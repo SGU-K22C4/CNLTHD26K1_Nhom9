@@ -1,22 +1,22 @@
 // Simplified navigation menu with 4 items: Women, Men, Contact, About Us
 export const NAV_DATA = [
   {
-    name: 'Nam',
+    name: 'MAN',
     id: 1,
-    path: '/collection/men',
+    path: '/collection/man',
   },
   {
-    name: 'Nữ',
+    name: 'WOMAN',
     id: 2,
-    path: '/collection/women',
+    path: '/collection/woman',
   },
   {
-    name: 'Contact',
+    name: 'CONTRACT',
     id: 3,
     path: '/contact',
   },
   {
-    name: 'About Us',
+    name: 'ABOUT US',
     id: 4,
     path: '/about',
   },

@@ -48,7 +48,7 @@ export default function CartDrawer() {
         role="dialog"
         aria-modal="true"
         aria-label="Shopping cart"
-        className={`absolute right-0 top-[calc(100%+15px)] w-[calc(100vw-2rem)] sm:w-[380px] max-w-[380px] h-[660px] bg-white z-[9999] flex flex-col shadow-2xl overflow-hidden transition-all duration-300 ${
+        className={`absolute right-0 top-[45px] w-[calc(100vw-2rem)] sm:w-[380px] max-w-[380px] h-[660px] bg-white z-[9999] flex flex-col shadow-2xl overflow-hidden transition-all duration-300 ${
           isDrawerOpen
             ? 'opacity-100 translate-y-0 pointer-events-auto'
             : 'opacity-0 -translate-y-4 pointer-events-none'
@@ -66,7 +66,7 @@ export default function CartDrawer() {
         </div>
 
         {/* Scrollable content */}
-        <div className="flex flex-1 flex-col overflow-y-auto px-6">
+        <div className="flex-1 overflow-y-auto px-6 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {isEmpty ? (
             <EmptyState onClose={closeDrawer} />
           ) : (
@@ -83,7 +83,7 @@ export default function CartDrawer() {
 
         {/* Footer — subtotal + checkout, shown only when cart has items */}
         {!isEmpty && (
-          <div className="shrink-0 px-6 py-5 border-t border-[#CBCBCB] bg-white">
+          <div className="mt-auto shrink-0 px-6 py-5 border-t border-[#CBCBCB] bg-white">
             <div className="flex items-center justify-between mb-4">
               <span className="font-[Montserrat] text-sm text-[#404040]">Subtotal</span>
               <span className="font-[Montserrat] text-base font-bold text-[#0C0C0C]">

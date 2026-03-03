@@ -17,70 +17,69 @@ export default function CartItem({ item, onRemove, onUpdateQuantity }) {
   const increment = () => onUpdateQuantity(id, quantity + 1)
 
   return (
-    <div className="relative flex gap-4 py-5 border-b border-neutral-cbcbcb last:border-b-0">
-      {/* Thumbnail */}
-      <div className="w-24 h-28 flex-shrink-0 overflow-hidden bg-gray-100">
-        <img src={image} alt={name} className="h-full w-full object-cover" />
+    <div className="relative flex items-start gap-4 py-4 border-b border-[#dfdfdf]">
+
+      {/* LEFT — product image */}
+      <div className="w-[80px] shrink-0 overflow-hidden bg-gray-100">
+        <img src={image} alt={name} className="w-full h-full object-cover" />
       </div>
 
-      {/* Remove (X) — top-right */}
-      <button
-        onClick={() => onRemove(id)}
-        aria-label={`Remove ${name}`}
-        className="absolute top-5 right-0 p-1 text-neutral-404040 hover:text-ink transition-colors"
-      >
-        <X size={18} />
-      </button>
-
-      {/* Details */}
-      <div className="flex flex-1 flex-col justify-between min-w-0 pr-6">
+      {/* RIGHT — all info, price, quantity */}
+      <div className="flex-1 flex flex-col gap-2 pr-6">
+        {/* Text block */}
         <div>
-          <h3 className="font-sans font-semibold text-[15px] leading-snug text-ink mb-2">
+          <h3 className="font-[Montserrat] font-bold text-sm leading-snug text-[#202020]">
             {name}
           </h3>
-
           {size && (
-            <p className="font-sans text-[13px] text-neutral-404040 mb-1">
+            <p className="font-[Montserrat] text-sm text-[#404040] mt-0.5">
               Size: {size}
             </p>
           )}
-
           {color && (
-            <p className="font-sans text-[13px] text-neutral-404040">
+            <p className="font-[Montserrat] text-sm text-[#404040] mt-0.5">
               Color: {color}
             </p>
           )}
         </div>
 
-        {/* Quantity stepper + Price */}
-        <div className="flex items-center justify-between mt-4">
-          <div className="flex items-center bg-brand-sage rounded">
+        {/* Bottom row — price (left) + quantity stepper (right) */}
+        <div className="flex justify-between items-center mt-auto">
+          <p className="font-[Montserrat] font-bold text-sm text-[#202020]">
+            ${(price * quantity).toFixed(2)}
+          </p>
+
+          <div className="inline-flex items-center border border-[#dfdfdf]">
             <button
               onClick={decrement}
               aria-label="Decrease quantity"
-              className="flex h-8 w-8 items-center justify-center rounded-l font-sans text-base text-neutral-404040 transition-colors hover:bg-brand-sage-hover"
+              className="flex h-8 w-8 items-center justify-center font-[Montserrat] text-base text-[#404040] hover:bg-gray-100 transition-colors"
             >
               −
             </button>
-
-            <span className="flex h-8 w-8 items-center justify-center select-none font-sans text-sm font-medium text-ink">
+            <span className="flex h-8 w-8 items-center justify-center select-none font-[Montserrat] text-sm font-medium text-[#202020]">
               {quantity}
             </span>
-
             <button
               onClick={increment}
               aria-label="Increase quantity"
-              className="flex h-8 w-8 items-center justify-center rounded-r font-sans text-base text-neutral-404040 transition-colors hover:bg-brand-sage-hover"
+              className="flex h-8 w-8 items-center justify-center font-[Montserrat] text-base text-[#404040] hover:bg-gray-100 transition-colors"
             >
               +
             </button>
           </div>
-
-          <p className="font-sans font-bold text-base text-ink">
-            ${(price * quantity).toFixed(2)}
-          </p>
         </div>
       </div>
+
+      {/* X — absolute, pinned top-right of the row */}
+      <button
+        onClick={() => onRemove(id)}
+        aria-label={`Remove ${name}`}
+        className="absolute top-4 right-0 text-[#202020] hover:text-[#404040] transition-colors"
+      >
+        <X size={16} strokeWidth={1.5} />
+      </button>
+
     </div>
   )
 }

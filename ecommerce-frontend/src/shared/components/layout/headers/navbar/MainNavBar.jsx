@@ -5,14 +5,17 @@ import DesktopMenu from './DesktopMenu';
 import LogoMobileWebsite from './LogoMobileWebsite';
 import MenuOutlinedIcon from '@mui/icons-material/MenuOutlined';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import SearchField from './SearchField';
 import NavigationDropMenuMobile from './NavigationDropMenuMobile';
 import BadgeNumberShopping from './BadgeNumberShopping';
 import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlined';
+import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 
 function MainNavBar(props) {
   const { options, setIsHovered, setIsOpen } = props;
+  const navigate = useNavigate();
 
   // Temporarily hardcoded cart count (will be replaced with Redux later)
   const cartCount = 0;
@@ -97,6 +100,8 @@ function MainNavBar(props) {
             </Button>
           )}
           <FavoriteBorderOutlinedIcon sx={{ cursor: 'pointer' }} />
+          <PersonOutlinedIcon sx={{ cursor: 'pointer' }} onClick={() => navigate('/login')} />
+          <BadgeNumberShopping badgetItem={cartCount.toString()} handleOpenModal={handleOpenModal} />
         </Box>
         
         {/* Mobile Logo */}
@@ -106,6 +111,7 @@ function MainNavBar(props) {
         
         {/* Mobile Right Icons */}
         <Box sx={{ display: { xs: 'flex', md: 'none' }, gap: '9px' }}>
+          <PersonOutlinedIcon sx={{ cursor: 'pointer' }} onClick={() => navigate('/login')} />
           <FavoriteBorderOutlinedIcon sx={{ cursor: 'pointer' }} />
           <BadgeNumberShopping badgetItem={cartCount.toString()} handleOpenModal={handleOpenModal} />
         </Box>

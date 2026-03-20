@@ -1,0 +1,26 @@
+# Maven / Java build output
+**/target/
+**/*.class
+
+# Logs
+**/*.log
+logs/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local environment overrides
+.env
+.env.*
+**/application-local.yml
+**/application-local.yaml
+
+# Temporary files
+**/*.tmp
+**/*.swp

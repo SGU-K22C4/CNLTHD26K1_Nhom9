@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="$PROJECT_DIR$/backend/services/product-service/src/main/resources/application.yml">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/backend/services/product-service/src/main/resources/application.yml" />
+              <option name="originalContent" value="server:&#10;  port: 8082&#10;&#10;spring:&#10;  application:&#10;    name: product-service&#10;  datasource:&#10;    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3307/catalog_db?useSSL=false&amp;allowPublicKeyRetrieval=true&amp;serverTimezone=UTC}&#10;    username: ${SPRING_DATASOURCE_USERNAME:root}&#10;    password: ${SPRING_DATASOURCE_PASSWORD:huytran123}&#10;    driver-class-name: com.mysql.cj.jdbc.Driver&#10;  jpa:&#10;    hibernate:&#10;      ddl-auto: validate&#10;    show-sql: false&#10;  flyway:&#10;    enabled: true&#10;    locations: classpath:db/migration&#10;&#10;jwt:&#10;  secret: ${JWT_SECRET:CHANGE_ME_base64_encoded_secret_key_at_least_32_bytes}&#10;" />
+              <option name="updatedContent" value="server:&#13;&#10;  port: 8082&#13;&#10;&#13;&#10;spring:&#13;&#10;  application:&#13;&#10;    name: product-service&#13;&#10;  datasource:&#13;&#10;    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3307/catalog_db?useSSL=false&amp;allowPublicKeyRetrieval=true&amp;serverTimezone=UTC}&#13;&#10;    username: ${SPRING_DATASOURCE_USERNAME:root}&#13;&#10;    password: ${SPRING_DATASOURCE_PASSWORD:huytran123}&#13;&#10;    driver-class-name: com.mysql.cj.jdbc.Driver&#13;&#10;  jpa:&#13;&#10;    hibernate:&#13;&#10;      ddl-auto: validate&#13;&#10;    show-sql: false&#13;&#10;  flyway:&#13;&#10;    enabled: true&#13;&#10;    locations: classpath:db/migration&#13;&#10;    baseline-on-migrate: true&#10;    baseline-version: 1&#10;&#13;&#10;jwt:&#13;&#10;  secret: ${JWT_SECRET:CHANGE_ME_base64_encoded_secret_key_at_least_32_bytes}&#13;&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

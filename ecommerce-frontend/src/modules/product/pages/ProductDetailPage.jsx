@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { MOCK_PRODUCTS } from '../data/mockProducts'
+import { productService } from '../services/productService'
 import ProductGallery from '../components/ProductGallery'
 import SizeSelector from '../components/SizeSelector'
 import ColorSelector from '../components/ColorSelector'
@@ -21,17 +21,6 @@ function HeartFilledDark() {
       <path d="M12 21C12 21 3 14.5 3 8.5C3 5.42 5.42 3 8.5 3C10.24 3 11.91 3.81 13 5.08C14.09 3.81 15.76 3 17.5 3C20.58 3 23 5.42 23 8.5C23 14.5 12 21 12 21Z" fill="#C0392B" stroke="#C0392B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
-}
-
-/* derive 4 gallery thumbnails from the base Unsplash URL */
-function buildGallery(baseUrl) {
-  const base = baseUrl.split('?')[0]
-  return [
-    `${base}?w=800&h=1000&fit=crop&crop=top`,
-    `${base}?w=800&h=1000&fit=crop&crop=center`,
-    `${base}?w=800&h=1000&fit=crop&crop=bottom`,
-    `${base}?w=800&h=1000&fit=crop&crop=entropy`,
-  ]
 }
 
 /* ── Quantity control ─────────────────────────────────────── */
@@ -83,13 +72,80 @@ export default function ProductDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
 
-  const product = MOCK_PRODUCTS.find((p) => String(p.id) === String(id))
+  const [product, setProduct] = useState(null)
+  const [related, setRelated] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const [selectedColor, setSelectedColor] = useState(product?.colors?.[0] || null)
+  const [selectedColor, setSelectedColor] = useState(null)
   const [selectedSize, setSelectedSize] = useState(null)
   const [qty, setQty] = useState(1)
   const [wishlisted, setWishlisted] = useState(false)
   const [addedToCart, setAddedToCart] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadProduct = async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const detail = await productService.getById(id)
+        if (!isMounted) return
+
+        setProduct(detail)
+        setSelectedColor(detail?.colors?.[0] || null)
+
+        const list = await productService.getAll({
+          categoryId: detail?.categoryId || undefined,
+          size: 20,
+        })
+
+        if (!isMounted) return
+        setRelated((list.items || []).filter((p) => p.id !== detail.id).slice(0, 4))
+      } catch (err) {
+        if (!isMounted) return
+        setError(err?.response?.data?.message || err?.message || 'Failed to load product')
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    loadProduct()
+
+    return () => {
+      isMounted = false
+    }
+  }, [id])
+
+  const galleryImages = useMemo(() => {
+    if (!product) return []
+    if (product.images?.length) return product.images
+    return product.image ? [product.image] : []
+  }, [product])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <p className="text-lg font-medium text-[#202020]">Loading product...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <p className="text-lg font-medium text-[#202020]">Could not load product</p>
+        <p className="text-sm text-[#888]">{error}</p>
+        <button
+          onClick={() => navigate('/products')}
+          className="text-[13px] underline text-[#5A6D57]"
+        >
+          Back to Collection
+        </button>
+      </div>
+    )
+  }
 
   if (!product) {
     return (
@@ -105,17 +161,13 @@ export default function ProductDetailPage() {
     )
   }
 
-  const { name, category, price, isNew, image, colors, sizes, collection, fabric } = product
-  const galleryImages = buildGallery(image)
+  const { name, category, price, isNew, colors, sizes, collection, fabric, description } = product
 
   const handleAddToCart = () => {
     if (!selectedSize) return
     setAddedToCart(true)
     setTimeout(() => setAddedToCart(false), 2000)
   }
-
-  /* Related products: same collection, different id */
-  const related = MOCK_PRODUCTS.filter((p) => p.collection === collection && p.id !== product.id).slice(0, 4)
 
   return (
     <div className="min-h-screen bg-white">
@@ -241,7 +293,7 @@ export default function ProductDetailPage() {
             <DetailRow
               label="Product Details"
               defaultOpen
-              content={`Fabric: ${fabric}. Part of the ${collection} collection. This versatile piece is designed for everyday comfort without compromising on style. True to size — we recommend ordering your usual size.`}
+              content={description || `Fabric: ${fabric}. Part of the ${collection} collection. This versatile piece is designed for everyday comfort without compromising on style. True to size and easy to mix with your everyday wardrobe.`}
             />
             <DetailRow
               label="Shipping & Returns"

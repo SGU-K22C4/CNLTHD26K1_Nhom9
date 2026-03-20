@@ -12,6 +12,7 @@ export default function AppRoutes() {
         <Route path="/" element={<HomePage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/products" element={<ProductListPage />} />
+        <Route path="/collection/:gender" element={<ProductListPage />} />
         <Route path="/products/:id" element={<ProductDetailPage />} />
       </Routes>
     </Layout>

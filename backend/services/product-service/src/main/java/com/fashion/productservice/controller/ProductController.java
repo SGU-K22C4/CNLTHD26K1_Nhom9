@@ -24,7 +24,7 @@ public class ProductController {
 
     @GetMapping
     public ResponseEntity<Page<ProductResponse>> getAll(
-            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String categoryId,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
@@ -35,7 +35,7 @@ public class ProductController {
     ) {
         Sort sort = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         return ResponseEntity.ok(
-                productService.getAll(category, search, minPrice, maxPrice, PageRequest.of(page, size, sort))
+            productService.getAll(categoryId, search, minPrice, maxPrice, PageRequest.of(page, size, sort))
         );
     }
 
@@ -55,9 +55,9 @@ public class ProductController {
         return ResponseEntity.ok(productService.getNewArrivals(PageRequest.of(page, size)));
     }
 
-    @GetMapping("/{slug}")
-    public ResponseEntity<ProductResponse> getBySlug(@PathVariable String slug) {
-        return ResponseEntity.ok(productService.getBySlug(slug));
+    @GetMapping("/{id}")
+    public ResponseEntity<ProductResponse> getById(@PathVariable String id) {
+        return ResponseEntity.ok(productService.getById(id));
     }
 
     @PostMapping
@@ -66,13 +66,13 @@ public class ProductController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ProductResponse> update(@PathVariable Long id,
+    public ResponseEntity<ProductResponse> update(@PathVariable String id,
                                                    @Valid @RequestBody ProductRequest request) {
         return ResponseEntity.ok(productService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, String>> delete(@PathVariable Long id) {
+    public ResponseEntity<Map<String, String>> delete(@PathVariable String id) {
         productService.delete(id);
         return ResponseEntity.ok(Map.of("message", "Product deleted successfully"));
     }

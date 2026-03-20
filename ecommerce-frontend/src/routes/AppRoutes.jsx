@@ -7,6 +7,9 @@ import CheckoutPaymentPage from '../modules/order/pages/CheckoutPaymentPage'
 import PaymentSuccessPage from '../modules/order/pages/PaymentSuccessPage'
 import PaymentFailedPage from '../modules/order/pages/PaymentFailedPage'
 import Layout from '../shared/components/layout/Layout'
+import SearchPage from '../modules/product/pages/SearchPage'
+import ProductListPage from '../modules/product/pages/ProductListPage'
+import ProductDetailPage from '../modules/product/pages/ProductDetailPage'
 
 function WithLayout({ children }) {
   return <Layout>{children}</Layout>

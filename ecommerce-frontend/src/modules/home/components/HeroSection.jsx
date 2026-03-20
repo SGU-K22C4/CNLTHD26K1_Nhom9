@@ -1,8 +1,3 @@
-<<<<<<< Updated upstream
-export default function HeroSection() {
-  return <div>HeroSection</div>
-}
-=======
 import { useTheme } from '@mui/material/styles';
 import { Button, Typography, useMediaQuery } from '@mui/material';
 import { Box } from '@mui/material';
@@ -79,4 +74,4 @@ function HeroSection() {
 }
 
 export default HeroSection;
->>>>>>> Stashed changes
+

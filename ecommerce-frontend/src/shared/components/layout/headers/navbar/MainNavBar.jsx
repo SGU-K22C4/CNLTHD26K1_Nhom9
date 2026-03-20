@@ -1,5 +1,6 @@
 import { AppBar, Toolbar, Box, IconButton, Button } from '@mui/material';
 import LogoWebsite from './LogoWebsite';
+import { useCartContext } from '../../../../../modules/cart/context/CartContext';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import DesktopMenu from './DesktopMenu';
 import LogoMobileWebsite from './LogoMobileWebsite';
@@ -10,12 +11,13 @@ import NavigationDropMenuMobile from './NavigationDropMenuMobile';
 import BadgeNumberShopping from './BadgeNumberShopping';
 import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlined';
 import CloseIcon from '@mui/icons-material/Close';
+import CartDrawer from '../../../../../modules/cart/components/CartDrawer';
+
 
 function MainNavBar(props) {
   const { options, setIsHovered, setIsOpen } = props;
 
-  // Temporarily hardcoded cart count (will be replaced with Redux later)
-  const cartCount = 0;
+  const { openDrawer, totalItems } = useCartContext();
 
   const [open, setOpen] = useState(false);
   const [isOpenSearch, setIsOpenSearch] = useState(false);
@@ -28,11 +30,6 @@ function MainNavBar(props) {
       setIsOpenSearch(true);
     }
   };
-  
-  // Temporarily empty function for cart modal
-  const handleOpenModal = () => {
-    // TODO: Open cart drawer/modal when Redux integration is ready
-  };
 
   return (
     <AppBar
@@ -42,6 +39,7 @@ function MainNavBar(props) {
         boxShadow: 'none',
         color: '#404040',
         width: '100%',
+        overflow: 'visible',
       }}
     >
       <Toolbar
@@ -97,6 +95,9 @@ function MainNavBar(props) {
             </Button>
           )}
           <FavoriteBorderOutlinedIcon sx={{ cursor: 'pointer' }} />
+          <div className="relative">
+            <BadgeNumberShopping badgetItem={totalItems.toString()} handleOpenModal={openDrawer} />
+          </div>
         </Box>
         
         {/* Mobile Logo */}
@@ -105,9 +106,11 @@ function MainNavBar(props) {
         </Box>
         
         {/* Mobile Right Icons */}
-        <Box sx={{ display: { xs: 'flex', md: 'none' }, gap: '9px' }}>
+        <Box sx={{ display: { xs: 'flex', md: 'none' }, gap: '9px', alignItems: 'center' }}>
           <FavoriteBorderOutlinedIcon sx={{ cursor: 'pointer' }} />
-          <BadgeNumberShopping badgetItem={cartCount.toString()} handleOpenModal={handleOpenModal} />
+          <div className="relative z-[10]">
+            <BadgeNumberShopping badgetItem={totalItems.toString()} handleOpenModal={openDrawer} />
+          </div>
         </Box>
         
         {/* Mobile Menu Drawer */}
@@ -116,6 +119,9 @@ function MainNavBar(props) {
       
       {/* Search Field Below Navbar */}
       {isOpenSearch && <SearchField />}
+
+      {/* Cart Drawer — rendered outside all display-conditional containers so it works on all screen sizes */}
+      <CartDrawer />
     </AppBar>
   );
 }

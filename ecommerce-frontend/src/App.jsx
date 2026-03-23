@@ -1,12 +1,7 @@
 import AppRoutes from './routes/AppRoutes'
-import { CartProvider } from './modules/cart/context/CartContext'
 
 function App() {
-  return (
-    <CartProvider>
-      <AppRoutes />
-    </CartProvider>
-  )
+  return <AppRoutes />
 }
 
 export default App

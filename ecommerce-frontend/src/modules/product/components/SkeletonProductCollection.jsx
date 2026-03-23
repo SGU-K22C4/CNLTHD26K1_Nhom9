@@ -1,10 +1,10 @@
-import { Box, Grid, Skeleton } from '@mui/material';
+import { Box, Skeleton } from '@mui/material';
 
 const SkeletonProductCollection = ({ displayCount = 4 }) => {
   return (
     <>
       {Array.from({ length: displayCount }, (_, index) => (
-        <Grid item xs={12} sm={6} key={index}>
+        <Box key={index}>
           <Box
             sx={{
               display: 'flex',
@@ -48,7 +48,7 @@ const SkeletonProductCollection = ({ displayCount = 4 }) => {
               </Box>
             </Box>
           </Box>
-        </Grid>
+        </Box>
       ))}
     </>
   );

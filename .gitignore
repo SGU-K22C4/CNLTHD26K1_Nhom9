@@ -1,0 +1,10 @@
+# Maven/Java build outputs
+**/target/
+
+# IDE project files
+.idea/
+**/.idea/
+
+# Maven wrapper downloaded binaries
+.mvn/wrapper/dists/
+.mvn/wrapper/*.zip

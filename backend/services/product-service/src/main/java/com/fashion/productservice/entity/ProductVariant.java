@@ -2,6 +2,13 @@ package com.fashion.productservice.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "product_variants")
@@ -12,8 +19,8 @@ import lombok.*;
 public class ProductVariant {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(length = 36)
+    private String id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
@@ -21,19 +28,35 @@ public class ProductVariant {
     @EqualsAndHashCode.Exclude
     private Product product;
 
-    @Column(length = 50)
-    private String color;
+    @Column(name = "color_name", nullable = false, length = 36)
+    private String colorName;
 
-    @Column(length = 10)
-    private String colorHex;
+    @Column(name = "price", nullable = false, precision = 15, scale = 2)
+    private BigDecimal price;
 
-    @Column(length = 20)
-    private String size;
+    @Column(name = "composition_detail", length = 500)
+    private String compositionDetail;
 
-    @Column(nullable = false)
+    @Column(name = "product_url", length = 500)
+    private String productUrl;
+
+    @OneToMany(mappedBy = "variant", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
-    private int stock = 0;
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private List<VariantImage> images = new ArrayList<>();
 
-    @Column(unique = true, length = 100)
-    private String sku;
+    @OneToMany(mappedBy = "variant", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private List<VariantSize> sizes = new ArrayList<>();
+
+    @CreationTimestamp
+    @Column(name = "created_at", insertable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", insertable = false, updatable = false)
+    private LocalDateTime updatedAt;
 }

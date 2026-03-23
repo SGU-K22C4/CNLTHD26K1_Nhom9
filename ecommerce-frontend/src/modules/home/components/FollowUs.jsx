@@ -19,7 +19,7 @@ function FollowUs() {
       {isMobile ? (
         <Grid container spacing={2}>
           {images?.map((item) => (
-            <Grid item xs={6} md={4} key={item.id}>
+            <Grid size={{ xs: 6, md: 4 }} key={item.id}>
               <img
                 src={item.image}
                 alt="Image galerrey"

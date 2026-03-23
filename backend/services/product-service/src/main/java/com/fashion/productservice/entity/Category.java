@@ -18,17 +18,19 @@ import java.util.List;
 public class Category {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(length = 36)
+    private String id;
 
     @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(unique = true, nullable = false)
-    private String slug;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private Gender gender;
 
-    private String description;
-    private String imageUrl;
+    @Column(name = "is_visible")
+    @Builder.Default
+    private boolean visible = true;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_id")
@@ -42,17 +44,16 @@ public class Category {
     @EqualsAndHashCode.Exclude
     private List<Category> children = new ArrayList<>();
 
-    @Column(nullable = false)
-    @Builder.Default
-    private boolean active = true;
-
-    @Column(name = "sort_order")
-    @Builder.Default
-    private int sortOrder = 0;
-
     @CreationTimestamp
+    @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
+    @Column(name = "updated_at", insertable = false, updatable = false)
     private LocalDateTime updatedAt;
+
+    public enum Gender {
+        MALE,
+        FEMALE
+    }
 }

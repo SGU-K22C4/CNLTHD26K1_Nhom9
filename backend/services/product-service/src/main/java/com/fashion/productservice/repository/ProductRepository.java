@@ -9,32 +9,30 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
-import java.util.Optional;
 
 @Repository
-public interface ProductRepository extends JpaRepository<Product, Long> {
-    Optional<Product> findBySlug(String slug);
+public interface ProductRepository extends JpaRepository<Product, String> {
 
-    Page<Product> findByStatus(Product.ProductStatus status, Pageable pageable);
+        Page<Product> findByVisibleTrue(Pageable pageable);
 
-    Page<Product> findByCategoryId(Long categoryId, Pageable pageable);
-
-    Page<Product> findByCategorySlug(String categorySlug, Pageable pageable);
-
-    Page<Product> findByFeaturedTrue(Pageable pageable);
-
-    Page<Product> findByNewArrivalTrue(Pageable pageable);
+        Page<Product> findByCategoryIdAndVisibleTrue(String categoryId, Pageable pageable);
 
     @Query("""
-        SELECT p FROM Product p
-        WHERE p.status = 'ACTIVE'
-          AND (:categorySlug IS NULL OR p.category.slug = :categorySlug)
+                SELECT DISTINCT p FROM Product p
+                WHERE p.visible = true
+                    AND (:categoryId IS NULL OR p.category.id = :categoryId)
           AND (:search IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%')))
-          AND (:minPrice IS NULL OR p.price >= :minPrice)
-          AND (:maxPrice IS NULL OR p.price <= :maxPrice)
+                    AND (:minPrice IS NULL OR EXISTS (
+                                SELECT v1.id FROM ProductVariant v1
+                                WHERE v1.product = p AND v1.price >= :minPrice
+                    ))
+                    AND (:maxPrice IS NULL OR EXISTS (
+                                SELECT v2.id FROM ProductVariant v2
+                                WHERE v2.product = p AND v2.price <= :maxPrice
+                    ))
     """)
     Page<Product> search(
-            @Param("categorySlug") String categorySlug,
+                        @Param("categoryId") String categoryId,
             @Param("search") String search,
             @Param("minPrice") BigDecimal minPrice,
             @Param("maxPrice") BigDecimal maxPrice,

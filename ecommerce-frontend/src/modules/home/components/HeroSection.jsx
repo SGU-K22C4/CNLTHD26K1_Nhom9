@@ -1,6 +1,7 @@
 import { useTheme } from '@mui/material/styles';
 import { Button, Typography, useMediaQuery } from '@mui/material';
 import { Box } from '@mui/material';
+import { Link } from 'react-router-dom';
 
 function HeroSection() {
   const theme = useTheme();
@@ -18,7 +19,7 @@ function HeroSection() {
       }}
     >
       <img
-        src="../../../../public/assets/images/hero-desktop.webp" // thêm sau
+        src="/assets/images/hero-desktop.webp"
         alt="Image for hero"
         style={{
           objectFit: 'cover',
@@ -49,6 +50,8 @@ function HeroSection() {
         </Typography>
 
         <Button
+          component={Link}
+          to="/products"
           sx={{
             bgcolor: '#ffff',
             color: '#0C0C0C',

@@ -13,7 +13,7 @@ import CopyrightIcon from "@mui/icons-material/Copyright";
 function FooterGridDesktop() {
   return (
     <Grid container spacing={3}>
-      <Grid item xs={12} sm={8} md={6}>
+      <Grid size={{ xs: 12, sm: 8, md: 6 }}>
         <Box
           sx={{
             height: "100%",
@@ -85,7 +85,7 @@ function FooterGridDesktop() {
           </Box>
         </Box>
       </Grid>
-      <Grid item xs={6} sm={4} md={2}>
+      <Grid size={{ xs: 6, sm: 4, md: 2 }}>
         <Box
           sx={{
             height: "400px",
@@ -107,7 +107,7 @@ function FooterGridDesktop() {
           <Typography>Copyright Notice</Typography>
         </Box>
       </Grid>
-      <Grid item xs={12} sm={4} md={2}>
+      <Grid size={{ xs: 12, sm: 4, md: 2 }}>
         <Box
           sx={{
             height: "400px",
@@ -131,7 +131,7 @@ function FooterGridDesktop() {
           </Link>
         </Box>
       </Grid>
-      <Grid item xs={12} sm={4} md={2}>
+      <Grid size={{ xs: 12, sm: 4, md: 2 }}>
         <Box
           sx={{
             height: "400px",

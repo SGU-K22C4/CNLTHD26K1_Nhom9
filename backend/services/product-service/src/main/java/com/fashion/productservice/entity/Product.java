@@ -5,7 +5,6 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,29 +18,18 @@ import java.util.List;
 public class Product {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(length = 36)
+    private String id;
 
     @Column(nullable = false, length = 200)
     private String name;
 
-    @Column(unique = true, nullable = false)
-    private String slug;
-
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(columnDefinition = "TEXT")
-    private String materials;
-
-    @Column(columnDefinition = "TEXT")
-    private String careInstructions;
-
-    @Column(nullable = false, precision = 12, scale = 2)
-    private BigDecimal price;
-
-    @Column(precision = 12, scale = 2)
-    private BigDecimal salePrice;
+    @Column(name = "is_visible")
+    @Builder.Default
+    private boolean visible = true;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id", nullable = false)
@@ -49,38 +37,17 @@ public class Product {
     @EqualsAndHashCode.Exclude
     private Category category;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    @Builder.Default
-    private ProductStatus status = ProductStatus.ACTIVE;
-
-    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
-    @Builder.Default
-    @ToString.Exclude
-    @EqualsAndHashCode.Exclude
-    private List<ProductImage> images = new ArrayList<>();
-
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private List<ProductVariant> variants = new ArrayList<>();
 
-    @Column(name = "is_featured")
-    @Builder.Default
-    private boolean featured = false;
-
-    @Column(name = "is_new")
-    @Builder.Default
-    private boolean newArrival = false;
-
     @CreationTimestamp
+    @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
+    @Column(name = "updated_at", insertable = false, updatable = false)
     private LocalDateTime updatedAt;
-
-    public enum ProductStatus {
-        ACTIVE, INACTIVE, OUT_OF_STOCK
-    }
 }

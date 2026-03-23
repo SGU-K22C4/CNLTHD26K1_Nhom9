@@ -1,5 +1,6 @@
 import BestSellers from '../components/BestSellers'
 import Collection from '../components/Collection'
+import FeaturedProducts from '../components/FeaturedProducts'
 import FollowUs from '../components/FollowUs'
 import HeroSection from '../components/HeroSection'
 import MoodiWeek from '../components/MoodiWeek'
@@ -10,6 +11,7 @@ export default function HomePage() {
     <>
       <HeroSection />
       <BestSellers />
+      <FeaturedProducts />
       <Collection />
       <MoodiWeek />
       <Sustainability />

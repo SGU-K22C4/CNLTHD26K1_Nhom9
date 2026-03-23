@@ -18,16 +18,26 @@ function WithLayout({ children }) {
 export default function AppRoutes() {
   return (
     <Routes>
-      {/* Full-screen checkout — no shared header/footer */}
-      <Route path="/checkout" element={<CheckoutPage />} />
-      <Route path="/checkout/shipping" element={<CheckoutShippingPage />} />
-      <Route path="/checkout/payment" element={<CheckoutPaymentPage />} />
-
-      {/* Pages wrapped in the shared Layout */}
+      {/* -------------------------------------------------- */}
+      {/* NHÓM 1: CÁC TRANG CÓ LAYOUT (HEADER & FOOTER)        */}
+      {/* -------------------------------------------------- */}
       <Route path="/" element={<WithLayout><HomePage /></WithLayout>} />
+      <Route path="/search" element={<WithLayout><SearchPage /></WithLayout>} />
+      <Route path="/products" element={<WithLayout><ProductListPage /></WithLayout>} />
+      <Route path="/collection/:gender" element={<WithLayout><ProductListPage /></WithLayout>} />
+      <Route path="/products/:id" element={<WithLayout><ProductDetailPage /></WithLayout>} />
       <Route path="/cart" element={<WithLayout><CartPage /></WithLayout>} />
       <Route path="/checkout/success" element={<WithLayout><PaymentSuccessPage /></WithLayout>} />
       <Route path="/checkout/failed" element={<WithLayout><PaymentFailedPage /></WithLayout>} />
+
+      {/* -------------------------------------------------- */}
+      {/* NHÓM 2: CÁC TRANG CHECKOUT FULL MÀN HÌNH (NO LAYOUT) */}
+      {/* -------------------------------------------------- */}
+      <Route path="/checkout" element={<CheckoutPage />} />
+      <Route path="/checkout/shipping" element={<CheckoutShippingPage />} />
+      <Route path="/checkout/payment" element={<CheckoutPaymentPage />} />
     </Routes>
+  )
+}
   )
 }

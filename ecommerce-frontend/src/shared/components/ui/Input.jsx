@@ -5,6 +5,7 @@ const Input = forwardRef(({
   label,
   error,
   helperText,
+  suffix,
   type = 'text',
   className,
   ...props
@@ -17,16 +18,24 @@ const Input = forwardRef(({
         </label>
       )}
       
-      <input
-        ref={ref}
-        type={type}
-        className={clsx(
-          'input',
-          error && 'input-error',
-          className
+      <div className="relative">
+        <input
+          ref={ref}
+          type={type}
+          className={clsx(
+            'input',
+            suffix && 'pr-10',
+            error && 'input-error',
+            className
+          )}
+          {...props}
+        />
+        {suffix && (
+          <span className="absolute inset-y-0 right-3 flex items-center">
+            {suffix}
+          </span>
         )}
-        {...props}
-      />
+      </div>
       
       {error && (
         <p className="mt-1.5 text-sm text-red-600">{error}</p>

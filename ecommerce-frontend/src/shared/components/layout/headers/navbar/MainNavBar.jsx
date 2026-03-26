@@ -6,16 +6,19 @@ import DesktopMenu from './DesktopMenu';
 import LogoMobileWebsite from './LogoMobileWebsite';
 import MenuOutlinedIcon from '@mui/icons-material/MenuOutlined';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import SearchField from './SearchField';
 import NavigationDropMenuMobile from './NavigationDropMenuMobile';
 import BadgeNumberShopping from './BadgeNumberShopping';
 import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlined';
+import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import CartDrawer from '../../../../../modules/cart/components/CartDrawer';
 
 
 function MainNavBar(props) {
   const { options, setIsHovered, setIsOpen } = props;
+  const navigate = useNavigate();
 
   const { openDrawer, totalItems } = useCartContext();
 
@@ -95,6 +98,7 @@ function MainNavBar(props) {
             </Button>
           )}
           <FavoriteBorderOutlinedIcon sx={{ cursor: 'pointer' }} />
+          <PersonOutlinedIcon sx={{ cursor: 'pointer' }} onClick={() => navigate('/login')} />
           <div className="relative">
             <BadgeNumberShopping badgetItem={totalItems.toString()} handleOpenModal={openDrawer} />
           </div>
@@ -107,6 +111,7 @@ function MainNavBar(props) {
         
         {/* Mobile Right Icons */}
         <Box sx={{ display: { xs: 'flex', md: 'none' }, gap: '9px', alignItems: 'center' }}>
+          <PersonOutlinedIcon sx={{ cursor: 'pointer' }} onClick={() => navigate('/login')} />
           <FavoriteBorderOutlinedIcon sx={{ cursor: 'pointer' }} />
           <div className="relative z-[10]">
             <BadgeNumberShopping badgetItem={totalItems.toString()} handleOpenModal={openDrawer} />

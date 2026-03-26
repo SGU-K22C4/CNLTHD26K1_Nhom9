@@ -1,4 +1,4 @@
-import HeaderImg from '../../../../public/assets/images/hero-desktop.webp'; // <-- Điều chỉnh path ảnh
+import HeaderImg from '/assets/images/hero-desktop.webp?url'; // <-- Điều chỉnh path ảnh
 import { Box, Button, Typography } from '@mui/material';
 
 function Sustainability() {

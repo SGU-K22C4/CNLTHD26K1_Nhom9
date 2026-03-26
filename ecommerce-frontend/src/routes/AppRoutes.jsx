@@ -10,6 +10,8 @@ import Layout from '../shared/components/layout/Layout'
 import SearchPage from '../modules/product/pages/SearchPage'
 import ProductListPage from '../modules/product/pages/ProductListPage'
 import ProductDetailPage from '../modules/product/pages/ProductDetailPage'
+import RegisterPage from '../modules/auth/pages/RegisterPage'
+import LoginPage from '../modules/auth/pages/LoginPage'
 
 function WithLayout({ children }) {
   return <Layout>{children}</Layout>
@@ -22,6 +24,8 @@ export default function AppRoutes() {
       {/* NHÓM 1: CÁC TRANG CÓ LAYOUT (HEADER & FOOTER)        */}
       {/* -------------------------------------------------- */}
       <Route path="/" element={<WithLayout><HomePage /></WithLayout>} />
+      <Route path="/register" element={<WithLayout><RegisterPage /></WithLayout>} />
+      <Route path="/login" element={<WithLayout><LoginPage /></WithLayout>} />
       <Route path="/search" element={<WithLayout><SearchPage /></WithLayout>} />
       <Route path="/products" element={<WithLayout><ProductListPage /></WithLayout>} />
       <Route path="/collection/:gender" element={<WithLayout><ProductListPage /></WithLayout>} />
@@ -37,7 +41,5 @@ export default function AppRoutes() {
       <Route path="/checkout/shipping" element={<CheckoutShippingPage />} />
       <Route path="/checkout/payment" element={<CheckoutPaymentPage />} />
     </Routes>
-  )
-}
   )
 }

@@ -12,6 +12,7 @@ import ProductListPage from '../modules/product/pages/ProductListPage'
 import ProductDetailPage from '../modules/product/pages/ProductDetailPage'
 import RegisterPage from '../modules/auth/pages/RegisterPage'
 import LoginPage from '../modules/auth/pages/LoginPage'
+import ContactPage from '../modules/contact/pages/ContactPage'
 
 function WithLayout({ children }) {
   return <Layout>{children}</Layout>
@@ -30,6 +31,7 @@ export default function AppRoutes() {
       <Route path="/products" element={<WithLayout><ProductListPage /></WithLayout>} />
       <Route path="/collection/:gender" element={<WithLayout><ProductListPage /></WithLayout>} />
       <Route path="/products/:id" element={<WithLayout><ProductDetailPage /></WithLayout>} />
+      <Route path="/contact" element={<WithLayout><ContactPage /></WithLayout>} />
       <Route path="/cart" element={<WithLayout><CartPage /></WithLayout>} />
       <Route path="/checkout/success" element={<WithLayout><PaymentSuccessPage /></WithLayout>} />
       <Route path="/checkout/failed" element={<WithLayout><PaymentFailedPage /></WithLayout>} />

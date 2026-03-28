@@ -1,5 +1,6 @@
 package com.fashion.orderservice.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -19,12 +20,13 @@ public class OrderItem {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id", nullable = false)
+    @JsonIgnore
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private Order order;
 
-    @Column(nullable = false)
-    private Long productId;
+    @Column(nullable = false, length = 36)
+    private String productId;
 
     @Column(nullable = false, length = 200)
     private String productName;

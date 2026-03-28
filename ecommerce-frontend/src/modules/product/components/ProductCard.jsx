@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { formatCurrency } from '../../../shared/utils/format'
 
 /* ── Wishlist heart icons (SVG, no MUI dependency) ───────── */
 function HeartOutline() {
@@ -89,7 +90,7 @@ export default function ProductCard({ product }) {
           <span
             style={{ fontSize: '13px', fontWeight: 500, color: '#202020', whiteSpace: 'nowrap', fontFamily: 'Montserrat, sans-serif' }}
           >
-            ${price}
+            {formatCurrency(price)}
           </span>
         </div>
 

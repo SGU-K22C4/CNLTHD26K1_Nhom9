@@ -8,6 +8,7 @@ export default function CartDrawer() {
   const {
     items,
     isDrawerOpen,
+    drawerAnchor,
     closeDrawer,
     removeItem,
     updateQuantity,
@@ -38,7 +39,8 @@ export default function CartDrawer() {
       <div
         aria-hidden="true"
         onClick={closeDrawer}
-        className={`fixed top-[96px] inset-x-0 bottom-0 bg-black/40 backdrop-blur-sm z-[1099] transition-opacity duration-300 ${
+        style={{ top: `${drawerAnchor.top}px` }}
+        className={`fixed inset-x-0 bottom-0 bg-black/40 backdrop-blur-sm z-[1099] transition-opacity duration-300 ${
           isDrawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       />
@@ -48,7 +50,11 @@ export default function CartDrawer() {
         role="dialog"
         aria-modal="true"
         aria-label="Shopping cart"
-        className={`absolute right-0 top-[45px] w-[calc(100vw-2rem)] sm:w-[380px] max-w-[380px] h-[660px] bg-white z-[9999] flex flex-col shadow-2xl overflow-hidden transition-all duration-300 ${
+        style={{
+          top: `${drawerAnchor.top}px`,
+          right: `${drawerAnchor.right}px`,
+        }}
+        className={`fixed w-[calc(100vw-2rem)] sm:w-[380px] max-w-[380px] h-[660px] bg-white z-[9999] flex flex-col shadow-2xl overflow-hidden transition-all duration-300 ${
           isDrawerOpen
             ? 'opacity-100 translate-y-0 pointer-events-auto'
             : 'opacity-0 -translate-y-4 pointer-events-none'

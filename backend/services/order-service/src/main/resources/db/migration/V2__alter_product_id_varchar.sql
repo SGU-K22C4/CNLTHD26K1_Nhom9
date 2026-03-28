@@ -1,0 +1,1 @@
+ALTER TABLE order_items MODIFY COLUMN product_id VARCHAR(36) NOT NULL;

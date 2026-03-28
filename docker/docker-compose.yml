@@ -1,4 +1,4 @@
-version: '3.8'
+name: fashion
 
 services:
 
@@ -8,10 +8,9 @@ services:
     container_name: fashion_mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: fashion_user_db
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-huytran123}
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d
@@ -25,10 +24,12 @@ services:
     image: redis:7.0-alpine
     container_name: fashion_redis
     restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -38,8 +39,8 @@ services:
   # ── Services ───────────────────────────────────────────────────────────────
   user-service:
     build:
-      context: ./backend/services/user-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/user-service/Dockerfile
     container_name: fashion_user_service
     restart: unless-stopped
     ports:
@@ -47,7 +48,7 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_user_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
       - JWT_SECRET=${JWT_SECRET}
       - MAIL_USERNAME=${MAIL_USERNAME}
       - MAIL_PASSWORD=${MAIL_PASSWORD}
@@ -58,8 +59,8 @@ services:
 
   product-service:
     build:
-      context: ./backend/services/product-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/product-service/Dockerfile
     container_name: fashion_product_service
     restart: unless-stopped
     ports:
@@ -67,7 +68,7 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_product_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
       - JWT_SECRET=${JWT_SECRET}
     depends_on:
       mysql:
@@ -75,8 +76,8 @@ services:
 
   cart-service:
     build:
-      context: ./backend/services/cart-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/cart-service/Dockerfile
     container_name: fashion_cart_service
     restart: unless-stopped
     ports:
@@ -91,8 +92,8 @@ services:
 
   order-service:
     build:
-      context: ./backend/services/order-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/order-service/Dockerfile
     container_name: fashion_order_service
     restart: unless-stopped
     ports:
@@ -100,16 +101,19 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_order_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
       - JWT_SECRET=${JWT_SECRET}
+      - VNPAY_TMN_CODE=${VNPAY_TMN_CODE:-XWJEG5N8}
+      - VNPAY_HASH_SECRET=${VNPAY_HASH_SECRET:-V0UJ9R7MWMJLFJREF60KQR5P9RO1XIYH}
+      - VNPAY_RETURN_URL=${VNPAY_RETURN_URL:-http://localhost:5173/payment/vnpay-return}
     depends_on:
       mysql:
         condition: service_healthy
 
   promotion-service:
     build:
-      context: ./backend/services/promotion-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/promotion-service/Dockerfile
     container_name: fashion_promotion_service
     restart: unless-stopped
     ports:
@@ -117,7 +121,7 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_promotion_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
       - JWT_SECRET=${JWT_SECRET}
     depends_on:
       mysql:
@@ -125,8 +129,8 @@ services:
 
   review-service:
     build:
-      context: ./backend/services/review-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/review-service/Dockerfile
     container_name: fashion_review_service
     restart: unless-stopped
     ports:
@@ -134,7 +138,7 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_review_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
       - JWT_SECRET=${JWT_SECRET}
     depends_on:
       mysql:
@@ -142,8 +146,8 @@ services:
 
   chatbot-service:
     build:
-      context: ./backend/services/chatbot-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/chatbot-service/Dockerfile
     container_name: fashion_chatbot_service
     restart: unless-stopped
     ports:
@@ -154,8 +158,8 @@ services:
 
   api-gateway:
     build:
-      context: ./backend/api-gateway
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: api-gateway/Dockerfile
     container_name: fashion_api_gateway
     restart: unless-stopped
     ports:

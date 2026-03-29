@@ -11,10 +11,13 @@ import org.springframework.web.bind.annotation.*;
 import com.fashion.orderservice.dto.request.OrderRequest;
 import com.fashion.orderservice.dto.request.OrderItemRequest;
 import com.fashion.orderservice.entity.OrderItem;
+import org.springframework.jdbc.core.JdbcTemplate;
+
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.UUID;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/orders")
@@ -22,9 +25,10 @@ import java.util.List;
 public class OrderController {
 
     private final OrderRepository orderRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     @PostMapping
-    public ResponseEntity<Order> createOrder(
+    public ResponseEntity<?> createOrder(
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @RequestBody OrderRequest request) {
 
@@ -48,9 +52,26 @@ public class OrderController {
 
         if (request.getItems() != null) {
             for (OrderItemRequest itemReq : request.getItems()) {
+                String productId = itemReq.getProductId();
+                if (productId == null || productId.isBlank()) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "productId is required"));
+                }
+
+                Boolean exists = jdbcTemplate.queryForObject(
+                        "SELECT EXISTS(SELECT 1 FROM fashion_product_db.products WHERE id = ?)",
+                        Boolean.class,
+                        productId
+                );
+                if (!Boolean.TRUE.equals(exists)) {
+                    return ResponseEntity.badRequest().body(Map.of(
+                            "error", "Invalid productId",
+                            "productId", productId
+                    ));
+                }
+
                 OrderItem item = new OrderItem();
                 item.setOrder(order);
-                item.setProductId(itemReq.getProductId());
+                item.setProductId(productId);
                 item.setProductName(itemReq.getProductName());
                 item.setProductSlug(itemReq.getProductSlug());
                 item.setImageUrl(itemReq.getImageUrl());

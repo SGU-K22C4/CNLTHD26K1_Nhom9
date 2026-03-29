@@ -23,6 +23,12 @@ function userHeaders() {
   return { 'X-User-Id': getGuestUserId() }
 }
 
+function unwrapData(response, fallback) {
+  if (response == null) return fallback
+  if (Object.prototype.hasOwnProperty.call(response, 'data')) return response.data ?? fallback
+  return response
+}
+
 export const cartService = {
   /**
    * Lấy toàn bộ giỏ hàng
@@ -30,7 +36,7 @@ export const cartService = {
    */
   getCart: async () => {
     const res = await api.get('/api/v1/cart', { headers: userHeaders() })
-    return res.data ?? []
+    return unwrapData(res, [])
   },
 
   /**
@@ -39,7 +45,7 @@ export const cartService = {
    */
   addItem: async (variantSizeId, quantity = 1) => {
     const res = await api.post('/api/v1/cart/items', { variantSizeId, quantity }, { headers: userHeaders() })
-    return res.data ?? []
+    return unwrapData(res, [])
   },
 
   /**
@@ -48,7 +54,7 @@ export const cartService = {
    */
   updateQuantity: async (variantSizeId, quantity) => {
     const res = await api.patch(`/api/v1/cart/items/${variantSizeId}`, { quantity }, { headers: userHeaders() })
-    return res.data ?? []
+    return unwrapData(res, [])
   },
 
   /**
@@ -57,7 +63,7 @@ export const cartService = {
    */
   removeItem: async (variantSizeId) => {
     const res = await api.delete(`/api/v1/cart/items/${variantSizeId}`, { headers: userHeaders() })
-    return res.data ?? []
+    return unwrapData(res, [])
   },
 
   /**
@@ -74,6 +80,6 @@ export const cartService = {
    */
   getCount: async () => {
     const res = await api.get('/api/v1/cart/count', { headers: userHeaders() })
-    return res.data ?? 0
+    return unwrapData(res, 0)
   },
 }

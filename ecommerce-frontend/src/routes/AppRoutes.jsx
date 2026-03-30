@@ -6,9 +6,9 @@ import PaymentSuccessPage from '../modules/order/pages/PaymentSuccessPage'
 import PaymentFailedPage from '../modules/order/pages/PaymentFailedPage'
 import VNPayReturnPage from '../modules/order/pages/VNPayReturnPage'
 import Layout from '../shared/components/layout/Layout'
-import SearchPage from '../modules/product/pages/SearchPage'
 import ProductListPage from '../modules/product/pages/ProductListPage'
 import ProductDetailPage from '../modules/product/pages/ProductDetailPage'
+import WishlistPage from '../modules/wishlist/pages/WishlistPage'
 
 function WithLayout({ children }) {
   return <Layout>{children}</Layout>
@@ -21,11 +21,11 @@ export default function AppRoutes() {
       {/* NHÓM 1: CÁC TRANG CÓ LAYOUT (HEADER & FOOTER)        */}
       {/* -------------------------------------------------- */}
       <Route path="/" element={<WithLayout><HomePage /></WithLayout>} />
-      <Route path="/search" element={<WithLayout><SearchPage /></WithLayout>} />
       <Route path="/products" element={<WithLayout><ProductListPage /></WithLayout>} />
       <Route path="/collection/:gender" element={<WithLayout><ProductListPage /></WithLayout>} />
       <Route path="/products/:id" element={<WithLayout><ProductDetailPage /></WithLayout>} />
       <Route path="/cart" element={<WithLayout><CartPage /></WithLayout>} />
+      <Route path="/wishlist" element={<WithLayout><WishlistPage /></WithLayout>} />
       <Route path="/checkout/success" element={<WithLayout><PaymentSuccessPage /></WithLayout>} />
       <Route path="/checkout/failed" element={<WithLayout><PaymentFailedPage /></WithLayout>} />
       <Route path="/payment/vnpay-return" element={<WithLayout><VNPayReturnPage /></WithLayout>} />

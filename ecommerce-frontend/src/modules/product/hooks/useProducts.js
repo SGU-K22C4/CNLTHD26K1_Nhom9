@@ -59,6 +59,34 @@ export function useProducts({ query = '', filters = {}, gender = '' } = {}) {
     }
   }, [query])
 
+  /* ── Tính toán available filters từ dữ liệu thực tế ──────── */
+  const availableFilters = useMemo(() => {
+    const sizesSet = new Set()
+    const colorLabelsSet = new Set()
+    const collectionsSet = new Set()
+    const fabricsSet = new Set()
+
+    allProducts.forEach((p) => {
+      (p.sizes || []).forEach((s) => sizesSet.add(s))
+      ;(p.colorLabels || []).forEach((c) => colorLabelsSet.add(c))
+      if (p.collection) collectionsSet.add(p.collection)
+      if (p.fabric && p.fabric !== 'N/A' && p.fabric !== 'Khác') fabricsSet.add(p.fabric)
+    })
+
+    const SIZE_ORDER = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
+    const sortedSizes = [...sizesSet].sort(
+      (a, b) => (SIZE_ORDER.indexOf(a) === -1 ? 999 : SIZE_ORDER.indexOf(a))
+              - (SIZE_ORDER.indexOf(b) === -1 ? 999 : SIZE_ORDER.indexOf(b))
+    )
+
+    return {
+      sizes: sortedSizes,
+      colorLabels: [...colorLabelsSet].sort(),
+      collections: [...collectionsSet].sort(),
+      fabrics: [...fabricsSet].sort(),
+    }
+  }, [allProducts])
+
   const filteredProducts = useMemo(() => {
     let result = [...allProducts]
 
@@ -83,9 +111,9 @@ export function useProducts({ query = '', filters = {}, gender = '' } = {}) {
       result = result.filter((p) => p.sizes.some((s) => filters.sizes.includes(s)))
     }
 
-    // Color filter
+    // Color filter — dùng colorLabels (tên tiếng Việt) thay vì hex
     if (filters.colors?.length) {
-      result = result.filter((p) => p.colors.some((c) => filters.colors.includes(c)))
+      result = result.filter((p) => (p.colorLabels || []).some((c) => filters.colors.includes(c)))
     }
 
     // Collection filter
@@ -136,5 +164,6 @@ export function useProducts({ query = '', filters = {}, gender = '' } = {}) {
     currentPage: safePage,
     pageSize,
     error,
+    availableFilters,
   }
-}
+}

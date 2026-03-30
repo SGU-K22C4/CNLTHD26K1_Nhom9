@@ -7,6 +7,7 @@ import ColorSelector from '../components/ColorSelector'
 import ProductCard from '../components/ProductCard'
 import { formatCurrency } from '../../../shared/utils/format'
 import { useCartContext } from '../../cart/context/CartContext'
+import { useWishlistContext } from '../../wishlist/context/WishlistContext'
 
 const PRIMARY = '#5A6D57'
 
@@ -84,8 +85,10 @@ export default function ProductDetailPage() {
   const [selectedColor, setSelectedColor] = useState(null)
   const [selectedSize, setSelectedSize] = useState(null)
   const [qty, setQty] = useState(1)
-  const [wishlisted, setWishlisted] = useState(false)
   const [addedToCart, setAddedToCart] = useState(false)
+
+  const { isWishlisted, toggleWishlist } = useWishlistContext()
+  const wishlisted = product ? isWishlisted(product.id) : false
 
   useEffect(() => {
     let isMounted = true
@@ -235,7 +238,7 @@ export default function ProductDetailPage() {
                 {name}
               </h1>
               <button
-                onClick={() => setWishlisted((p) => !p)}
+                onClick={() => toggleWishlist(product.id)}
                 className="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
                 aria-label="Toggle wishlist"
               >
@@ -316,7 +319,7 @@ export default function ProductDetailPage() {
 
             {/* Add to Wishlist text button */}
             <button
-              onClick={() => setWishlisted((p) => !p)}
+              onClick={() => toggleWishlist(product.id)}
               className="w-full h-[52px] text-[13px] font-medium tracking-[0.1em] uppercase text-[#202020] border border-[#CBCBCB] hover:border-[#202020] transition-colors mb-6"
             >
               {wishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}

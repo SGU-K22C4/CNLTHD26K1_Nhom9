@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../../shared/components/ui/Button';
 import Input from '../../../shared/components/ui/Input';
+import { formatCurrency } from '../../../shared/utils/format';
 
 const FREE_SHIPPING_THRESHOLD = 100;
 
@@ -40,24 +41,24 @@ export default function CartSummary({ subtotal = 0 }) {
 
       {/* Line items */}
       <div className="flex flex-col gap-3">
-        <SummaryRow label="Subtotal" value={`$${subtotal.toFixed(2)}`} />
+        <SummaryRow label="Subtotal" value={formatCurrency(subtotal)} />
 
         <SummaryRow
           label="Shipping"
-          value={shippingFee === 0 ? 'Free' : `$${shippingFee.toFixed(2)}`}
+          value={shippingFee === 0 ? 'Miễn phí' : formatCurrency(shippingFee)}
           valueClass={shippingFee === 0 ? 'text-brand-green font-semibold' : undefined}
         />
 
         {shippingFee > 0 && (
           <p className="font-[Montserrat] text-[12px] text-neutral-404040 leading-[1.6] tracking-[0.8px] uppercase">
-            Add ${(FREE_SHIPPING_THRESHOLD - subtotal).toFixed(2)} more for free shipping
+            Mua thêm {formatCurrency(FREE_SHIPPING_THRESHOLD - subtotal)} để được miễn phí vận chuyển
           </p>
         )}
 
         {promoApplied && (
           <SummaryRow
             label="Discount (10%)"
-            value={`-$${discount.toFixed(2)}`}
+            value={`-${formatCurrency(discount)}`}
             valueClass="text-brand-green"
           />
         )}
@@ -103,7 +104,7 @@ export default function CartSummary({ subtotal = 0 }) {
       {/* Total */}
       <div className="flex items-center justify-between">
         <span className="font-[Montserrat] font-bold text-[16px] text-ink capitalize">Total</span>
-        <span className="font-[Montserrat] font-bold text-[18px] text-ink">${total.toFixed(2)}</span>
+        <span className="font-[Montserrat] font-bold text-[18px] text-ink">{formatCurrency(total)}</span>
       </div>
 
       {/* Checkout button */}

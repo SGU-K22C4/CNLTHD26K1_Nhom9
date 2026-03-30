@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useProducts } from '../hooks/useProducts'
 import { useFilters } from '../hooks/useFilters'
@@ -6,21 +6,105 @@ import ProductCard from '../components/ProductCard'
 import FilterSidebar from '../components/FilterSidebar'
 import SkeletonProductCollection from '../components/SkeletonProductCollection'
 
-/* ── 24×24 Search SVG ──────────────────────────────────────── */
-function SearchSvg() {
+/* ── Inline styles (no Tailwind dependency for new elements) ── */
+const styles = {
+  searchWrapper: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0',
+  },
+  searchInputContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    background: '#F7F7F5',
+    border: '1.5px solid transparent',
+    borderRadius: '50px',
+    padding: '0 18px',
+    height: '44px',
+    gap: '10px',
+    transition: 'border-color 0.25s ease, box-shadow 0.25s ease, width 0.35s cubic-bezier(0.4,0,0.2,1)',
+    overflow: 'hidden',
+    cursor: 'text',
+  },
+  searchInputContainerFocused: {
+    borderColor: '#5A6D57',
+    boxShadow: '0 0 0 3px rgba(90,109,87,0.12)',
+    background: '#fff',
+  },
+  searchInput: {
+    border: 'none',
+    outline: 'none',
+    background: 'transparent',
+    fontSize: '15px',
+    fontFamily: 'Montserrat, sans-serif',
+    color: '#202020',
+    letterSpacing: '0.02em',
+    width: '100%',
+    minWidth: 0,
+  },
+  iconBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    opacity: 1,
+    transition: 'opacity 0.2s',
+  },
+  searchChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    background: '#5A6D57',
+    color: '#fff',
+    borderRadius: '50px',
+    padding: '5px 14px 5px 16px',
+    fontSize: '13px',
+    fontFamily: 'Montserrat, sans-serif',
+    fontWeight: 500,
+    letterSpacing: '0.04em',
+    whiteSpace: 'nowrap',
+  },
+  chipClose: {
+    background: 'rgba(255,255,255,0.25)',
+    border: 'none',
+    borderRadius: '50%',
+    width: '18px',
+    height: '18px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    padding: 0,
+    transition: 'background 0.2s',
+  },
+}
+
+function SearchSvg({ color = '#5A6D57', size = 20 }) {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="11" cy="11" r="7" stroke="#202020" strokeWidth="1.5" />
-      <path d="M16.5 16.5L21 21" stroke="#202020" strokeWidth="1.5" strokeLinecap="round" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" stroke={color} strokeWidth="1.8" />
+      <path d="M16.5 16.5L21 21" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   )
 }
 
-/* ── 24×24 Close/X SVG ─────────────────────────────────────── */
-function CloseSvg() {
+function CloseSmSvg({ color = '#fff' }) {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M18 6L6 18M6 6L18 18" stroke="#202020" strokeWidth="1.5" strokeLinecap="round" />
+    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M10 2L2 10M2 2L10 10" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function ClearSvg() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M18 6L6 18M6 6L18 18" stroke="#9E9E9E" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
 }
@@ -38,6 +122,8 @@ export default function SearchPage() {
       : ''
 
   const [inputValue, setInputValue] = useState(initialQuery)
+  const [focused, setFocused] = useState(false)
+  const inputRef = useRef(null)
 
   useEffect(() => {
     setInputValue(searchParams.get('q') || '')
@@ -48,6 +134,7 @@ export default function SearchPage() {
     if (inputValue.trim()) {
       const genderQuery = genderParam ? `&gender=${encodeURIComponent(genderParam)}` : ''
       navigate(`/search?q=${encodeURIComponent(inputValue.trim())}${genderQuery}`)
+      inputRef.current?.blur()
     }
   }
 
@@ -55,6 +142,7 @@ export default function SearchPage() {
     setInputValue('')
     const genderQuery = genderParam ? `?gender=${encodeURIComponent(genderParam)}` : ''
     navigate(`/search${genderQuery}`)
+    setTimeout(() => inputRef.current?.focus(), 50)
   }
 
   const { filters, setFilter, toggleArrayFilter, clearFilters, hasActiveFilters } = useFilters()
@@ -71,14 +159,10 @@ export default function SearchPage() {
     gender: genderFilter,
   })
 
-  useEffect(() => {
-    setPage(0)
-  }, [initialQuery, genderFilter, filters])
+  useEffect(() => { setPage(0) }, [initialQuery, genderFilter, filters])
 
   useEffect(() => {
-    if (page !== currentPage) {
-      setPage(currentPage)
-    }
+    if (page !== currentPage) setPage(currentPage)
   }, [page, currentPage])
 
   const pageNumbers = useMemo(() => {
@@ -88,70 +172,102 @@ export default function SearchPage() {
   }, [totalPages])
 
   return (
-    <div className="min-h-screen bg-white" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#fff', fontFamily: 'Montserrat, sans-serif' }}>
 
       {/* ══ Search bar ══════════════════════════════════════════ */}
-      <div className="border-b border-[#E0E0E0]">
-        <form
-          onSubmit={handleSubmit}
-          className="max-w-[1440px] mx-auto flex items-center px-6 h-[56px] gap-4"
-        >
-          {/* Search icon button */}
-          <button
-            type="submit"
-            className="flex-shrink-0 hover:opacity-70 transition-opacity"
-            aria-label="Search"
+      <div style={{ borderBottom: '1px solid #EBEBEB', background: '#fff' }}>
+        <div style={{
+          maxWidth: '1440px',
+          margin: '0 auto',
+          padding: '0 24px',
+          height: '72px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px',
+        }}>
+
+          {/* ── Search input pill ── */}
+          <form
+            onSubmit={handleSubmit}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}
           >
-            <SearchSvg />
-          </button>
-
-          {/* Input */}
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Search"
-            className="flex-1 text-[16px] font-normal text-[#202020] placeholder-[#CBCBCB] outline-none bg-transparent leading-none"
-            style={{ fontFamily: 'Montserrat, sans-serif' }}
-          />
-
-          {/* Clear button */}
-          {inputValue && (
-            <button
-              type="button"
-              onClick={handleClear}
-              className="flex-shrink-0 hover:opacity-70 transition-opacity"
-              aria-label="Clear search"
+            <div
+              style={{
+                ...styles.searchInputContainer,
+                ...(focused ? styles.searchInputContainerFocused : {}),
+                flex: 1,
+              }}
+              onClick={() => inputRef.current?.focus()}
             >
-              <CloseSvg />
-            </button>
+              {/* Icon */}
+              <button type="submit" style={styles.iconBtn} aria-label="Search">
+                <SearchSvg color={focused ? '#5A6D57' : '#9E9E9E'} />
+              </button>
+
+              {/* Input */}
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
+                placeholder="Tìm kiếm sản phẩm..."
+                style={styles.searchInput}
+                autoFocus
+              />
+
+              {/* Clear X inside pill */}
+              {inputValue && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleClear() }}
+                  style={{ ...styles.iconBtn, marginLeft: '4px' }}
+                  aria-label="Clear"
+                >
+                  <ClearSvg />
+                </button>
+              )}
+            </div>
+          </form>
+
+          {/* ── Searched keyword chip ── */}
+          {initialQuery && !focused && (
+            <div style={styles.searchChip}>
+              <span>"{initialQuery}"</span>
+              <button
+                style={styles.chipClose}
+                onClick={handleClear}
+                aria-label="Remove search"
+              >
+                <CloseSmSvg />
+              </button>
+            </div>
           )}
-        </form>
+        </div>
       </div>
 
       {/* ══ Body ════════════════════════════════════════════════ */}
-      <div className="max-w-[1440px] mx-auto px-6 py-8">
+      <div style={{ maxWidth: '1440px', margin: '0 auto', padding: '32px 24px' }}>
 
         {/* Item count */}
-        <p
-          className="text-center mb-8"
-          style={{
-            fontFamily: 'Montserrat, sans-serif',
-            fontSize: '14px',
-            fontWeight: 400,
-            color: '#202020',
-            letterSpacing: '0.06em',
-          }}
-        >
-          {loading
-            ? 'Loading…'
-            : `${total} Item${total !== 1 ? 's' : ''}`}
+        <p style={{
+          textAlign: 'center',
+          marginBottom: '32px',
+          fontFamily: 'Montserrat, sans-serif',
+          fontSize: '13px',
+          fontWeight: 400,
+          color: '#8A8A8A',
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+        }}>
+          {loading ? 'Đang tải…' : `${total} sản phẩm`}
         </p>
 
-        <div className="flex gap-8 items-start">
+        <div style={{ display: 'flex', gap: '32px', alignItems: 'flex-start' }}>
 
-          {/* ── Filter sidebar ─────────────────────────────── */}
-          <div className="w-auto md:w-[240px] flex-shrink-0">
+          {/* ── Filter sidebar ───────────────────────────────── */}
+          <div style={{ width: '240px', flexShrink: 0 }}>
             <FilterSidebar
               filters={filters}
               setFilter={setFilter}
@@ -161,49 +277,38 @@ export default function SearchPage() {
             />
           </div>
 
-          {/* ── Product grid ───────────────────────────────── */}
-          <div className="flex-1 min-w-0">
+          {/* ── Product grid ─────────────────────────────────── */}
+          <div style={{ flex: 1, minWidth: 0 }}>
             {loading ? (
               <div className="grid grid-cols-2 gap-x-5 gap-y-10">
                 <SkeletonProductCollection displayCount={4} />
               </div>
             ) : error ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center gap-2">
-                <p
-                  style={{
-                    fontFamily: 'Montserrat, sans-serif',
-                    fontSize: '16px',
-                    fontWeight: 600,
-                    color: '#202020',
-                  }}
-                >
-                  Could not load products
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '96px 0', gap: '8px', textAlign: 'center' }}>
+                <p style={{ fontFamily: 'Montserrat, sans-serif', fontSize: '16px', fontWeight: 600, color: '#202020' }}>
+                  Không thể tải sản phẩm
                 </p>
                 <p style={{ fontSize: '14px', color: '#888', fontFamily: 'Montserrat, sans-serif' }}>{error}</p>
               </div>
             ) : products.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
-                <p
-                  style={{
-                    fontFamily: 'Montserrat, sans-serif',
-                    fontSize: '16px',
-                    fontWeight: 600,
-                    color: '#202020',
-                  }}
-                >
-                  No products found
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '96px 0', gap: '12px', textAlign: 'center' }}>
+                {/* Empty state illustration */}
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#F7F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px' }}>
+                  <SearchSvg color="#CBCBCB" size={28} />
+                </div>
+                <p style={{ fontFamily: 'Montserrat, sans-serif', fontSize: '16px', fontWeight: 600, color: '#202020' }}>
+                  Không tìm thấy sản phẩm
                 </p>
                 {initialQuery && (
                   <p style={{ fontSize: '14px', color: '#888', fontFamily: 'Montserrat, sans-serif' }}>
-                    Try a different search term or clear your filters.
+                    Thử từ khóa khác hoặc xóa bộ lọc.
                   </p>
                 )}
                 <button
                   onClick={clearFilters}
-                  className="underline underline-offset-2 hover:opacity-70 transition-opacity"
-                  style={{ fontSize: '14px', color: '#5A6D57', fontFamily: 'Montserrat, sans-serif' }}
+                  style={{ marginTop: '4px', fontSize: '13px', color: '#5A6D57', fontFamily: 'Montserrat, sans-serif', background: 'none', border: '1px solid #5A6D57', borderRadius: '50px', padding: '8px 20px', cursor: 'pointer', letterSpacing: '0.04em', transition: 'all 0.2s' }}
                 >
-                  Clear filters
+                  Xóa bộ lọc
                 </button>
               </div>
             ) : (
@@ -215,7 +320,7 @@ export default function SearchPage() {
                 </div>
 
                 {totalPages > 1 && (
-                  <div className="mt-10 flex items-center justify-center gap-2 flex-wrap">
+                  <div style={{ marginTop: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
                       onClick={() => setPage((prev) => Math.max(0, prev - 1))}

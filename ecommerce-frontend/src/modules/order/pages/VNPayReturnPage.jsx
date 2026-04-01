@@ -15,6 +15,30 @@ export default function VNPayReturnPage() {
         const queryString = searchParams.toString()
         const data = await paymentService.verifyVnpayPayment(queryString)
         setResult(data)
+
+        // If payment successful, redirect to order detail page
+        if (data.success) {
+          // Clear cart after successful VNPay payment
+          const guestId = localStorage.getItem('guestId')
+          if (guestId) {
+            const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+            try {
+              await fetch(`${API_URL}/api/v1/cart`, {
+                method: 'DELETE',
+                headers: { 'X-User-Id': guestId },
+              })
+            } catch (e) {
+              console.warn('Failed to clear cart:', e)
+            }
+          }
+
+          // Use orderId if available, else orderNumber
+          const id = data.orderId || data.orderNumber
+          if (id) {
+            navigate(`/orders/${id}?from=payment`, { replace: true })
+            return
+          }
+        }
       } catch (err) {
         console.error('VNPay verification failed:', err)
         setResult({ success: false, message: 'Không thể xác thực thanh toán. Vui lòng liên hệ hỗ trợ.' })
@@ -23,7 +47,7 @@ export default function VNPayReturnPage() {
       }
     }
     verify()
-  }, [searchParams])
+  }, [searchParams, navigate])
 
   if (loading) {
     return (
@@ -41,6 +65,7 @@ export default function VNPayReturnPage() {
   }
 
   if (result?.success) {
+    // This is a fallback — normally we redirect above
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
         <div style={{ textAlign: 'center', maxWidth: 500, padding: 40 }}>
@@ -53,15 +78,26 @@ export default function VNPayReturnPage() {
           <p style={{ color: '#888', fontSize: 14, marginBottom: 24 }}>
             Cảm ơn bạn đã mua hàng. Đơn hàng của bạn đã được xác nhận và đang được xử lý.
           </p>
-          <button
-            onClick={() => navigate('/')}
-            style={{
-              padding: '12px 32px', backgroundColor: '#5A6D57', color: '#fff',
-              border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600
-            }}
-          >
-            Tiếp tục mua sắm
-          </button>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <button
+              onClick={() => navigate('/')}
+              style={{
+                padding: '12px 32px', backgroundColor: '#5A6D57', color: '#fff',
+                border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600
+              }}
+            >
+              Tiếp tục mua sắm
+            </button>
+            <button
+              onClick={() => navigate(`/orders/${result.orderNumber}`)}
+              style={{
+                padding: '12px 32px', backgroundColor: '#fff', color: '#5A6D57',
+                border: '1px solid #5A6D57', cursor: 'pointer', fontSize: 14, fontWeight: 600
+              }}
+            >
+              Xem chi tiết đơn hàng
+            </button>
+          </div>
         </div>
       </div>
     )

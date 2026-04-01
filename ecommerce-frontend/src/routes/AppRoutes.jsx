@@ -5,6 +5,7 @@ import CheckoutPage from '../modules/order/pages/CheckoutPage'
 import PaymentSuccessPage from '../modules/order/pages/PaymentSuccessPage'
 import PaymentFailedPage from '../modules/order/pages/PaymentFailedPage'
 import VNPayReturnPage from '../modules/order/pages/VNPayReturnPage'
+import OrderDetailPage from '../modules/order/pages/OrderDetailPage'
 import Layout from '../shared/components/layout/Layout'
 import ProductListPage from '../modules/product/pages/ProductListPage'
 import ProductDetailPage from '../modules/product/pages/ProductDetailPage'
@@ -29,6 +30,7 @@ export default function AppRoutes() {
       <Route path="/checkout/success" element={<WithLayout><PaymentSuccessPage /></WithLayout>} />
       <Route path="/checkout/failed" element={<WithLayout><PaymentFailedPage /></WithLayout>} />
       <Route path="/payment/vnpay-return" element={<WithLayout><VNPayReturnPage /></WithLayout>} />
+      <Route path="/orders/:orderId" element={<WithLayout><OrderDetailPage /></WithLayout>} />
 
       {/* -------------------------------------------------- */}
       {/* NHÓM 2: CÁC TRANG CHECKOUT FULL MÀN HÌNH (NO LAYOUT) */}

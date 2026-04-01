@@ -168,28 +168,49 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - JWT_SECRET=${JWT_SECRET}
 
-  api-gateway:
-    build:
-      context: ../backend
-      dockerfile: api-gateway/Dockerfile
-    container_name: fashion_api_gateway
+  # ── Kong Gateway (replaces Spring Cloud API Gateway) ─────────────────────
+  # DB-less mode: all config loaded from kong.yml declarative file.
+  # Custom jwt-auth Lua plugin validates HS256 tokens and injects
+  # X-User-Id / X-User-Email headers to downstream services.
+  #
+  # JWT_SECRET is injected into kong.yml at startup via entrypoint wrapper
+  # (Kong DB-less mode does not support env var interpolation natively).
+  kong:
+    image: kong:3.7-ubuntu
+    container_name: fashion_kong_gateway
     restart: unless-stopped
-    ports:
-      - "8080:8080"
+    entrypoint: ["/bin/sh", "/kong/docker-entrypoint-wrapper.sh"]
     environment:
-      - USER_SERVICE_URL=http://user-service:8081
-      - PRODUCT_SERVICE_URL=http://product-service:8082
-      - CART_SERVICE_URL=http://cart-service:8083
-      - ORDER_SERVICE_URL=http://order-service:8084
-      - PROMOTION_SERVICE_URL=http://promotion-service:8085
-      - REVIEW_SERVICE_URL=http://review-service:8086
-      - CHATBOT_SERVICE_URL=http://chatbot-service:8087
-      - JWT_SECRET=${JWT_SECRET}
+      KONG_DATABASE: "off"
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_PROXY_LISTEN: 0.0.0.0:8080
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      # Load custom jwt-auth plugin
+      KONG_PLUGINS: bundled,jwt-auth
+      KONG_LUA_PACKAGE_PATH: /kong/custom-plugins/?.lua;/kong/custom-plugins/?/init.lua;;
+      # JWT secret — shared with all Spring Boot services
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "8080:8080"   # Proxy (frontend calls this)
+      - "8001:8001"   # Admin API (debug & inspection)
+    volumes:
+      - ./kong.yml:/kong/template/kong.yml.template:ro
+      - ./kong/docker-entrypoint-wrapper.sh:/kong/docker-entrypoint-wrapper.sh:ro
+      - ./kong/plugins/jwt-auth:/kong/custom-plugins/kong/plugins/jwt-auth:ro
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       - user-service
       - product-service
       - cart-service
       - order-service
+      - promotion-service
+      - review-service
+      # - chatbot-service  # Uncomment when chatbot-service image is built
 
 volumes:
   mysql_data:

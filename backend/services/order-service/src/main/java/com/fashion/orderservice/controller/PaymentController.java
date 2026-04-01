@@ -91,6 +91,7 @@ public class PaymentController {
 
                 result.put("success", true);
                 result.put("message", "Payment successful");
+                result.put("orderId", order.getId());
                 result.put("orderNumber", order.getOrderNumber());
                 result.put("transactionNo", transactionNo);
             } else {

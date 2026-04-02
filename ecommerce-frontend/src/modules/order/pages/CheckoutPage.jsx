@@ -128,9 +128,9 @@ export default function CheckoutPage() {
           return // Don't clear cart or navigate — VNPay will redirect back
         }
 
-        // COD or other methods: clear cart and go to success page
+        // COD or other methods: clear cart and go to order detail page
         await clearCart()
-        navigate('/checkout/success', { replace: true })
+        navigate(`/orders/${savedOrder.id}?from=payment`, { replace: true })
       } catch (err) {
         console.error('Submit order failed:', err)
         alert('Tạo đơn hàng thất bại. Vui lòng thử lại.')

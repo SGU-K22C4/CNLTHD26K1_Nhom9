@@ -1,8 +1,10 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CheckCircle2 } from 'lucide-react'
 
 export default function PaymentSuccessPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const orderId = searchParams.get('orderId')
 
   return (
     <div className="min-h-[70vh] flex flex-col items-center justify-center font-[Montserrat] py-24 px-8 text-center">
@@ -51,12 +53,14 @@ export default function PaymentSuccessPage() {
         >
           Khám phá thêm sản phẩm
         </button>
-        <button
-          onClick={() => alert('Tính năng xem chi tiết đơn hàng sẽ được phát triển sau.')}
-          className="bg-white border border-[#5A6D57] text-[#5A6D57] hover:bg-gray-50 text-[14px] font-normal leading-6 px-8 py-3 transition-colors"
-        >
-          Xem chi tiết đơn hàng
-        </button>
+        {orderId && (
+          <button
+            onClick={() => navigate(`/orders/${orderId}`)}
+            className="bg-white border border-[#5A6D57] text-[#5A6D57] hover:bg-gray-50 text-[14px] font-normal leading-6 px-8 py-3 transition-colors"
+          >
+            Xem chi tiết đơn hàng
+          </button>
+        )}
       </div>
     </div>
   )

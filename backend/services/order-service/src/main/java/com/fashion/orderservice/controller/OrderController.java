@@ -122,6 +122,28 @@ public class OrderController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    /**
+     * GET /api/v1/orders/by-number/{orderNumber}
+     * Get full order detail by order number (used after payment success).
+     */
+    @GetMapping("/by-number/{orderNumber}")
+    public ResponseEntity<Order> getOrderByNumber(@PathVariable String orderNumber) {
+        return orderRepository.findByOrderNumber(orderNumber)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * GET /api/v1/orders/detail/{id}
+     * Get full order detail by ID (used by order detail page).
+     */
+    @GetMapping("/detail/{id}")
+    public ResponseEntity<Order> getOrderDetail(@PathVariable Long id) {
+        return orderRepository.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PatchMapping("/{id}/cancel")
     public ResponseEntity<Order> cancelOrder(
             @PathVariable Long id,

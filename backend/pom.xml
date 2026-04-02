@@ -40,7 +40,7 @@
 
     <modules>
         <module>common</module>
-        <module>api-gateway</module>
+        <!-- <module>api-gateway</module> -->  <!-- Replaced by Kong Gateway (docker/kong.yml) -->
         <module>services/user-service</module>
         <module>services/product-service</module>
         <module>services/cart-service</module>

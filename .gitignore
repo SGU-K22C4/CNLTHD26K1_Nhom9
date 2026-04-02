@@ -1,10 +1,43 @@
-# Maven/Java build outputs
-**/target/
-
-# IDE project files
+# ── IDE & OS ──────────────────────────────────────────────────────────────────
 .idea/
-**/.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
 
-# Maven wrapper downloaded binaries
-.mvn/wrapper/dists/
-.mvn/wrapper/*.zip
+# ── Java / Maven ──────────────────────────────────────────────────────────────
+target/
+*.class
+*.jar
+*.war
+*.log
+.mvn/wrapper/maven-wrapper.jar
+!.mvn/wrapper/maven-wrapper.properties
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+node_modules/
+dist/
+.next/
+.nuxt/
+*.local
+
+# ── Environment / Secrets (NEVER commit these) ────────────────────────────────
+docker/.env
+.env
+.env.*
+!.env.example
+!ecommerce-frontend/.env.development
+
+# ── Docker volumes & backups ──────────────────────────────────────────────────
+docker/mysql/data/
+docker/redis/data/
+docker/mysql_backup.sql
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.swp
+*.swo

@@ -1,0 +1,113 @@
+package com.fashion.orderservice.controller;
+
+import com.fashion.orderservice.config.VNPayConfig;
+import com.fashion.orderservice.entity.Order;
+import com.fashion.orderservice.repository.OrderRepository;
+import com.fashion.orderservice.service.VNPayService;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/v1/payments/vnpay")
+@RequiredArgsConstructor
+public class PaymentController {
+
+    private final VNPayService vnPayService;
+    private final OrderRepository orderRepository;
+
+    /**
+     * GET /api/v1/payments/vnpay/create-payment?orderId=123
+     * Returns a JSON with the VNPay redirect URL.
+     */
+    @GetMapping("/create-payment")
+    public ResponseEntity<Map<String, String>> createPayment(
+            @RequestParam Long orderId,
+            HttpServletRequest request) {
+
+        Order order = orderRepository.findById(orderId).orElse(null);
+        if (order == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // Only allow VNPAY payment method
+        if (order.getPaymentMethod() != Order.PaymentMethod.VNPAY) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Order payment method is not VNPAY");
+            return ResponseEntity.badRequest().body(error);
+        }
+
+        String ipAddress = VNPayConfig.getIpAddress(request);
+        long totalAmount = order.getTotal().longValue(); // VND integer
+        String orderInfo = "Thanh toan don hang " + order.getOrderNumber();
+
+        String paymentUrl = vnPayService.createPaymentUrl(order.getId(), totalAmount, orderInfo, ipAddress);
+
+        Map<String, String> response = new HashMap<>();
+        response.put("paymentUrl", paymentUrl);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * GET /api/v1/payments/vnpay/payment-return?vnp_TxnRef=...&vnp_ResponseCode=...&vnp_SecureHash=...
+     * Called by the frontend after VNPay redirects back.
+     * Validates signature and updates order status.
+     */
+    @GetMapping("/payment-return")
+    public ResponseEntity<Map<String, Object>> paymentReturn(@RequestParam Map<String, String> params) {
+
+        Map<String, Object> result = new HashMap<>();
+
+        boolean isValid = vnPayService.validateSignature(params);
+        if (!isValid) {
+            result.put("success", false);
+            result.put("message", "Invalid signature");
+            return ResponseEntity.badRequest().body(result);
+        }
+
+        String txnRef = params.get("vnp_TxnRef");
+        String responseCode = params.get("vnp_ResponseCode");
+        String transactionNo = params.get("vnp_TransactionNo");
+
+        try {
+            Long orderId = Long.parseLong(txnRef);
+            Order order = orderRepository.findById(orderId).orElse(null);
+
+            if (order == null) {
+                result.put("success", false);
+                result.put("message", "Order not found");
+                return ResponseEntity.badRequest().body(result);
+            }
+
+            if ("00".equals(responseCode)) {
+                // Payment successful
+                order.setStatus(Order.OrderStatus.CONFIRMED);
+                order.setPaymentStatus(Order.PaymentStatus.PAID);
+                orderRepository.save(order);
+
+                result.put("success", true);
+                result.put("message", "Payment successful");
+                result.put("orderId", order.getId());
+                result.put("orderNumber", order.getOrderNumber());
+                result.put("transactionNo", transactionNo);
+            } else {
+                // Payment failed
+                order.setPaymentStatus(Order.PaymentStatus.FAILED);
+                orderRepository.save(order);
+
+                result.put("success", false);
+                result.put("message", "Payment failed");
+                result.put("responseCode", responseCode);
+            }
+        } catch (NumberFormatException e) {
+            result.put("success", false);
+            result.put("message", "Invalid transaction reference");
+        }
+
+        return ResponseEntity.ok(result);
+    }
+}

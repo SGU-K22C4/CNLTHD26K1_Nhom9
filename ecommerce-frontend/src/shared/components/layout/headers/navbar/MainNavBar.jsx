@@ -1,4 +1,5 @@
 import { AppBar, Toolbar, Box, IconButton, Button } from '@mui/material';
+import { Link } from 'react-router-dom';
 import LogoWebsite from './LogoWebsite';
 import { useCartContext } from '../../../../../modules/cart/context/CartContext';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
@@ -15,12 +16,11 @@ import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import CartDrawer from '../../../../../modules/cart/components/CartDrawer';
 
-
 function MainNavBar(props) {
   const { options, setIsHovered, setIsOpen } = props;
   const navigate = useNavigate();
 
-  const { openDrawer, totalItems } = useCartContext();
+  const { openDrawer, closeDrawer, totalItems } = useCartContext();
 
   const [open, setOpen] = useState(false);
   const [isOpenSearch, setIsOpenSearch] = useState(false);
@@ -28,10 +28,15 @@ function MainNavBar(props) {
   const handleDrawerOpen = () => setOpen(true);
   const handleDrawerClose = () => setOpen(false);
   const handleCloseSearch = () => setIsOpenSearch(false);
-  const handleOpenSearch = () => {
-    if (!isOpenSearch) {
-      setIsOpenSearch(true);
-    }
+  const handleToggleSearch = () => {
+    setIsOpenSearch((prev) => {
+      if (!prev) closeDrawer();   // mở search → đóng cart
+      return !prev;
+    });
+  };
+  const handleOpenCart = (e) => {
+    setIsOpenSearch(false);        // đóng search → mở cart
+    openDrawer(e);
   };
 
   return (
@@ -54,76 +59,62 @@ function MainNavBar(props) {
         }}
       >
         <LogoWebsite />
-        
+
         {/* Mobile Menu Icon + Search */}
         <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
           <IconButton onClick={handleDrawerOpen}>
             <MenuOutlinedIcon sx={{ cursor: 'pointer', color: '#000000' }} />
           </IconButton>
-          {isOpenSearch ? (
-            <Button
-              sx={{ color: 'inherit', padding: 0, minWidth: '0px' }}
-              onClick={handleCloseSearch}
-            >
-              <CloseIcon />
-            </Button>
-          ) : (
-            <Button
-              onClick={handleOpenSearch}
-              sx={{ color: 'inherit', padding: 0, minWidth: '0px' }}
-            >
-              <SearchOutlinedIcon />
-            </Button>
-          )}
+          <Button
+            onClick={handleToggleSearch}
+            sx={{ color: 'inherit', padding: 0, minWidth: '0px' }}
+          >
+            {isOpenSearch ? <CloseIcon /> : <SearchOutlinedIcon />}
+          </Button>
         </Box>
-        
+
         {/* Desktop Menu */}
         <DesktopMenu options={options} setIsHovered={setIsHovered} setIsOpen={setIsOpen} />
-        
+
         {/* Right Side Icons - Desktop Only */}
         <Box sx={{ gap: { xs: 1, md: 2 }, display: { xs: 'none', md: 'flex' }, alignItems: 'center' }}>
-          {isOpenSearch ? (
-            <Button
-              sx={{ color: 'inherit', padding: '0px', margin: '0px', display: 'block', minWidth: '0px' }}
-              onClick={handleCloseSearch}
-            >
-              <CloseIcon />
-            </Button>
-          ) : (
-            <Button
-              onClick={handleOpenSearch}
-              sx={{ color: 'inherit', padding: '0px', margin: '0px', display: 'block', minWidth: '0px' }}
-            >
-              <SearchOutlinedIcon />
-            </Button>
-          )}
-          <FavoriteBorderOutlinedIcon sx={{ cursor: 'pointer' }} />
+          <Button
+            onClick={handleToggleSearch}
+            sx={{ color: 'inherit', padding: '0px', margin: '0px', display: 'block', minWidth: '0px' }}
+          >
+            {isOpenSearch ? <CloseIcon /> : <SearchOutlinedIcon />}
+          </Button>
+          <Link to="/wishlist" style={{ color: 'inherit', display: 'flex' }}>
+            <FavoriteBorderOutlinedIcon sx={{ cursor: 'pointer' }} />
+          </Link>
           <div className="relative">
-            <BadgeNumberShopping badgetItem={totalItems.toString()} handleOpenModal={openDrawer} />
+            <BadgeNumberShopping badgetItem={totalItems.toString()} handleOpenModal={handleOpenCart} />
           </div>
         </Box>
-        
+
         {/* Mobile Logo */}
         <Box>
           <LogoMobileWebsite />
         </Box>
-        
+
         {/* Mobile Right Icons */}
         <Box sx={{ display: { xs: 'flex', md: 'none' }, gap: '9px', alignItems: 'center' }}>
-          <FavoriteBorderOutlinedIcon sx={{ cursor: 'pointer' }} />
+          <Link to="/wishlist" style={{ color: 'inherit', display: 'flex' }}>
+            <FavoriteBorderOutlinedIcon sx={{ cursor: 'pointer' }} />
+          </Link>
           <div className="relative z-[10]">
             <BadgeNumberShopping badgetItem={totalItems.toString()} handleOpenModal={openDrawer} />
           </div>
         </Box>
-        
+
         {/* Mobile Menu Drawer */}
         <NavigationDropMenuMobile open={open} handleDrawerClose={handleDrawerClose} options={options} />
       </Toolbar>
-      
-      {/* Search Field Below Navbar */}
-      {isOpenSearch && <SearchField />}
 
-      {/* Cart Drawer — rendered outside all display-conditional containers so it works on all screen sizes */}
+      {/* Search Dropdown — beautiful animated */}
+      {isOpenSearch && <SearchField onClose={handleCloseSearch} />}
+
+      {/* Cart Drawer */}
       <CartDrawer />
     </AppBar>
   );

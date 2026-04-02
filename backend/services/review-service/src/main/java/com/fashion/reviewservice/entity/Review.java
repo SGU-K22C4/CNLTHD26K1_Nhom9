@@ -1,15 +1,14 @@
 package com.fashion.reviewservice.entity;
 
-import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "reviews", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"user_id", "product_id"})
-})
+@Document(collection = "reviews")
+@CompoundIndex(name = "uniq_user_product", def = "{'userId': 1, 'productId': 1}", unique = true)
 @Data
 @Builder
 @NoArgsConstructor
@@ -17,25 +16,19 @@ import java.time.LocalDateTime;
 public class Review {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @Column(nullable = false)
     private String userId;
 
-    @Column(nullable = false)
     private Long productId;
 
-    @Column(nullable = false)
     private int rating; // 1-5
 
-    @Column(columnDefinition = "TEXT")
     private String comment;
 
-    @Column(nullable = false)
     @Builder.Default
     private boolean approved = false;
 
-    @CreationTimestamp
-    private LocalDateTime createdAt;
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
 }

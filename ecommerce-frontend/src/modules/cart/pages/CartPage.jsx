@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { X, Minus, Plus } from 'lucide-react'
 import { useCartContext } from '../context/CartContext'
+import { formatCurrency } from '../../../shared/utils/format'
 
 const TAX_RATE = 0.08
 
@@ -16,11 +17,11 @@ export default function CartPage() {
     <div className="flex flex-col gap-4 pt-6 border-t border-[#dfdfdf]">
       <div className="flex items-center justify-between text-[#404040] text-sm lg:text-base">
         <span>Subtotal ({totalItems})</span>
-        <span>${subtotal.toFixed(2)}</span>
+        <span>{formatCurrency(subtotal)}</span>
       </div>
       <div className="flex items-center justify-between text-[#404040] text-sm lg:text-base">
         <span>Tax</span>
-        <span>${tax.toFixed(2)}</span>
+        <span>{formatCurrency(tax)}</span>
       </div>
       <div className="flex items-center justify-between text-[#404040] text-sm lg:text-base">
         <span>Shipping</span>
@@ -28,7 +29,7 @@ export default function CartPage() {
       </div>
       <div className="flex items-center justify-between text-[#202020] font-bold text-sm lg:text-lg pt-2 border-t border-[#dfdfdf]">
         <span>Order Totals:</span>
-        <span>${total.toFixed(2)}</span>
+        <span>{formatCurrency(total)}</span>
       </div>
       <p className="text-[11px] text-[#202020] font-semibold leading-relaxed mt-1">
         The Total Amount You Pay Includes All Applicable Customs Duties &amp; Taxes. We Guarantee No Additional Charges On Delivery
@@ -100,7 +101,7 @@ export default function CartPage() {
                 {/* Price + stepper on same row */}
                 <div className="flex items-center justify-between mt-3">
                   <p className="text-sm font-bold text-[#202020]">
-                    $ {(item.price * item.quantity).toFixed(0)}
+                    {formatCurrency(item.price * item.quantity)}
                   </p>
                   <div className="flex items-center border border-[#dfdfdf] bg-[#D1D9CF]">
                     <button
@@ -187,7 +188,7 @@ export default function CartPage() {
             </div>
             {items.map((item) => (
               <div key={item.id} className="grid grid-cols-3 gap-4 py-8 border-b border-[#dfdfdf] items-center">
-                <span className="text-lg text-[#202020]">${item.price.toFixed(2)}</span>
+                <span className="text-lg text-[#202020]">{formatCurrency(item.price)}</span>
                 <div className="flex items-center justify-center">
                   <div className="flex items-center justify-between bg-[#D1D9CF] w-[88px] px-2 py-[5px]">
                     <button
@@ -210,7 +211,7 @@ export default function CartPage() {
                   </div>
                 </div>
                 <span className="text-lg text-[#202020] text-right">
-                  ${(item.price * item.quantity).toFixed(2)}
+                  {formatCurrency(item.price * item.quantity)}
                 </span>
               </div>
             ))}

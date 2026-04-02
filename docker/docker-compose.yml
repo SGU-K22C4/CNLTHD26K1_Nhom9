@@ -1,4 +1,4 @@
-version: '3.8'
+name: fashion
 
 services:
 
@@ -8,10 +8,9 @@ services:
     container_name: fashion_mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: fashion_user_db
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-huytran123}
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d
@@ -25,21 +24,37 @@ services:
     image: redis:7.0-alpine
     container_name: fashion_redis
     restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
 
+  mongo:
+    image: mongo:7.0
+    container_name: fashion_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ── Services ───────────────────────────────────────────────────────────────
   user-service:
     build:
-      context: ./backend/services/user-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/user-service/Dockerfile
     container_name: fashion_user_service
     restart: unless-stopped
     ports:
@@ -47,7 +62,7 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_user_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
       - JWT_SECRET=${JWT_SECRET}
       - MAIL_USERNAME=${MAIL_USERNAME}
       - MAIL_PASSWORD=${MAIL_PASSWORD}
@@ -58,8 +73,8 @@ services:
 
   product-service:
     build:
-      context: ./backend/services/product-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/product-service/Dockerfile
     container_name: fashion_product_service
     restart: unless-stopped
     ports:
@@ -67,7 +82,7 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_product_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
       - JWT_SECRET=${JWT_SECRET}
     depends_on:
       mysql:
@@ -75,8 +90,8 @@ services:
 
   cart-service:
     build:
-      context: ./backend/services/cart-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/cart-service/Dockerfile
     container_name: fashion_cart_service
     restart: unless-stopped
     ports:
@@ -91,8 +106,8 @@ services:
 
   order-service:
     build:
-      context: ./backend/services/order-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/order-service/Dockerfile
     container_name: fashion_order_service
     restart: unless-stopped
     ports:
@@ -100,16 +115,19 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_order_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
       - JWT_SECRET=${JWT_SECRET}
+      - VNPAY_TMN_CODE=${VNPAY_TMN_CODE:-XWJEG5N8}
+      - VNPAY_HASH_SECRET=${VNPAY_HASH_SECRET:-V0UJ9R7MWMJLFJREF60KQR5P9RO1XIYH}
+      - VNPAY_RETURN_URL=${VNPAY_RETURN_URL:-http://localhost:5173/payment/vnpay-return}
     depends_on:
       mysql:
         condition: service_healthy
 
   promotion-service:
     build:
-      context: ./backend/services/promotion-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/promotion-service/Dockerfile
     container_name: fashion_promotion_service
     restart: unless-stopped
     ports:
@@ -117,7 +135,7 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_promotion_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
       - JWT_SECRET=${JWT_SECRET}
     depends_on:
       mysql:
@@ -125,25 +143,23 @@ services:
 
   review-service:
     build:
-      context: ./backend/services/review-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/review-service/Dockerfile
     container_name: fashion_review_service
     restart: unless-stopped
     ports:
       - "8086:8086"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_review_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-      - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/fashion_review_db
       - JWT_SECRET=${JWT_SECRET}
     depends_on:
-      mysql:
+      mongo:
         condition: service_healthy
 
   chatbot-service:
     build:
-      context: ./backend/services/chatbot-service
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: services/chatbot-service/Dockerfile
     container_name: fashion_chatbot_service
     restart: unless-stopped
     ports:
@@ -152,29 +168,51 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - JWT_SECRET=${JWT_SECRET}
 
-  api-gateway:
-    build:
-      context: ./backend/api-gateway
-      dockerfile: Dockerfile
-    container_name: fashion_api_gateway
+  # ── Kong Gateway (replaces Spring Cloud API Gateway) ─────────────────────
+  # DB-less mode: all config loaded from kong.yml declarative file.
+  # Custom jwt-auth Lua plugin validates HS256 tokens and injects
+  # X-User-Id / X-User-Email headers to downstream services.
+  #
+  # JWT_SECRET is injected into kong.yml at startup via entrypoint wrapper
+  # (Kong DB-less mode does not support env var interpolation natively).
+  kong:
+    image: kong:3.7-ubuntu
+    container_name: fashion_kong_gateway
     restart: unless-stopped
-    ports:
-      - "8080:8080"
+    entrypoint: ["/bin/sh", "/kong/docker-entrypoint-wrapper.sh"]
     environment:
-      - USER_SERVICE_URL=http://user-service:8081
-      - PRODUCT_SERVICE_URL=http://product-service:8082
-      - CART_SERVICE_URL=http://cart-service:8083
-      - ORDER_SERVICE_URL=http://order-service:8084
-      - PROMOTION_SERVICE_URL=http://promotion-service:8085
-      - REVIEW_SERVICE_URL=http://review-service:8086
-      - CHATBOT_SERVICE_URL=http://chatbot-service:8087
-      - JWT_SECRET=${JWT_SECRET}
+      KONG_DATABASE: "off"
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_PROXY_LISTEN: 0.0.0.0:8080
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      # Load custom jwt-auth plugin
+      KONG_PLUGINS: bundled,jwt-auth
+      KONG_LUA_PACKAGE_PATH: /kong/custom-plugins/?.lua;/kong/custom-plugins/?/init.lua;;
+      # JWT secret — shared with all Spring Boot services
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "8080:8080"   # Proxy (frontend calls this)
+      - "8001:8001"   # Admin API (debug & inspection)
+    volumes:
+      - ./kong.yml:/kong/template/kong.yml.template:ro
+      - ./kong/docker-entrypoint-wrapper.sh:/kong/docker-entrypoint-wrapper.sh:ro
+      - ./kong/plugins/jwt-auth:/kong/custom-plugins/kong/plugins/jwt-auth:ro
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       - user-service
       - product-service
       - cart-service
       - order-service
+      - promotion-service
+      - review-service
+      # - chatbot-service  # Uncomment when chatbot-service image is built
 
 volumes:
   mysql_data:
   redis_data:
+  mongo_data:

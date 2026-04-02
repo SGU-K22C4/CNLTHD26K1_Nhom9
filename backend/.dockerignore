@@ -1,0 +1,15 @@
+# IDE & OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Build artifacts (each service rebuilds inside Docker)
+**/target/
+
+# Git
+.git/
+.gitignore
+
+# Docs
+*.md

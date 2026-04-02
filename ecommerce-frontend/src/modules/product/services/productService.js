@@ -42,7 +42,41 @@ function toImageList(product) {
   return [...new Set(images)]
 }
 
-function normalizeProduct(product) {
+/* ── Extract main fabric keywords from compositionDetail ─── */
+const FABRIC_KEYWORDS = [
+  { keyword: 'cotton', label: 'Cotton' },
+  { keyword: 'linen', label: 'Linen' },
+  { keyword: 'lanh', label: 'Linen' },
+  { keyword: 'pôliexte', label: 'Polyester' },
+  { keyword: 'polyester', label: 'Polyester' },
+  { keyword: 'len', label: 'Len' },
+  { keyword: 'wool', label: 'Len' },
+  { keyword: 'lụa', label: 'Lụa' },
+  { keyword: 'silk', label: 'Lụa' },
+  { keyword: 'lyocell', label: 'Lyocell' },
+  { keyword: 'elastane', label: 'Elastane' },
+  { keyword: 'poliamit', label: 'Polyamide' },
+  { keyword: 'nylon', label: 'Nylon' },
+  { keyword: 'acrylic', label: 'Acrylic' },
+  { keyword: 'viscose', label: 'Viscose' },
+  { keyword: 'vitcô', label: 'Viscose' },
+  { keyword: 'da', label: 'Da' },
+  { keyword: 'leather', label: 'Da' },
+  { keyword: 'denim', label: 'Denim' },
+]
+
+function extractFabric(compositionDetail = '') {
+  if (!compositionDetail) return null
+  const lower = compositionDetail.toLowerCase()
+  for (const { keyword, label } of FABRIC_KEYWORDS) {
+    if (lower.includes(keyword)) {
+      return label
+    }
+  }
+  return null
+}
+
+export function normalizeProduct(product) {
   const variants = product.variants || []
   const firstVariant = variants[0]
   const prices = variants
@@ -72,12 +106,13 @@ function normalizeProduct(product) {
     colors: colors.map(toColorHex),
     colorLabels: colors,
     sizes,
-    collection: product.categoryName || 'Collection',
-    fabric: firstVariant?.compositionDetail || 'N/A',
+    collection: product.categoryName || '',
+    fabric: extractFabric(firstVariant?.compositionDetail) || 'Khác',
     createdAt: product.createdAt,
     updatedAt: product.updatedAt,
   }
 }
+
 
 export const productService = {
   getAll: async (params = {}) => {

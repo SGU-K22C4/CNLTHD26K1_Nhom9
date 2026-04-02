@@ -15,12 +15,13 @@ const CATEGORY_LABELS = {
 }
 
 export default function ProductListPage() {
-    const [page, setPage] = useState(0)
+  const [page, setPage] = useState(0)
 
   const { gender: genderSlug } = useParams()
   const [searchParams] = useSearchParams()
   const category = searchParams.get('category') || ''
   const genderParam = searchParams.get('gender') || ''
+  const searchQuery = searchParams.get('q') || ''
 
   const normalizedGender = (genderSlug || genderParam).toLowerCase()
   const genderFilter = normalizedGender === 'men' || normalizedGender === 'male'
@@ -29,11 +30,13 @@ export default function ProductListPage() {
       ? 'FEMALE'
       : ''
 
-  const pageTitle = genderFilter === 'MALE'
-    ? 'Nam Collection'
-    : genderFilter === 'FEMALE'
-      ? 'Nu Collection'
-      : (CATEGORY_LABELS[category] || 'All Products')
+  const pageTitle = searchQuery
+    ? `Kết quả tìm kiếm: "${searchQuery}"`
+    : genderFilter === 'MALE'
+      ? 'Nam Collection'
+      : genderFilter === 'FEMALE'
+        ? 'Nu Collection'
+        : (CATEGORY_LABELS[category] || 'All Products')
 
   const { filters, setFilter, toggleArrayFilter, clearFilters, hasActiveFilters } = useFilters(
     category ? { collections: [CATEGORY_LABELS[category]] } : {}
@@ -45,14 +48,16 @@ export default function ProductListPage() {
     total,
     totalPages,
     currentPage,
+    availableFilters,
   } = useProducts({
+    query: searchQuery,
     filters: { ...filters, page, pageSize: 12 },
     gender: genderFilter,
   })
 
   useEffect(() => {
     setPage(0)
-  }, [genderFilter, category, filters])
+  }, [genderFilter, category, filters, searchQuery])
 
   useEffect(() => {
     if (page !== currentPage) {
@@ -97,6 +102,7 @@ export default function ProductListPage() {
               toggleArrayFilter={toggleArrayFilter}
               clearFilters={clearFilters}
               hasActiveFilters={hasActiveFilters}
+              availableFilters={availableFilters}
             />
           </div>
 

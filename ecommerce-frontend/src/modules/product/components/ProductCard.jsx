@@ -1,5 +1,6 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { formatCurrency } from '../../../shared/utils/format'
+import { useWishlistContext } from '../../wishlist/context/WishlistContext'
 
 /* ── Wishlist heart icons (SVG, no MUI dependency) ───────── */
 function HeartOutline() {
@@ -32,12 +33,13 @@ function HeartFilled() {
 }
 
 export default function ProductCard({ product }) {
-  const [wishlisted, setWishlisted] = useState(false)
   const navigate = useNavigate()
+  const { isWishlisted, toggleWishlist } = useWishlistContext()
 
   if (!product) return null
 
   const { id, name, category, price, isNew, image, colors } = product
+  const wishlisted = isWishlisted(id)
 
   return (
     <div
@@ -69,7 +71,7 @@ export default function ProductCard({ product }) {
           className="absolute top-3 right-3 p-1 transition-transform hover:scale-110"
           onClick={(e) => {
             e.stopPropagation()
-            setWishlisted((prev) => !prev)
+            toggleWishlist(id)
           }}
           aria-label="Toggle wishlist"
         >
@@ -89,7 +91,7 @@ export default function ProductCard({ product }) {
           <span
             style={{ fontSize: '13px', fontWeight: 500, color: '#202020', whiteSpace: 'nowrap', fontFamily: 'Montserrat, sans-serif' }}
           >
-            ${price}
+            {formatCurrency(price)}
           </span>
         </div>
 

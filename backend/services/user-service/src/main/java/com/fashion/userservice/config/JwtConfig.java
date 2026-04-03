@@ -26,9 +26,6 @@ public class JwtConfig {
                         .username(user.getEmail())
                         .password(user.getPassword())
                         .roles(user.getRole().name())
-                        .accountLocked(user.getLockedUntil() != null &&
-                                user.getLockedUntil().isAfter(java.time.LocalDateTime.now()))
-                        .disabled(!user.isActive())
                         .build())
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
     }

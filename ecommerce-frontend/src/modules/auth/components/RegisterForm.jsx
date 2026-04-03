@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import Input from '../../../shared/components/ui/Input';
 import VerifyEmailModal from './VerifyEmailModal';
+import { useProvinces } from '../../../shared/hooks/useProvinces';
 
 /* ── Social icon SVGs ─────────────────────────────────────── */
 const AppleIcon = () => (
@@ -45,13 +46,64 @@ export default function RegisterForm({ onSuccess }) {
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
-  } = useForm();
+  } = useForm({
+    defaultValues: {
+      gender: "0",
+      avatar: '/assets/images/avatarnam.png',
+      isDefault: false
+    }
+  });
+
+  const gender = watch('gender');
+  const avatarUrl = watch('avatar');
+
+  // Change avatar whenever gender changes
+  useEffect(() => {
+    setValue('avatar', gender === "0" ? '/assets/images/avatarnam.png' : '/assets/images/avatarnu.png');
+  }, [gender, setValue]);
+
+  // Province API Custom Hook with Caching (Performance)
+  const { provinces } = useProvinces(2);
+  const [wards, setWards] = useState([]);
+
+  const selectedCityCode = watch('cityCode');
+
+  useEffect(() => {
+    setValue('wardCode', '');
+    if (selectedCityCode) {
+      const city = provinces.find(p => p.code == selectedCityCode);
+      setWards(city && city.wards ? city.wards : []);
+      setValue('city', city ? city.name : '');
+    } else {
+      setWards([]);
+      setValue('city', '');
+    }
+  }, [selectedCityCode, provinces, setValue]);
 
   const onSubmit = async (data) => {
     try {
-      // TODO: wire up authService.register(data)
-      console.log('Register payload:', data);
+      if (data.wardCode && wards.length > 0) {
+        const w = wards.find(w => w.code == data.wardCode);
+        if (w) data.ward = w.name;
+      }
+      // Prepare payload to match backend
+      const payload = {
+        fullName: data.fullName,
+        email: data.email,
+        password: data.password,
+        phone: data.phone,
+        gender: parseInt(data.gender, 10),
+        avatar: data.avatar,
+        street: data.street,
+        city: data.city,
+        ward: data.ward,
+        isDefault: data.isDefault
+      };
+      console.log('Register payload:', payload);
+
       // Show verify-email modal with the submitted email
       setVerifyEmail(data.email);
     } catch (err) {
@@ -68,116 +120,190 @@ export default function RegisterForm({ onSuccess }) {
         onResend={() => console.log('Resend email to', verifyEmail)}
       />
 
-    <div className="w-full max-w-[460px] mx-auto flex flex-col gap-6 px-4 py-10 sm:px-0">
-      {/* Title */}
-      <h2 className="text-[26px] font-semibold text-center text-gray-900 tracking-wide">
-        Create Account
-      </h2>
+      <div className="w-full max-w-[500px] mx-auto flex flex-col gap-6 px-4 py-8 sm:px-0">
+        {/* Title */}
+        <h2 className="text-[26px] font-semibold text-center text-gray-900 tracking-wide">
+          Create Account
+        </h2>
 
-      {/* Form */}
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-        {/* First Name */}
-        <Input
-          type="text"
-          placeholder="First Name"
-          error={errors.firstName?.message}
-          {...register('firstName', { required: 'First name is required' })}
-        />
+        {/* Form */}
+        <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+          {/* Avatar Preview */}
+          <div className="flex flex-col items-center gap-2">
+            <img
+              src={avatarUrl}
+              alt="Avatar Preview"
+              className="w-20 h-20 rounded-full object-cover shadow-md bg-gray-50 border"
+            />
+            <span className="text-[10px] text-gray-500 text-center leading-tight">
+              Avatar uniquely chosen for you based on gender
+            </span>
+          </div>
 
-        {/* Last Name */}
-        <Input
-          type="text"
-          placeholder="Last Name"
-          error={errors.lastName?.message}
-          {...register('lastName', { required: 'Last name is required' })}
-        />
+          {/* Full Name */}
+          <Input
+            type="text"
+            placeholder="Full Name"
+            error={errors.fullName?.message}
+            {...register('fullName', { required: 'Full name is required' })}
+          />
 
-        {/* Email */}
-        <Input
-          type="email"
-          placeholder="Email"
-          error={errors.email?.message}
-          {...register('email', {
-            required: 'Email is required',
-            pattern: {
-              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-              message: 'Enter a valid email address',
-            },
-          })}
-        />
+          {/* Missing Phone & Gender Container */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            <div className="flex-1">
+              <Input
+                type="text"
+                placeholder="Phone Number"
+                error={errors.phone?.message}
+                {...register('phone', { 
+                  required: 'Phone number is required',
+                  pattern: {
+                    value: /^(84|0[3|5|7|8|9])+([0-9]{8})$/,
+                    message: 'Invalid Vietnamese phone number',
+                  }
+                })}
+              />
+            </div>
 
-        {/* Password */}
-        <Input
-          type={showPassword ? 'text' : 'password'}
-          placeholder="Password"
-          error={errors.password?.message}
-          suffix={
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => setShowPassword((v) => !v)}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-            >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          }
-          {...register('password', {
-            required: 'Password is required',
-            minLength: { value: 8, message: 'Password must be at least 8 characters' },
-          })}
-        />
+            <div className="flex items-center gap-4 bg-[#F9F9F9] border border-transparent rounded px-4 h-[46px]">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" value="0" {...register('gender')} className="accent-[#5A6D57]" />
+                <span className="text-sm text-gray-700">Male</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" value="1" {...register('gender')} className="accent-[#5A6D57]" />
+                <span className="text-sm text-gray-700">Female</span>
+              </label>
+            </div>
+          </div>
 
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full py-3 bg-[#5A6D57] hover:bg-[#4a5c48] active:bg-[#3d4e3b] text-white text-sm font-semibold tracking-widest uppercase rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed mt-2"
-        >
-          {isSubmitting ? 'Registering…' : 'Register Now'}
-        </button>
-      </form>
+          {/* Email */}
+          <Input
+            type="email"
+            placeholder="Email Address"
+            error={errors.email?.message}
+            {...register('email', {
+              required: 'Email is required',
+              pattern: {
+                value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                message: 'Enter a valid email address',
+              },
+            })}
+          />
 
-      {/* Already have account */}
-      <p className="text-center text-sm text-gray-600">
-        Already Have An Account?{' '}
-        <Link to="/login" className="font-semibold text-gray-900 hover:underline">
-          Log In
-        </Link>
-      </p>
+          {/* Password */}
+          <Input
+            type={showPassword ? 'text' : 'password'}
+            placeholder="Password"
+            error={errors.password?.message}
+            suffix={
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setShowPassword((v) => !v)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            }
+            {...register('password', {
+              required: 'Password is required',
+              pattern: {
+                value: /^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*[@#$%^&+=_!]).{8,100}$/,
+                message: 'Password must have 1 digit, 1 lower, 1 upper, 1 special char.',
+              },
+            })}
+          />
 
-      {/* Divider */}
-      <div className="flex items-center gap-4">
-        <hr className="flex-1 border-gray-200" />
-        <span className="text-sm text-gray-400">Or</span>
-        <hr className="flex-1 border-gray-200" />
+          {/* ADDRESS SECTION */}
+          <div className="text-sm text-gray-700 font-semibold border-t pt-4 mt-2">Delivery Address</div>
+
+          <Input
+            type="text"
+            placeholder="Street Address (e.g. 460/4 Nơ Trang Long)"
+            error={errors.street?.message}
+            {...register('street', { required: 'Street address is required' })}
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="flex flex-col">
+              <select
+                className={`w-full px-4 border ${errors.cityCode ? 'border-red-500' : 'border-transparent'} h-[46px] bg-[#F9F9F9] rounded focus:bg-white focus:border-[#5A6D57] focus:outline-none transition-colors text-sm`}
+                {...register('cityCode', { required: 'City is required' })}
+              >
+                <option value="">City / Province</option>
+                {provinces.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
+              </select>
+            </div>
+
+            <div className="flex flex-col">
+              <select
+                className={`w-full px-4 border ${errors.wardCode ? 'border-red-500' : 'border-transparent'} h-[46px] bg-[#F9F9F9] rounded focus:bg-white focus:border-[#5A6D57] focus:outline-none transition-colors text-sm`}
+                {...register('wardCode', { required: 'Ward is required' })}
+                disabled={!wards.length}
+              >
+                <option value="">Ward</option>
+                {wards.map(w => <option key={w.code} value={w.code}>{w.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer mt-1">
+            <input type="checkbox" {...register('isDefault')} className="w-4 h-4 accent-[#5A6D57] rounded" />
+            <span className="text-sm text-gray-600">Set as default address</span>
+          </label>
+
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full py-3 bg-[#5A6D57] hover:bg-[#4a5c48] active:bg-[#3d4e3b] text-white text-sm font-semibold tracking-widest uppercase rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed mt-4"
+          >
+            {isSubmitting ? 'Registering…' : 'Register Now'}
+          </button>
+        </form>
+
+        {/* Already have account */}
+        <p className="text-center text-sm text-gray-600">
+          Already Have An Account?{' '}
+          <Link to="/login" className="font-semibold text-gray-900 hover:underline">
+            Log In
+          </Link>
+        </p>
+
+        {/* Divider */}
+        <div className="flex items-center gap-4">
+          <hr className="flex-1 border-gray-200" />
+          <span className="text-sm text-gray-400">Or</span>
+          <hr className="flex-1 border-gray-200" />
+        </div>
+
+        {/* Social Sign Up */}
+        <div className="flex items-center justify-center gap-6">
+          <SocialButton label="Sign up with Apple">
+            <AppleIcon />
+          </SocialButton>
+          <SocialButton label="Sign up with Google">
+            <GoogleIcon />
+          </SocialButton>
+          <SocialButton label="Sign up with Facebook">
+            <FacebookIcon />
+          </SocialButton>
+        </div>
+
+        {/* Terms */}
+        <p className="text-center text-xs text-gray-500 leading-relaxed px-2">
+          By Clicking Register Now, You Agree To{' '}
+          <Link to="/terms" className="underline hover:text-gray-700">
+            Terms &amp; Conditions
+          </Link>{' '}
+          And{' '}
+          <Link to="/privacy" className="underline hover:text-gray-700">
+            Privacy Policy
+          </Link>
+        </p>
       </div>
-
-      {/* Social Sign Up */}
-      <div className="flex items-center justify-center gap-6">
-        <SocialButton label="Sign up with Apple">
-          <AppleIcon />
-        </SocialButton>
-        <SocialButton label="Sign up with Google">
-          <GoogleIcon />
-        </SocialButton>
-        <SocialButton label="Sign up with Facebook">
-          <FacebookIcon />
-        </SocialButton>
-      </div>
-
-      {/* Terms */}
-      <p className="text-center text-xs text-gray-500 leading-relaxed px-2">
-        By Clicking Register Now, You Agree To{' '}
-        <Link to="/terms" className="underline hover:text-gray-700">
-          Terms &amp; Conditions
-        </Link>{' '}
-        And{' '}
-        <Link to="/privacy" className="underline hover:text-gray-700">
-          Privacy Policy
-        </Link>
-      </p>
-    </div>
     </>
   );
 }

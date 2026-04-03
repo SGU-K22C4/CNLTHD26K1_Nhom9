@@ -1,12 +1,11 @@
 import { useNavigate } from 'react-router-dom';
-import Layout from '../../../shared/components/layout/Layout';
 import RegisterForm from '../components/RegisterForm';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
 
   return (
-    <Layout>
+    <>
       {/* ── Two-column layout ──────────────────────────────────── */}
       <div className="flex flex-col md:flex-row min-h-[calc(100vh-120px)]">
 
@@ -34,6 +33,6 @@ export default function RegisterPage() {
         </div>
 
       </div>
-    </Layout>
+    </>
   );
 }

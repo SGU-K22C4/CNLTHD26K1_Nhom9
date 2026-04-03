@@ -54,57 +54,49 @@ function MainNavBar(props) {
         sx={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: { xs: 'space-between', md: 'space-around' },
-          p: { xs: '0px 20px', md: '0' },
+          justifyContent: 'space-between',
+          p: { xs: '0px 20px', md: '0px 40px' },
         }}
       >
-        <LogoWebsite />
-
-        {/* Mobile Menu Icon + Search */}
-        <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
-          <IconButton onClick={handleDrawerOpen}>
-            <MenuOutlinedIcon sx={{ cursor: 'pointer', color: '#000000' }} />
-          </IconButton>
-          <Button
-            onClick={handleToggleSearch}
-            sx={{ color: 'inherit', padding: 0, minWidth: '0px' }}
-          >
-            {isOpenSearch ? <CloseIcon /> : <SearchOutlinedIcon />}
-          </Button>
+        {/* === LEFT SECTION: Logo (Desktop) + Menu Icon & Search (Mobile) === */}
+        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+          <LogoWebsite />
+          <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
+            <IconButton onClick={handleDrawerOpen}>
+              <MenuOutlinedIcon sx={{ cursor: 'pointer', color: '#000000' }} />
+            </IconButton>
+            <Button
+              onClick={handleToggleSearch}
+              sx={{ color: 'inherit', padding: 0, minWidth: '0px' }}
+            >
+              {isOpenSearch ? <CloseIcon /> : <SearchOutlinedIcon />}
+            </Button>
+          </Box>
         </Box>
 
-        {/* Desktop Menu */}
-        <DesktopMenu options={options} setIsHovered={setIsHovered} setIsOpen={setIsOpen} />
-
-        {/* Right Side Icons - Desktop Only */}
-        <Box sx={{ gap: { xs: 1, md: 2 }, display: { xs: 'none', md: 'flex' }, alignItems: 'center' }}>
-          <Button
-            onClick={handleToggleSearch}
-            sx={{ color: 'inherit', padding: '0px', margin: '0px', display: 'block', minWidth: '0px' }}
-          >
-            {isOpenSearch ? <CloseIcon /> : <SearchOutlinedIcon />}
-          </Button>
-          <Link to="/wishlist" style={{ color: 'inherit', display: 'flex' }}>
-            <FavoriteBorderOutlinedIcon sx={{ cursor: 'pointer' }} />
-          </Link>
-          <div className="relative">
-            <BadgeNumberShopping badgetItem={totalItems.toString()} handleOpenModal={handleOpenCart} />
-          </div>
-        </Box>
-
-        {/* Mobile Logo */}
-        <Box>
+        {/* === CENTER SECTION: Desktop Menu (Desktop) + Mobile Logo (Mobile) === */}
+        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+          <DesktopMenu options={options} setIsHovered={setIsHovered} setIsOpen={setIsOpen} />
           <LogoMobileWebsite />
         </Box>
 
-        {/* Mobile Right Icons */}
-        <Box sx={{ display: { xs: 'flex', md: 'none' }, gap: '9px', alignItems: 'center' }}>
+        {/* === RIGHT SECTION: Icons === */}
+        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: { xs: '9px', md: 2 } }}>
+          <Button
+            onClick={handleToggleSearch}
+            sx={{ color: 'inherit', padding: '0px', margin: '0px', display: { xs: 'none', md: 'block' }, minWidth: '0px' }}
+          >
+            {isOpenSearch ? <CloseIcon /> : <SearchOutlinedIcon />}
+          </Button>
+          <Link to="/login" style={{ color: 'inherit', display: 'flex' }}>
+            <PersonOutlinedIcon sx={{ cursor: 'pointer' }} />
+          </Link>
           <Link to="/wishlist" style={{ color: 'inherit', display: 'flex' }}>
             <FavoriteBorderOutlinedIcon sx={{ cursor: 'pointer' }} />
           </Link>
-          <div className="relative z-[10]">
-            <BadgeNumberShopping badgetItem={totalItems.toString()} handleOpenModal={openDrawer} />
-          </div>
+          <Box className="relative z-[10]">
+            <BadgeNumberShopping badgetItem={totalItems.toString()} handleOpenModal={handleOpenCart} />
+          </Box>
         </Box>
 
         {/* Mobile Menu Drawer */}
@@ -116,6 +108,7 @@ function MainNavBar(props) {
 
       {/* Cart Drawer */}
       <CartDrawer />
+
     </AppBar>
   );
 }

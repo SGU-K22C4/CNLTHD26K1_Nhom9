@@ -26,8 +26,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private static final int MAX_FAILED_ATTEMPTS = 5;
-    private static final long LOCK_DURATION_MINUTES = 15;
     private static final long REFRESH_TOKEN_DAYS = 7;
     private static final long RESET_TOKEN_MINUTES = 15;
 
@@ -49,8 +47,10 @@ public class AuthService {
         User user = User.builder()
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .firstName(request.getFirstName())
-                .lastName(request.getLastName())
+                .fullName(request.getFullName())
+                .phone(request.getPhone())
+                .gender(request.getGender())
+                .avatar(request.getAvatar())
                 .build();
 
         userRepository.save(user);
@@ -63,8 +63,8 @@ public class AuthService {
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
+                .firstName(user.getFullName())
+                .lastName("")
                 .role(user.getRole().name())
                 .build();
     }
@@ -74,23 +74,17 @@ public class AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
 
-        // Check account locked
-        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now())) {
-            throw new AccountLockedException("Account locked until " + user.getLockedUntil());
-        }
+        // Check account locked removed.
 
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
             );
         } catch (BadCredentialsException e) {
-            handleFailedLogin(user);
             throw new InvalidCredentialsException("Invalid email or password");
         }
 
-        // Reset failed attempts on success
-        user.setFailedLoginAttempts(0);
-        user.setLockedUntil(null);
+        // Reset failed attempts on success removed
         userRepository.save(user);
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
@@ -101,8 +95,8 @@ public class AuthService {
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
+                .firstName(user.getFullName())
+                .lastName("")
                 .role(user.getRole().name())
                 .build();
     }
@@ -124,8 +118,8 @@ public class AuthService {
                 .accessToken(newAccessToken)
                 .refreshToken(rawRefreshToken)
                 .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
+                .firstName(user.getFullName())
+                .lastName("")
                 .role(user.getRole().name())
                 .build();
     }
@@ -179,14 +173,7 @@ public class AuthService {
 
     // ─── Private helpers ───────────────────────────────────────────────────────
 
-    private void handleFailedLogin(User user) {
-        int attempts = user.getFailedLoginAttempts() + 1;
-        user.setFailedLoginAttempts(attempts);
-        if (attempts >= MAX_FAILED_ATTEMPTS) {
-            user.setLockedUntil(LocalDateTime.now().plusMinutes(LOCK_DURATION_MINUTES));
-        }
-        userRepository.save(user);
-    }
+    // removed handleFailedLogin
 
     private String saveRefreshToken(User user, String rawToken) {
         RefreshToken rt = RefreshToken.builder()

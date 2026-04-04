@@ -7,6 +7,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 
+@SuppressWarnings("null")
 public interface ProductService {
 
     Page<ProductResponse> getAll(String categoryId, String search,

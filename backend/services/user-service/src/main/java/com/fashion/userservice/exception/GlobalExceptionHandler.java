@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
+@SuppressWarnings("null")
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -65,9 +66,9 @@ public class GlobalExceptionHandler {
 
     private ResponseEntity<ErrorResponse> buildError(HttpStatus status, String message) {
         return ResponseEntity.status(status).body(
-                new ErrorResponse(LocalDateTime.now().toString(), status.value(), message)
-        );
+                new ErrorResponse(LocalDateTime.now().toString(), status.value(), message));
     }
 
-    public record ErrorResponse(String timestamp, int status, String message) {}
+    public record ErrorResponse(String timestamp, int status, String message) {
+    }
 }

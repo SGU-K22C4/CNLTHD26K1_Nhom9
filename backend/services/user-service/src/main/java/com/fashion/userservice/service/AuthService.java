@@ -24,6 +24,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class AuthService {
 
     private static final long REFRESH_TOKEN_DAYS = 7;
@@ -56,7 +57,7 @@ public class AuthService {
         userRepository.save(user);
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String accessToken  = jwtService.generateToken(userDetails);
+        String accessToken = jwtService.generateAccessToken(userDetails);
         String refreshToken = saveRefreshToken(user, jwtService.generateRefreshToken(userDetails));
 
         return AuthResponse.builder()
@@ -78,8 +79,7 @@ public class AuthService {
 
         try {
             authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-            );
+                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
         } catch (BadCredentialsException e) {
             throw new InvalidCredentialsException("Invalid email or password");
         }
@@ -88,7 +88,7 @@ public class AuthService {
         userRepository.save(user);
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String accessToken  = jwtService.generateToken(userDetails);
+        String accessToken = jwtService.generateAccessToken(userDetails);
         String refreshToken = saveRefreshToken(user, jwtService.generateRefreshToken(userDetails));
 
         return AuthResponse.builder()
@@ -112,7 +112,7 @@ public class AuthService {
 
         User user = stored.getUser();
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String newAccessToken = jwtService.generateToken(userDetails);
+        String newAccessToken = jwtService.generateAccessToken(userDetails);
 
         return AuthResponse.builder()
                 .accessToken(newAccessToken)
@@ -133,7 +133,8 @@ public class AuthService {
     public void forgotPassword(ForgotPasswordRequest request) {
         User user = userRepository.findByEmail(request.getEmail()).orElse(null);
         // Always return success to prevent email enumeration
-        if (user == null) return;
+        if (user == null)
+            return;
 
         // Delete old tokens
         passwordResetTokenRepository.deleteAllByUserId(user.getId());

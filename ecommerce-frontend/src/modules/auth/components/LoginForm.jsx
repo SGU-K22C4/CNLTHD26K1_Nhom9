@@ -4,6 +4,9 @@ import { Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import Input from '../../../shared/components/ui/Input';
 import WelcomeModal from './WelcomeModal';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
+import { authService } from '../services/authService';
 
 /* ── Social icon SVGs (same set as Register) ──────────────── */
 const AppleIcon = () => (
@@ -41,20 +44,37 @@ const SocialButton = ({ children, label }) => (
 export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
+  // 1. Hook Điều hướng chuẩn SPA (Tránh chớp chớp trang)
+  const navigate = useNavigate();
+  // 2. Lấy hàm login từ Global State (AuthContext)
+  const { login } = useAuth();
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm();
-
   const onSubmit = async (data) => {
     try {
-      // TODO: wire up authService.login(data)
-      console.log('Login payload:', data);
+      // Dùng authService đã cấu hình sẵn của bạn
+      const response = await authService.login(data.email, data.password);
+
+      const { accessToken, refreshToken, user } = response;
+
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('userInfo', JSON.stringify(user));
+      // 4. Kích hoạt State Global (Navbar sẽ nghe thấy và chuyển ngay thành hình Avatar đại diện)
+      login(user);
+
       setShowWelcome(true);
+      // Điều hướng cực mượt sau 2s thông báo (đè Modal bằng router path)
+      setTimeout(() => {
+        navigate('/');
+      }, 2000);
     } catch (err) {
-      console.error(err);
+      console.error("Đăng nhập thất bại:", err);
+      alert(err.response?.data?.message || "Sai mật khẩu hoặc email chưa đăng ký!");
     }
   };
 
@@ -62,95 +82,95 @@ export default function LoginForm() {
     <>
       <WelcomeModal isOpen={showWelcome} onClose={() => setShowWelcome(false)} />
 
-    <div className="w-full max-w-[460px] mx-auto flex flex-col gap-6 px-4 py-10 sm:px-0">
-      {/* Title */}
-      <h2 className="text-[26px] font-semibold text-center text-gray-900 tracking-wide">
-        Log In
-      </h2>
+      <div className="w-full max-w-[460px] mx-auto flex flex-col gap-6 px-4 py-10 sm:px-0">
+        {/* Title */}
+        <h2 className="text-[26px] font-semibold text-center text-gray-900 tracking-wide">
+          Log In
+        </h2>
 
-      {/* Form */}
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-        {/* Email */}
-        <Input
-          type="email"
-          placeholder="Email"
-          error={errors.email?.message}
-          {...register('email', {
-            required: 'Email is required',
-            pattern: {
-              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-              message: 'Enter a valid email address',
-            },
-          })}
-        />
+        {/* Form */}
+        <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+          {/* Email */}
+          <Input
+            type="email"
+            placeholder="Email"
+            error={errors.email?.message}
+            {...register('email', {
+              required: 'Email is required',
+              pattern: {
+                value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                message: 'Enter a valid email address',
+              },
+            })}
+          />
 
-        {/* Password */}
-        <Input
-          type={showPassword ? 'text' : 'password'}
-          placeholder="Password"
-          error={errors.password?.message}
-          suffix={
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => setShowPassword((v) => !v)}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-            >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          }
-          {...register('password', {
-            required: 'Password is required',
-          })}
-        />
+          {/* Password */}
+          <Input
+            type={showPassword ? 'text' : 'password'}
+            placeholder="Password"
+            error={errors.password?.message}
+            suffix={
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setShowPassword((v) => !v)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            }
+            {...register('password', {
+              required: 'Password is required',
+            })}
+          />
 
-        {/* Forgot password */}
-        <Link
-          to="/forgot-password"
-          className="text-sm text-gray-600 hover:text-gray-900 hover:underline self-start -mt-1"
-        >
-          Forgot Your Password?
-        </Link>
+          {/* Forgot password */}
+          <Link
+            to="/forgot-password"
+            className="text-sm text-gray-600 hover:text-gray-900 hover:underline self-start -mt-1"
+          >
+            Forgot Your Password?
+          </Link>
 
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full py-3 bg-[#5A6D57] hover:bg-[#4a5c48] active:bg-[#3d4e3b] text-white text-sm font-semibold tracking-widest uppercase rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed mt-1"
-        >
-          {isSubmitting ? 'Logging in…' : 'Log In'}
-        </button>
-      </form>
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full py-3 bg-[#5A6D57] hover:bg-[#4a5c48] active:bg-[#3d4e3b] text-white text-sm font-semibold tracking-widest uppercase rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed mt-1"
+          >
+            {isSubmitting ? 'Logging in…' : 'Log In'}
+          </button>
+        </form>
 
-      {/* Divider */}
-      <div className="flex items-center gap-4">
-        <hr className="flex-1 border-gray-200" />
-        <span className="text-sm text-gray-400">Or</span>
-        <hr className="flex-1 border-gray-200" />
+        {/* Divider */}
+        <div className="flex items-center gap-4">
+          <hr className="flex-1 border-gray-200" />
+          <span className="text-sm text-gray-400">Or</span>
+          <hr className="flex-1 border-gray-200" />
+        </div>
+
+        {/* Social Sign In */}
+        <div className="flex items-center justify-center gap-6">
+          <SocialButton label="Sign in with Apple">
+            <AppleIcon />
+          </SocialButton>
+          <SocialButton label="Sign in with Google">
+            <GoogleIcon />
+          </SocialButton>
+          <SocialButton label="Sign in with Facebook">
+            <FacebookIcon />
+          </SocialButton>
+        </div>
+
+        {/* Create account */}
+        <p className="text-center text-sm text-gray-600">
+          New To Modimal?{' '}
+          <Link to="/register" className="font-semibold text-gray-900 hover:underline">
+            Create An Account
+          </Link>
+        </p>
       </div>
-
-      {/* Social Sign In */}
-      <div className="flex items-center justify-center gap-6">
-        <SocialButton label="Sign in with Apple">
-          <AppleIcon />
-        </SocialButton>
-        <SocialButton label="Sign in with Google">
-          <GoogleIcon />
-        </SocialButton>
-        <SocialButton label="Sign in with Facebook">
-          <FacebookIcon />
-        </SocialButton>
-      </div>
-
-      {/* Create account */}
-      <p className="text-center text-sm text-gray-600">
-        New To Modimal?{' '}
-        <Link to="/register" className="font-semibold text-gray-900 hover:underline">
-          Create An Account
-        </Link>
-      </p>
-    </div>
     </>
   );
 }

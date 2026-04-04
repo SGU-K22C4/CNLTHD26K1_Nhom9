@@ -15,6 +15,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/payments/vnpay")
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class PaymentController {
 
     private final VNPayService vnPayService;
@@ -53,7 +54,8 @@ public class PaymentController {
     }
 
     /**
-     * GET /api/v1/payments/vnpay/payment-return?vnp_TxnRef=...&vnp_ResponseCode=...&vnp_SecureHash=...
+     * GET
+     * /api/v1/payments/vnpay/payment-return?vnp_TxnRef=...&vnp_ResponseCode=...&vnp_SecureHash=...
      * Called by the frontend after VNPay redirects back.
      * Validates signature and updates order status.
      */

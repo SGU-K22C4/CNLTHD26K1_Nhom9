@@ -22,6 +22,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class OrderController {
 
     private final OrderRepository orderRepository;
@@ -60,13 +61,11 @@ public class OrderController {
                 Boolean exists = jdbcTemplate.queryForObject(
                         "SELECT EXISTS(SELECT 1 FROM fashion_product_db.products WHERE id = ?)",
                         Boolean.class,
-                        productId
-                );
+                        productId);
                 if (!Boolean.TRUE.equals(exists)) {
                     return ResponseEntity.badRequest().body(Map.of(
                             "error", "Invalid productId",
-                            "productId", productId
-                    ));
+                            "productId", productId));
                 }
 
                 OrderItem item = new OrderItem();

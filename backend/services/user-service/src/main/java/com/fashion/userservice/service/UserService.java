@@ -19,6 +19,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class UserService {
 
     private final UserRepository userRepository;
@@ -33,8 +34,8 @@ public class UserService {
     @Transactional
     public UserProfileResponse updateProfile(String userId, UpdateProfileRequest request) {
         User user = findUserById(userId);
-        user.setFullName(request.getFirstName() + " " + request.getLastName());
-        user.setPhone(request.getPhoneNumber());
+        user.setFullName(request.getFullName());
+        user.setPhone(request.getPhone());
         userRepository.save(user);
         return toProfileResponse(user);
     }

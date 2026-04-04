@@ -27,7 +27,7 @@ public class JwtConfig {
                         .password(user.getPassword())
                         .roles(user.getRole().name())
                         .build())
-                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+                .orElseThrow(() -> new UsernameNotFoundException("Tài khoản không tồn tại trong hệ thống!"));
     }
 
     @Bean

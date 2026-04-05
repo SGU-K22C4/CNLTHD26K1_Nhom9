@@ -9,7 +9,9 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
+    <groupId>com.fashion</groupId>
     <artifactId>config-service</artifactId>
+    <version>1.0.0</version>
     <name>config-service</name>
     <description>Spring Cloud Config Server for centralized configuration</description>
 

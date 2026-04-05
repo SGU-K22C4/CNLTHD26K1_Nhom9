@@ -4,15 +4,17 @@ server:
 spring:
   datasource:
     # URL mặc định sẽ trỏ vào localhost:3306. Muốn đổi sang server prod thì map biến môi trường vào!
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/fashion_user_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
-    username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:rootpassword}
+    url: jdbc:mysql://localhost:3306/fashion_user_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: "@Manhtran11"
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
     hibernate:
-      ddl-auto: validate
-    show-sql: false
+      #dùng validate khi đã có database cần validate , ngoài ra nếu chạy lần đầu thì dùng update
+      # ddl-auto: validate 
+      ddl-auto: update
+    show-sql: true
     properties:
       hibernate:
         format_sql: true
@@ -28,6 +30,18 @@ spring:
     jpa:
       repositories:
         bootstrap-mode: deferred
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 logging:
   level:

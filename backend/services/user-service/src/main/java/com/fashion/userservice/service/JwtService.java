@@ -4,7 +4,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
+import com.fashion.userservice.entity.User;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -36,19 +36,19 @@ public class JwtService {
     }
 
     // hàm tạo access token sau khi token build ban đầu hết hạn
-    public String generateAccessToken(UserDetails userDetails) {
-        return buildToken(userDetails, jwtExpiration);
+    public String generateAccessToken(User user) {
+        return buildToken(user, jwtExpiration);
     }
 
     // hàm tạo refresh token
-    public String generateRefreshToken(UserDetails userDetails) {
-        return buildToken(userDetails, refreshExpiration);
+    public String generateRefreshToken(User user) {
+        return buildToken(user, refreshExpiration);
     }
 
     // hàm kiểm tra token có hợp lệ không
-    public boolean isTokenValid(String token, UserDetails userDetails) {
+    public boolean isTokenValid(String token, User user) {
         final String email = extractEmail(token);
-        return email.equals(userDetails.getUsername()) && !isTokenExpired(token);
+        return email.equals(user.getEmail()) && !isTokenExpired(token);
     }
 
     // hàm kiểm tra token hết hạn không
@@ -62,14 +62,10 @@ public class JwtService {
     }
 
     // hàm build token ban đầu khi user login
-    private String buildToken(UserDetails userDetails, long expiration) {
-        // 1. Ép kiểu UserDetails về Entity User để lấy bổ sung các trường ta tự định
-        // nghĩa
-        com.fashion.userservice.entity.User user = (com.fashion.userservice.entity.User) userDetails;
-
+    private String buildToken(User user, long expiration) {
         return Jwts.builder()
-                .subject(userDetails.getUsername()) // -> Lưu email/username
-                // 2. Nhồi thêm (claim) các định danh vào payload để sau này Kong giải mã ra
+                .subject(user.getEmail()) // -> Lưu email/username
+                // Nhồi thêm (claim) các định danh vào payload để sau này Kong giải mã ra
                 .claim("userId", user.getId())
                 .claim("role", user.getRole().name())
                 .issuedAt(new Date())

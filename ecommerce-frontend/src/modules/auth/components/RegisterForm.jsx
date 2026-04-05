@@ -5,6 +5,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import Input from '../../../shared/components/ui/Input';
 import VerifyEmailModal from './VerifyEmailModal';
 import { useProvinces } from '../../../shared/hooks/useProvinces';
+import { authService } from '../services/authService';
 
 /* ── Social icon SVGs ─────────────────────────────────────── */
 const AppleIcon = () => (
@@ -102,12 +103,14 @@ export default function RegisterForm({ onSuccess }) {
         ward: data.ward,
         isDefault: data.isDefault
       };
-      console.log('Register payload:', payload);
-
-      // Show verify-email modal with the submitted email
+      
+      await authService.register(payload);
+      
+      // Mở modal báo cho user check email
       setVerifyEmail(data.email);
     } catch (err) {
       console.error(err);
+      alert(err.response?.data?.message || 'Đăng ký thất bại, email có thể đã bị trùng!');
     }
   };
 

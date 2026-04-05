@@ -1,4 +1,4 @@
-import { AppBar, Toolbar, Box, IconButton, Button } from '@mui/material';
+import { AppBar, Toolbar, Box, IconButton, Button, Menu, MenuItem, Typography } from '@mui/material';
 import { Link } from 'react-router-dom';
 import LogoWebsite from './LogoWebsite';
 import { useCartContext } from '../../../../../modules/cart/context/CartContext';
@@ -15,15 +15,19 @@ import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlin
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import CartDrawer from '../../../../../modules/cart/components/CartDrawer';
+import { useAuth } from '../../../../../modules/auth/hooks/useAuth';
 
 function MainNavBar(props) {
   const { options, setIsHovered, setIsOpen } = props;
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const { openDrawer, closeDrawer, totalItems } = useCartContext();
 
   const [open, setOpen] = useState(false);
   const [isOpenSearch, setIsOpenSearch] = useState(false);
+  // Dropdown anchor cho user menu
+  const [userMenuAnchor, setUserMenuAnchor] = useState(null);
 
   const handleDrawerOpen = () => setOpen(true);
   const handleDrawerClose = () => setOpen(false);
@@ -37,6 +41,23 @@ function MainNavBar(props) {
   const handleOpenCart = (e) => {
     setIsOpenSearch(false);        // đóng search → mở cart
     openDrawer(e);
+  };
+
+  const handleUserIconClick = (e) => {
+    if (user) {
+      // Đã login → mở dropdown
+      setUserMenuAnchor(e.currentTarget);
+    } else {
+      // Chưa login → về trang đăng nhập
+      navigate('/login');
+    }
+  };
+
+  const handleUserMenuClose = () => setUserMenuAnchor(null);
+
+  const handleLogout = () => {
+    handleUserMenuClose();
+    logout(navigate);
   };
 
   return (
@@ -88,9 +109,37 @@ function MainNavBar(props) {
           >
             {isOpenSearch ? <CloseIcon /> : <SearchOutlinedIcon />}
           </Button>
-          <Link to="/login" style={{ color: 'inherit', display: 'flex' }}>
+
+          {/* User Icon — thông minh: đã login → dropdown, chưa login → về /login */}
+          <IconButton
+            onClick={handleUserIconClick}
+            sx={{ color: 'inherit', padding: '4px' }}
+            aria-label={user ? 'Tài khoản' : 'Đăng nhập'}
+          >
             <PersonOutlinedIcon sx={{ cursor: 'pointer' }} />
-          </Link>
+          </IconButton>
+          <Menu
+            anchorEl={userMenuAnchor}
+            open={Boolean(userMenuAnchor)}
+            onClose={handleUserMenuClose}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            PaperProps={{ sx: { mt: 1, minWidth: 160, boxShadow: '0 4px 20px rgba(0,0,0,0.1)' } }}
+          >
+            {user && (
+              <Box sx={{ px: 2, py: 1, borderBottom: '1px solid #f0f0f0' }}>
+                <Typography variant="caption" color="text.secondary">Xin chào,</Typography>
+                <Typography variant="body2" fontWeight={600}>{user.firstName} {user.lastName}</Typography>
+              </Box>
+            )}
+            <MenuItem onClick={() => { handleUserMenuClose(); navigate('/orders'); }} sx={{ fontSize: 14 }}>
+              Đơn hàng của tôi
+            </MenuItem>
+            <MenuItem onClick={handleLogout} sx={{ fontSize: 14, color: 'error.main' }}>
+              Đăng xuất
+            </MenuItem>
+          </Menu>
+
           <Link to="/wishlist" style={{ color: 'inherit', display: 'flex' }}>
             <FavoriteBorderOutlinedIcon sx={{ cursor: 'pointer' }} />
           </Link>

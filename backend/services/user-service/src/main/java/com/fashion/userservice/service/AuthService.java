@@ -6,15 +6,14 @@ import com.fashion.userservice.entity.PasswordResetToken;
 import com.fashion.userservice.entity.RefreshToken;
 import com.fashion.userservice.entity.User;
 import com.fashion.userservice.exception.*;
+import com.fashion.userservice.repository.EmailVerificationTokenRepository;
 import com.fashion.userservice.repository.PasswordResetTokenRepository;
 import com.fashion.userservice.repository.RefreshTokenRepository;
 import com.fashion.userservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,12 +31,12 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final MailService mailService;
     private final AuthenticationManager authenticationManager;
-    private final UserDetailsService userDetailsService;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -56,16 +55,20 @@ public class AuthService {
 
         userRepository.save(user);
 
-        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String accessToken = jwtService.generateAccessToken(userDetails);
-        String refreshToken = saveRefreshToken(user, jwtService.generateRefreshToken(userDetails));
+        String token = UUID.randomUUID().toString();
+        com.fashion.userservice.entity.EmailVerificationToken verificationToken = com.fashion.userservice.entity.EmailVerificationToken.builder()
+                .userId(user.getId())
+                .token(token)
+                .expiresAt(LocalDateTime.now().plusHours(24))
+                .build();
+        emailVerificationTokenRepository.save(verificationToken);
+
+        // Phát sự kiện gửi mail xác thực
+        mailService.sendVerificationEmail(user.getEmail(), user.getFullName(), token);
 
         return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
                 .email(user.getEmail())
                 .firstName(user.getFullName())
-                .lastName("")
                 .role(user.getRole().name())
                 .build();
     }
@@ -75,21 +78,18 @@ public class AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
 
-        // Check account locked removed.
-
-        try {
-            authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
-        } catch (BadCredentialsException e) {
-            throw new InvalidCredentialsException("Invalid email or password");
+        if (!user.isEmailVerified()) {
+            throw new DisabledException("Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email!");
         }
 
-        // Reset failed attempts on success removed
+        authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+
+        // Gỡ bỏ reset field vì sẽ ảnh hưởng tới audit/timestamps (nếu cần thì implement riêng logic reset)
         userRepository.save(user);
 
-        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String accessToken = jwtService.generateAccessToken(userDetails);
-        String refreshToken = saveRefreshToken(user, jwtService.generateRefreshToken(userDetails));
+        String accessToken = jwtService.generateAccessToken(user);
+        String refreshToken = saveRefreshToken(user, jwtService.generateRefreshToken(user));
 
         return AuthResponse.builder()
                 .accessToken(accessToken)
@@ -111,8 +111,7 @@ public class AuthService {
         }
 
         User user = stored.getUser();
-        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String newAccessToken = jwtService.generateAccessToken(userDetails);
+        String newAccessToken = jwtService.generateAccessToken(user);
 
         return AuthResponse.builder()
                 .accessToken(newAccessToken)
@@ -170,6 +169,24 @@ public class AuthService {
 
         // Revoke all refresh tokens for security
         refreshTokenRepository.revokeAllByUserId(user.getId());
+    }
+
+    @Transactional
+    public void verifyEmail(String token) {
+        com.fashion.userservice.entity.EmailVerificationToken verificationToken = emailVerificationTokenRepository.findByToken(token)
+                .orElseThrow(() -> new TokenExpiredException("Invalid verification token"));
+
+        if (verificationToken.isExpired()) {
+            throw new TokenExpiredException("Verification token has expired");
+        }
+
+        User user = userRepository.findById(verificationToken.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        user.setEmailVerified(true);
+        userRepository.save(user);
+
+        emailVerificationTokenRepository.deleteAllByUserId(user.getId());
     }
 
     // ─── Private helpers ───────────────────────────────────────────────────────

@@ -11,7 +11,7 @@ spring:
       server:
         native:
           # Đường dẫn thư mục chứa cấu hình chung cho cả dự án
-          search-locations: file:./config-repo/
+          search-locations: file:../../config-repo/
 
 # Bật endpoint Actuator để giám sát Config Server
 management:

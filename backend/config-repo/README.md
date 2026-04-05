@@ -39,3 +39,5 @@ các bạn tạo 1 file .env copy sườn file .env.example vào và sửa lại
 Khi đem server triển khai lên K8s (hoặc VPS Cloud), DevOps chỉ cần nạp các biến môi trường (Ví dụ `SPRING_DATASOURCE_PASSWORD=xyz`) vào container. Spring Boot sẽ tự động bỏ qua giá trị cấu hình local trong các file này và ăn theo mật khẩu production xịn!
 
 Mọi câu hỏi, vui lòng liên hệ Leader! Happy Coding! 🚀
+
+## cặp lệnh xịn khi build mvn spring-boot:run

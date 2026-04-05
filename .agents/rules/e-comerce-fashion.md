@@ -10,6 +10,7 @@ trigger: always_on
 * Mục tiêu: Xây dựng hệ thống Microservices hoàn chỉnh, có khả năng mở rộng, sử dụng Spring Boot và React
 * Đối tượng:
   * Customer (Khách hàng)
+  * Guest (khách mời chưa login truy cập Web)
   * Admin (Quản trị viên)
 
 # 2. Tech Stack Core

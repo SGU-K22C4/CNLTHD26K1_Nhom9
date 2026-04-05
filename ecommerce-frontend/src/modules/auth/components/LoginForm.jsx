@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import Input from '../../../shared/components/ui/Input';
 import WelcomeModal from './WelcomeModal';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { authService } from '../services/authService';
 
@@ -44,9 +44,13 @@ const SocialButton = ({ children, label }) => (
 export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
-  // 1. Hook Điều hướng chuẩn SPA (Tránh chớp chớp trang)
+  const [serverError, setServerError] = useState('');
+
   const navigate = useNavigate();
-  // 2. Lấy hàm login từ Global State (AuthContext)
+  const location = useLocation();
+  // Lấy lại URL user đang muốn vào trước khi bị đá sang /login
+  const from = location.state?.from || '/';
+
   const { login } = useAuth();
 
   const {
@@ -55,23 +59,19 @@ export default function LoginForm() {
     formState: { errors, isSubmitting },
   } = useForm();
   const onSubmit = async (data) => {
+    setServerError('');
     try {
-      // Dùng authService đã cấu hình sẵn của bạn
       const response = await authService.login(data.email, data.password);
 
-      const { accessToken, refreshToken, email, firstName, lastName, role } = response;
-
-      // Đẩy tất cả data cục bộ này vào Context để Context tự xử lý LocalStorage
-      login(response);
-
-      setShowWelcome(true);
-      // Điều hướng cực mượt sau 2s thông báo (đè Modal bằng router path)
-      setTimeout(() => {
-        navigate('/');
-      }, 2000);
+      // Đẩy data vào Context và truyền callback redirect
+      login(response, () => {
+        setShowWelcome(true);
+        // Chờ 1.5s cho modal Welcome hiện rồi mới redirect về trang cũ
+        setTimeout(() => navigate(from, { replace: true }), 1500);
+      });
     } catch (err) {
-      console.error("Đăng nhập thất bại:", err);
-      alert(err.response?.data?.message || "Sai mật khẩu hoặc email chưa đăng ký!");
+      const msg = err.response?.data?.message || 'Đăng nhập thất bại, vui lòng thử lại!';
+      setServerError(msg);
     }
   };
 
@@ -84,6 +84,13 @@ export default function LoginForm() {
         <h2 className="text-[26px] font-semibold text-center text-gray-900 tracking-wide">
           Log In
         </h2>
+
+        {/* Server Error Banner */}
+        {serverError && (
+          <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+            {serverError}
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">

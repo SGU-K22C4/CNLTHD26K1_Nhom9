@@ -59,13 +59,10 @@ export default function LoginForm() {
       // Dùng authService đã cấu hình sẵn của bạn
       const response = await authService.login(data.email, data.password);
 
-      const { accessToken, refreshToken, user } = response;
+      const { accessToken, refreshToken, email, firstName, lastName, role } = response;
 
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
-      localStorage.setItem('userInfo', JSON.stringify(user));
-      // 4. Kích hoạt State Global (Navbar sẽ nghe thấy và chuyển ngay thành hình Avatar đại diện)
-      login(user);
+      // Đẩy tất cả data cục bộ này vào Context để Context tự xử lý LocalStorage
+      login(response);
 
       setShowWelcome(true);
       // Điều hướng cực mượt sau 2s thông báo (đè Modal bằng router path)

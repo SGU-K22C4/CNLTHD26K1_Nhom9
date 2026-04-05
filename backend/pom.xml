@@ -23,8 +23,24 @@
         <lombok.version>1.18.30</lombok.version>
     </properties>
 
+    <dependencies>
+        <!-- Tự động nạp biến môi trường từ file .env cho toàn bộ Microservices -->
+        <dependency>
+            <groupId>me.paulschwarz</groupId>
+            <artifactId>spring-dotenv</artifactId>
+            <version>4.0.0</version>
+        </dependency>
+    </dependencies>
+
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>2023.0.1</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>com.fashion</groupId>
                 <artifactId>common</artifactId>
@@ -40,6 +56,7 @@
 
     <modules>
         <module>common</module>
+        <module>services/config-service</module>
         <!-- <module>api-gateway</module> -->  <!-- Replaced by Kong Gateway (docker/kong.yml) -->
         <module>services/user-service</module>
         <module>services/product-service</module>

@@ -12,8 +12,19 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
-    const login = (userData) => {
-        setUser(userData);
+    const login = (data) => {
+        // data từ API trả về bao gồm accessToken, refreshToken, và thông tin user
+        const userInfo = {
+            email: data.email,
+            firstName: data.firstName,
+            lastName: data.lastName,
+            role: data.role
+        };
+        
+        setUser(userInfo);
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        localStorage.setItem('userInfo', JSON.stringify(userInfo));
     };
 
     const logout = () => {

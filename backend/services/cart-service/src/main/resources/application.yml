@@ -1,13 +1,5 @@
-server:
-  port: 8083
-
 spring:
   application:
     name: cart-service
-  data:
-    redis:
-      host: ${SPRING_DATA_REDIS_HOST:localhost}
-      port: ${SPRING_DATA_REDIS_PORT:6379}
-
-jwt:
-  secret: ${JWT_SECRET:CHANGE_ME_base64_encoded_secret_key_at_least_32_bytes}
+  config:
+    import: "optional:configserver:http://localhost:8888"

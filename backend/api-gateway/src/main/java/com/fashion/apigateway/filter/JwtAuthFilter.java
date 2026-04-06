@@ -44,16 +44,22 @@ public class JwtAuthFilter extends AbstractGatewayFilterFactory<JwtAuthFilter.Co
                         .parseSignedClaims(token)
                         .getPayload();
 
-                // Inject user info to downstream services via headers
+                // 1. Lấy thông tin đã giấu từ User Service
+                String userId = claims.get("userId", String.class);
+                String role = claims.get("role", String.class);
+                String email = claims.getSubject();
+
+                // 2. Giả lập tính năng của Kong Plugin: Tiêm Context thành HTTP Header
                 ServerWebExchange mutatedExchange = exchange.mutate()
                         .request(r -> r.headers(headers -> {
-                            headers.set("X-User-Id", claims.getSubject());
-                            headers.set("X-User-Email", claims.getSubject());
+                            headers.set("X-User-Id", userId);
+                            headers.set("X-User-Role", role);
+                            headers.set("X-Consumer-Username", email);
                         }))
                         .build();
 
                 return chain.filter(mutatedExchange);
-            } catch (Exception e) {
+            }catch (Exception e) {
                 log.warn("JWT validation failed: {}", e.getMessage());
                 return unauthorized(exchange);
             }

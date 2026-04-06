@@ -11,6 +11,7 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class VNPayService {
 
     private final VNPayConfig vnPayConfig;

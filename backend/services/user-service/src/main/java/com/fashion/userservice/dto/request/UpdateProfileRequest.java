@@ -7,12 +7,9 @@ import lombok.Data;
 @Data
 public class UpdateProfileRequest {
 
-    @NotBlank @Size(max = 50)
-    private String firstName;
-
-    @NotBlank @Size(max = 50)
-    private String lastName;
+    @NotBlank @Size(max = 100)
+    private String fullName;
 
     @Size(max = 20)
-    private String phoneNumber;
+    private String phone;
 }

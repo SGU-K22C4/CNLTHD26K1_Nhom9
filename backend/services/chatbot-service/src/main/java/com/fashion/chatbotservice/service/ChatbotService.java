@@ -13,6 +13,7 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@SuppressWarnings("null")
 public class ChatbotService {
 
     private final WebClient webClient;
@@ -27,23 +28,23 @@ public class ChatbotService {
     private int maxTokens;
 
     private static final String SYSTEM_PROMPT = """
-        Bạn là trợ lý tư vấn thời trang cho cửa hàng Fashion Store.
-        Hãy giúp khách hàng tìm sản phẩm phù hợp, tư vấn phối đồ, và trả lời câu hỏi về sản phẩm.
-        Trả lời ngắn gọn, thân thiện bằng tiếng Việt.
-        """;
+            Bạn là trợ lý tư vấn thời trang cho cửa hàng Fashion Store.
+            Hãy giúp khách hàng tìm sản phẩm phù hợp, tư vấn phối đồ, và trả lời câu hỏi về sản phẩm.
+            Trả lời ngắn gọn, thân thiện bằng tiếng Việt.
+            """;
 
     public Mono<String> chat(String userMessage, List<Map<String, String>> history) {
         List<Map<String, String>> messages = new java.util.ArrayList<>();
         messages.add(Map.of("role", "system", "content", SYSTEM_PROMPT));
-        if (history != null) messages.addAll(history);
+        if (history != null)
+            messages.addAll(history);
         messages.add(Map.of("role", "user", "content", userMessage));
 
         Map<String, Object> body = Map.of(
                 "model", model,
                 "messages", messages,
                 "max_tokens", maxTokens,
-                "temperature", 0.7
-        );
+                "temperature", 0.7);
 
         return webClient.post()
                 .uri("https://api.openai.com/v1/chat/completions")

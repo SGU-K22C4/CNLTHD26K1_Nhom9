@@ -34,9 +34,6 @@ public class Address {
     private String ward;
 
     @Column(nullable = false, length = 100)
-    private String district;
-
-    @Column(nullable = false, length = 100)
     private String city;
 
     @Column(name = "is_default", nullable = false)

@@ -1,6 +1,6 @@
 package com.fashion.promotionservice.controller;
 
-import com.fashion.promotionservice.entity.Coupon;
+// import com.fashion.promotionservice.entity.Coupon;
 import com.fashion.promotionservice.repository.CouponRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -26,7 +26,8 @@ public class PromotionController {
                 .findByCodeAndActiveTrueAndStartDateBeforeAndEndDateAfter(code, now, now)
                 .map(coupon -> {
                     if (coupon.getUsageLimit() != null && coupon.getUsedCount() >= coupon.getUsageLimit()) {
-                        return ResponseEntity.ok(Map.<String, Object>of("valid", false, "reason", "Coupon đã hết lượt sử dụng"));
+                        return ResponseEntity
+                                .ok(Map.<String, Object>of("valid", false, "reason", "Coupon đã hết lượt sử dụng"));
                     }
                     if (coupon.getMinOrderAmount() != null && orderAmount.compareTo(coupon.getMinOrderAmount()) < 0) {
                         return ResponseEntity.ok(Map.<String, Object>of("valid", false, "reason",
@@ -37,8 +38,7 @@ public class PromotionController {
                             "valid", true,
                             "discount", discount,
                             "code", coupon.getCode(),
-                            "type", coupon.getDiscountType()
-                    ));
+                            "type", coupon.getDiscountType()));
                 })
                 .orElse(ResponseEntity.ok(Map.of("valid", false, "reason", "Mã không hợp lệ hoặc đã hết hạn")));
     }

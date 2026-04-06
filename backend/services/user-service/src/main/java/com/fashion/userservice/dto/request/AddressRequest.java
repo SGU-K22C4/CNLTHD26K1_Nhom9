@@ -19,9 +19,6 @@ public class AddressRequest {
     private String ward;
 
     @NotBlank
-    private String district;
-
-    @NotBlank
     private String city;
 
     private boolean isDefault = false;

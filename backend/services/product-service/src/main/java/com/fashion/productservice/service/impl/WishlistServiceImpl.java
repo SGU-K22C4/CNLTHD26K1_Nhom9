@@ -18,6 +18,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class WishlistServiceImpl implements WishlistService {
 
     private final WishlistRepository wishlistRepository;

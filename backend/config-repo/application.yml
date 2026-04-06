@@ -1,0 +1,25 @@
+# CẤU HÌNH DÙNG CHUNG CHO TẤT CẢ CÁC MICROSERVICES
+# Mọi service (user, product, order...) khi kết nối tới Config Server đều sẽ nhận cấu hình này
+
+spring:
+  # Cấu hình mail (nếu các service khác cũng có xài gửi mail)
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:your-email@gmail.com}
+    password: ${MAIL_PASSWORD:your-app-password}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+# JWT dùng chung cho tất cả service để giải mã token
+jwt:
+  secret: ${JWT_SECRET:ZmFzaGlvbi1lLWNvbW1lcmNlLXNlY3JldC1rZXktdGhhdC1pcy1sb25nLWVub3VnaC0zMmJ5dGVz}
+  expiration: ${JWT_EXPIRATION:900000}
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}

@@ -70,7 +70,11 @@ export default function OrderHistoryPage() {
     } catch {
       setError('Chưa kết nối được backend đơn hàng, đang dùng dữ liệu demo để test giao diện.')
       setOrders(getDemoOrders())
-      setMineReviews(await reviewService.getMine())
+      try {
+        setMineReviews(await reviewService.getMine())
+      } catch {
+        setMineReviews([])
+      }
     } finally {
       setLoading(false)
     }
@@ -83,13 +87,13 @@ export default function OrderHistoryPage() {
   const reviewedKeys = useMemo(() => {
     const keys = new Set()
     mineReviews.forEach((review) => {
-      const productId = Number(review.productId)
-      if (!Number.isNaN(productId)) {
+      const productId = String(review.productId || '').trim()
+      if (productId) {
         keys.add(`product-${productId}`)
       }
 
-      const orderId = Number(review.orderId)
-      if (!Number.isNaN(orderId) && !Number.isNaN(productId)) {
+      const orderId = String(review.orderId || '').trim()
+      if (orderId && productId) {
         keys.add(`order-${orderId}-product-${productId}`)
       }
     })
@@ -126,7 +130,7 @@ export default function OrderHistoryPage() {
 
         <div className="mb-5 p-4 border border-[#E8E8E8] bg-white">
           <p className="text-[12px] text-[#444]">
-            Quy tắc đánh giá: mỗi khách hàng chỉ gửi 1 đánh giá cho mỗi sản phẩm đã mua. Sau khi gửi đánh giá hợp lệ, hệ thống sẽ cộng điểm tích lũy vào tài khoản.
+            Quy tắc đánh giá: mỗi khách hàng chỉ gửi 1 đánh giá cho mỗi sản phẩm đã mua.
           </p>
         </div>
 
@@ -161,9 +165,10 @@ export default function OrderHistoryPage() {
 
                   <div className="divide-y divide-[#F2F2F2]">
                     {(order.items || []).map((item, index) => {
-                      const numericProductId = Number(item.productId)
-                      const reviewed = reviewedKeys.has(`product-${numericProductId}`)
-                        || reviewedKeys.has(`order-${Number(order.id)}-product-${numericProductId}`)
+                      const productIdKey = String(item.productId || '').trim()
+                      const orderIdKey = String(order.id || '').trim()
+                      const reviewed = reviewedKeys.has(`product-${productIdKey}`)
+                        || reviewedKeys.has(`order-${orderIdKey}-product-${productIdKey}`)
 
                       return (
                         <article key={`${order.id}-${item.productId}-${index}`} className="p-5 flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
@@ -186,8 +191,8 @@ export default function OrderHistoryPage() {
                             onClick={() => {
                               setSubmitError('')
                               setReviewTarget({
-                                orderId: Number(order.id),
-                                productId: item.productId,
+                                orderId: String(order.id),
+                                productId: String(item.productId),
                                 productName: item.productName,
                               })
                             }}

@@ -3,3 +3,7 @@ spring:
     name: review-service
   config:
     import: "optional:configserver:http://localhost:8888"
+
+review:
+  integration:
+    order-service-url: ${ORDER_SERVICE_URL:http://localhost:8084}

@@ -48,6 +48,7 @@ function getDemoOrders() {
 export default function OrderHistoryPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [reviewWarning, setReviewWarning] = useState('')
   const [orders, setOrders] = useState([])
 
   const [reviewTarget, setReviewTarget] = useState(null)
@@ -58,26 +59,32 @@ export default function OrderHistoryPage() {
   const loadData = async () => {
     setLoading(true)
     setError('')
+    setReviewWarning('')
 
-    try {
-      const [orderPage, myReviews] = await Promise.all([
-        orderService.getHistory({ page: 0, size: 50 }),
-        reviewService.getMine(),
-      ])
+    const [orderResult, reviewResult] = await Promise.allSettled([
+      orderService.getHistory({ page: 0, size: 50 }),
+      reviewService.getMine(),
+    ])
 
+    if (orderResult.status === 'fulfilled') {
+      const orderPage = orderResult.value
       setOrders(Array.isArray(orderPage?.content) ? orderPage.content : [])
-      setMineReviews(Array.isArray(myReviews) ? myReviews : [])
-    } catch {
+    } else {
+      console.error('[OrderHistoryPage] Failed to load order history:', orderResult.reason)
       setError('Chưa kết nối được backend đơn hàng, đang dùng dữ liệu demo để test giao diện.')
       setOrders(getDemoOrders())
-      try {
-        setMineReviews(await reviewService.getMine())
-      } catch {
-        setMineReviews([])
-      }
-    } finally {
-      setLoading(false)
     }
+
+    if (reviewResult.status === 'fulfilled') {
+      const myReviews = reviewResult.value
+      setMineReviews(Array.isArray(myReviews) ? myReviews : [])
+    } else {
+      console.error('[OrderHistoryPage] Failed to load user reviews:', reviewResult.reason)
+      setMineReviews([])
+      setReviewWarning('Không tải được trạng thái đánh giá. Bạn vẫn xem được đơn hàng, nhưng trạng thái "Đã đánh giá" có thể chưa chính xác.')
+    }
+
+    setLoading(false)
   }
 
   useEffect(() => {
@@ -135,6 +142,7 @@ export default function OrderHistoryPage() {
         </div>
 
         {error && <p className="text-[13px] text-red-500 mb-4">{error}</p>}
+        {reviewWarning && <p className="text-[13px] text-amber-600 mb-4">{reviewWarning}</p>}
 
         {loading ? (
           <p className="text-[13px] text-[#666]">Đang tải đơn hàng...</p>

@@ -4,7 +4,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
+import com.fashion.userservice.entity.User;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -24,39 +24,50 @@ public class JwtService {
     @Value("${jwt.refresh-expiration}")
     private long refreshExpiration;
 
+    // hàm trích xuất email từ token
     public String extractEmail(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
+    // hàm trích xuất yêu cầu từ token
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
     }
 
-    public String generateToken(UserDetails userDetails) {
-        return buildToken(userDetails, jwtExpiration);
+    // hàm tạo access token sau khi token build ban đầu hết hạn
+    public String generateAccessToken(User user) {
+        return buildToken(user, jwtExpiration);
     }
 
-    public String generateRefreshToken(UserDetails userDetails) {
-        return buildToken(userDetails, refreshExpiration);
+    // hàm tạo refresh token
+    public String generateRefreshToken(User user) {
+        return buildToken(user, refreshExpiration);
     }
 
-    public boolean isTokenValid(String token, UserDetails userDetails) {
+    // hàm kiểm tra token có hợp lệ không
+    public boolean isTokenValid(String token, User user) {
         final String email = extractEmail(token);
-        return email.equals(userDetails.getUsername()) && !isTokenExpired(token);
+        return email.equals(user.getEmail()) && !isTokenExpired(token);
     }
 
+    // hàm kiểm tra token hết hạn không
     private boolean isTokenExpired(String token) {
         return extractExpiration(token).before(new Date());
     }
 
+    // hàm trích xuất thời gian hết hạn từ token
     private Date extractExpiration(String token) {
         return extractClaim(token, Claims::getExpiration);
     }
 
-    private String buildToken(UserDetails userDetails, long expiration) {
+    // hàm build token ban đầu khi user login
+    private String buildToken(User user, long expiration) {
         return Jwts.builder()
-                .subject(userDetails.getUsername())
+                .subject(user.getEmail()) // -> Lưu email/username
+                // Nhồi thêm (claim) các định danh vào payload để sau này Kong giải mã ra
+                .claim("userId", user.getId())
+                .claim("role", user.getRole().name())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSigningKey())

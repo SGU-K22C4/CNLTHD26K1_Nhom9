@@ -1,18 +1,19 @@
 import { Routes, Route } from 'react-router-dom'
 import HomePage from '../modules/home/pages/HomePage'
+import PrivateRoute, { GuestOnlyRoute } from './PrivateRoute'
 import CartPage from '../modules/cart/pages/CartPage'
 import CheckoutPage from '../modules/order/pages/CheckoutPage'
-import CheckoutShippingPage from '../modules/order/pages/CheckoutShippingPage'
-import CheckoutPaymentPage from '../modules/order/pages/CheckoutPaymentPage'
 import PaymentSuccessPage from '../modules/order/pages/PaymentSuccessPage'
 import PaymentFailedPage from '../modules/order/pages/PaymentFailedPage'
+import VNPayReturnPage from '../modules/order/pages/VNPayReturnPage'
+import OrderDetailPage from '../modules/order/pages/OrderDetailPage'
 import Layout from '../shared/components/layout/Layout'
-import SearchPage from '../modules/product/pages/SearchPage'
 import ProductListPage from '../modules/product/pages/ProductListPage'
 import ProductDetailPage from '../modules/product/pages/ProductDetailPage'
-import RegisterPage from '../modules/auth/pages/RegisterPage'
+import WishlistPage from '../modules/wishlist/pages/WishlistPage'
 import LoginPage from '../modules/auth/pages/LoginPage'
-import ContactPage from '../modules/contact/pages/ContactPage'
+import RegisterPage from '../modules/auth/pages/RegisterPage'
+import VerifyEmailPage from '../modules/auth/pages/VerifyEmailPage'
 
 function WithLayout({ children }) {
   return <Layout>{children}</Layout>
@@ -22,26 +23,33 @@ export default function AppRoutes() {
   return (
     <Routes>
       {/* -------------------------------------------------- */}
-      {/* NHÓM 1: CÁC TRANG CÓ LAYOUT (HEADER & FOOTER)        */}
+      {/* NHÓM 1: PUBLIC — Ai cũng vào được                  */}
       {/* -------------------------------------------------- */}
       <Route path="/" element={<WithLayout><HomePage /></WithLayout>} />
-      <Route path="/register" element={<WithLayout><RegisterPage /></WithLayout>} />
-      <Route path="/login" element={<WithLayout><LoginPage /></WithLayout>} />
-      <Route path="/search" element={<WithLayout><SearchPage /></WithLayout>} />
       <Route path="/products" element={<WithLayout><ProductListPage /></WithLayout>} />
       <Route path="/collection/:gender" element={<WithLayout><ProductListPage /></WithLayout>} />
       <Route path="/products/:id" element={<WithLayout><ProductDetailPage /></WithLayout>} />
-      <Route path="/contact" element={<WithLayout><ContactPage /></WithLayout>} />
-      <Route path="/cart" element={<WithLayout><CartPage /></WithLayout>} />
-      <Route path="/checkout/success" element={<WithLayout><PaymentSuccessPage /></WithLayout>} />
-      <Route path="/checkout/failed" element={<WithLayout><PaymentFailedPage /></WithLayout>} />
+      <Route path="/verify-email" element={<WithLayout><VerifyEmailPage /></WithLayout>} />
 
       {/* -------------------------------------------------- */}
-      {/* NHÓM 2: CÁC TRANG CHECKOUT FULL MÀN HÌNH (NO LAYOUT) */}
+      {/* NHÓM 2: GUEST ONLY — Đã login thì về trang chủ     */}
       {/* -------------------------------------------------- */}
-      <Route path="/checkout" element={<CheckoutPage />} />
-      <Route path="/checkout/shipping" element={<CheckoutShippingPage />} />
-      <Route path="/checkout/payment" element={<CheckoutPaymentPage />} />
+      <Route element={<GuestOnlyRoute />}>
+        <Route path="/login" element={<WithLayout><LoginPage /></WithLayout>} />
+        <Route path="/register" element={<WithLayout><RegisterPage /></WithLayout>} />
+      </Route>
+
+      {/* -------------------------------------------------- */}
+      {/* NHÓM 3: PRIVATE — Phải đăng nhập mới vào được      */}
+      {/* -------------------------------------------------- */}
+      <Route path="/cart" element={<PrivateRoute><WithLayout><CartPage /></WithLayout></PrivateRoute>} />
+      <Route path="/wishlist" element={<PrivateRoute><WithLayout><WishlistPage /></WithLayout></PrivateRoute>} />
+      <Route path="/checkout/success" element={<PrivateRoute><WithLayout><PaymentSuccessPage /></WithLayout></PrivateRoute>} />
+      <Route path="/checkout/failed" element={<PrivateRoute><WithLayout><PaymentFailedPage /></WithLayout></PrivateRoute>} />
+      <Route path="/payment/vnpay-return" element={<PrivateRoute><WithLayout><VNPayReturnPage /></WithLayout></PrivateRoute>} />
+      <Route path="/orders/:orderId" element={<PrivateRoute><WithLayout><OrderDetailPage /></WithLayout></PrivateRoute>} />
+      <Route path="/checkout" element={<PrivateRoute><CheckoutPage /></PrivateRoute>} />
     </Routes>
   )
 }
+

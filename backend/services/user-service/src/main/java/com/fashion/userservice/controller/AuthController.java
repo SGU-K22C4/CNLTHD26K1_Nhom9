@@ -49,4 +49,10 @@ public class AuthController {
         authService.resetPassword(request);
         return ResponseEntity.noContent().build();
     }
+
+    @GetMapping("/verify-email")
+    public ResponseEntity<String> verifyEmail(@RequestParam("token") String token) {
+        authService.verifyEmail(token);
+        return ResponseEntity.ok("Xác thực email thành công! Bạn có thể đăng nhập ngay bây giờ.");
+    }
 }

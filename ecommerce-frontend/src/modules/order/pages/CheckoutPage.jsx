@@ -1,40 +1,172 @@
-﻿import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, Minus, Plus, Phone, User, ChevronLeft, ChevronDown } from 'lucide-react'
+import { X, Minus, Plus, User, ChevronLeft, ChevronDown } from 'lucide-react'
 import { useCartContext } from '../../cart/context/CartContext'
+import { formatCurrency } from '../../../shared/utils/format'
+import { orderService } from '../services/orderService'
+import { paymentService } from '../services/paymentService'
 
 const TAX_RATE = 0.08
 
 export default function CheckoutPage() {
-  const { items, removeItem, updateQuantity, subtotal, totalItems } = useCartContext()
+  const { items, removeItem, updateQuantity, subtotal, totalItems, clearCart = () => {} } = useCartContext()
   const navigate = useNavigate()
 
   const tax = subtotal * TAX_RATE
   const total = subtotal + tax
 
-  /* â”€â”€ Form state â”€â”€ */
+  /* ―― Form state ―― */
   const [form, setForm] = useState({
     email: '',
     emailOffers: false,
-    country: '',
     firstName: '',
     lastName: '',
     company: '',
     address: '',
     apartment: '',
-    postalCode: '',
+    ward: '',
+    wardId: '',
+    district: '',
+    districtId: '',
     city: '',
+    cityId: '',
     phone: '',
     saveInfo: false,
+    paymentMethod: 'COD',
+    note: '',
   })
+
+  const [errors, setErrors] = useState({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  /* ── Address Dropdowns State ── */
+  const [provinces, setProvinces] = useState([])
+  const [districts, setDistricts] = useState([])
+  const [wards, setWards] = useState([])
+
+  useEffect(() => {
+    fetch('https://provinces.open-api.vn/api/p/')
+      .then(res => res.json())
+      .then(data => {
+        setProvinces(data)
+      })
+      .catch(err => console.error('Failed to load provinces:', err))
+  }, [])
+
+  const handleCityChange = (e) => {
+    const [id, name] = e.target.value.split('|')
+    setForm(prev => ({ ...prev, city: name, cityId: id, district: '', districtId: '', ward: '', wardId: '' }))
+    setErrors(prev => ({ ...prev, city: null, district: null, ward: null }))
+    setDistricts([])
+    setWards([])
+    if (id) {
+      fetch(`https://provinces.open-api.vn/api/p/${id}?depth=2`)
+        .then(res => res.json())
+        .then(data => {
+          setDistricts(data.districts || [])
+        })
+    }
+  }
+
+  const handleDistrictChange = (e) => {
+    const [id, name] = e.target.value.split('|')
+    setForm(prev => ({ ...prev, district: name, districtId: id, ward: '', wardId: '' }))
+    setErrors(prev => ({ ...prev, district: null, ward: null }))
+    setWards([])
+    if (id) {
+      fetch(`https://provinces.open-api.vn/api/d/${id}?depth=2`)
+        .then(res => res.json())
+        .then(data => {
+          setWards(data.wards || [])
+        })
+    }
+  }
+
+  const handleWardChange = (e) => {
+    const [id, name] = e.target.value.split('|')
+    setForm(prev => ({ ...prev, ward: name, wardId: id }))
+    setErrors(prev => ({ ...prev, ward: null }))
+  }
 
   const set = (field) => (e) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value
     setForm((prev) => ({ ...prev, [field]: value }))
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: null }))
   }
 
-  const inputBase =
-    'w-full border border-[#dfdfdf] p-3 text-sm text-[#202020] placeholder-[#9a9a9a] outline-none focus:border-[#5A6D57] transition-colors bg-white'
+  const validateForm = () => {
+    const newErrors = {}
+    if (!form.email.trim()) newErrors.email = 'Vui lòng nhập email'
+    else if (!/^\S+@\S+\.\S+$/.test(form.email)) newErrors.email = 'Email không hợp lệ'
+
+    if (!form.firstName.trim()) newErrors.firstName = 'Vui lòng nhập họ'
+    if (!form.lastName.trim()) newErrors.lastName = 'Vui lòng nhập tên'
+    
+    if (!form.phone.trim()) newErrors.phone = 'Vui lòng nhập số điện thoại'
+    else if (!/(84|0[3|5|7|8|9])+([0-9]{8})\b/.test(form.phone)) newErrors.phone = 'Số điện thoại không hợp lệ'
+    
+    if (!form.address.trim()) newErrors.address = 'Vui lòng nhập địa chỉ'
+    if (!form.cityId) newErrors.city = 'Vui lòng chọn Tỉnh / Thành phố'
+    if (!form.districtId) newErrors.district = 'Vui lòng chọn Quận / Huyện'
+    if (!form.wardId) newErrors.ward = 'Vui lòng chọn Phường / Xã'
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleContinue = async () => {
+    if (validateForm()) {
+      try {
+        setIsSubmitting(true)
+        const payload = buildOrderPayload()
+        const savedOrder = await orderService.create(payload)
+        
+        // If VNPAY, redirect to VNPay payment page
+        if (form.paymentMethod === 'VNPAY') {
+          const { paymentUrl } = await paymentService.createVnpayPayment(savedOrder.id)
+          window.location.href = paymentUrl
+          return // Don't clear cart or navigate — VNPay will redirect back
+        }
+
+        // COD or other methods: clear cart and go to order detail page
+        await clearCart()
+        navigate(`/orders/${savedOrder.id}?from=payment`, { replace: true })
+      } catch (err) {
+        console.error('Submit order failed:', err)
+        alert('Tạo đơn hàng thất bại. Vui lòng thử lại.')
+      } finally {
+        setIsSubmitting(false)
+      }
+    }
+  }
+
+  const getInputClass = (field) =>
+    `w-full border p-3 text-sm text-[#202020] placeholder-[#9a9a9a] outline-none transition-colors bg-white ${
+      errors[field] ? 'border-red-500 focus:border-red-500' : 'border-[#dfdfdf] focus:border-[#5A6D57]'
+    }`
+
+  const ErrorMsg = ({ field }) => errors[field] ? <span className="text-red-500 text-xs mt-1 block">{errors[field]}</span> : null
+
+  /* ── Build payload matching DB Order entity ── */
+  const buildOrderPayload = () => ({
+    recipientName: `${form.firstName} ${form.lastName}`.trim(),
+    recipientPhone: form.phone,
+    shippingAddress: [form.address, form.apartment, form.ward, form.district, form.city]
+      .filter(Boolean).join(', '),
+    paymentMethod: form.paymentMethod,
+    note: form.note || null,
+    email: form.email || null,
+    items: items.map(item => ({
+      productId: item.productId || item.id,
+      productName: item.name,
+      productSlug: item.slug || item.productSlug || '',
+      imageUrl: item.imageUrl || item.image || '',
+      color: item.color,
+      size: item.size,
+      quantity: item.quantity,
+      unitPrice: item.price
+    }))
+  })
 
   /* â”€â”€ Shared: cart item row â”€â”€ */
   const CartItemRow = ({ item }) => (
@@ -53,7 +185,7 @@ export default function CheckoutPage() {
         {item.color && <p className="text-sm text-[#404040]">Color: {item.color}</p>}
         {/* Price + stepper */}
         <div className="flex items-center justify-between mt-3">
-          <p className="text-sm font-bold text-[#202020]">$ {(item.price * item.quantity).toFixed(0)}</p>
+          <p className="text-sm font-bold text-[#202020]">{formatCurrency(item.price * item.quantity)}</p>
           <div className="flex items-center bg-[#D1D9CF]">
             <button onClick={() => updateQuantity(item.id, item.quantity - 1)} aria-label="Decrease"
               className="flex h-8 w-8 items-center justify-center text-[#404040] hover:bg-black/5 transition-colors">
@@ -81,16 +213,16 @@ export default function CheckoutPage() {
   const OrderTotals = () => (
     <div className="flex flex-col gap-3 pt-5 border-t border-[#dfdfdf]">
       <div className="flex justify-between text-sm text-[#404040]">
-        <span>Subtotal ({totalItems})</span><span>${subtotal.toFixed(2)}</span>
+        <span>Subtotal ({totalItems})</span><span>{formatCurrency(subtotal)}</span>
       </div>
       <div className="flex justify-between text-sm text-[#404040]">
-        <span>Tax</span><span>${tax.toFixed(2)}</span>
+        <span>Tax</span><span>{formatCurrency(tax)}</span>
       </div>
       <div className="flex justify-between text-sm text-[#404040]">
         <span>Shipping</span><span>Free</span>
       </div>
       <div className="flex justify-between text-sm font-bold text-[#202020] pt-3 border-t border-[#dfdfdf]">
-        <span>Order Totals:</span><span>${total.toFixed(2)}</span>
+        <span>Order Totals:</span><span>{formatCurrency(total)}</span>
       </div>
       <p className="text-[11px] text-[#202020] font-semibold leading-relaxed mt-1">
         The Total Amount You Pay Includes All Applicable Customs Duties &amp; Taxes. We Guarantee No Additional Charges On Delivery
@@ -103,56 +235,118 @@ export default function CheckoutPage() {
     <>
       {/* Contact */}
       <div className="flex items-center justify-between mb-3 mt-6">
-        <h2 className="text-base font-semibold text-[#202020]">Contact</h2>
+        <h2 className="text-base font-semibold text-[#202020]">Liên hệ</h2>
         <p className="text-sm text-[#404040]">
-          Have An Account?{' '}
-          <button className="underline font-medium hover:text-[#5A6D57] transition-colors">Log In</button>
+          Đã có tài khoản?{' '}
+          <button className="underline font-medium hover:text-[#5A6D57] transition-colors">Đăng nhập</button>
         </p>
       </div>
       <div className="relative mb-2">
-        <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9a9a9a]" />
+        <User size={16} className={`absolute left-3 top-1/2 -translate-y-1/2 ${errors.email ? 'text-red-500' : 'text-[#9a9a9a]'}`} />
         <input type="email" placeholder="Email" value={form.email} onChange={set('email')}
-          className={`${inputBase} pl-9`} />
+          className={`${getInputClass('email')} pl-9`} />
       </div>
+      <ErrorMsg field="email" />
       <label className="flex items-center gap-2 text-sm text-[#404040] mb-6 cursor-pointer select-none">
         <input type="checkbox" checked={form.emailOffers} onChange={set('emailOffers')}
           className="w-4 h-4 border-[#dfdfdf] accent-[#5A6D57]" />
-        Email Me With News And Offers
+        Gửi email khuyến mãi cho tôi
       </label>
 
       {/* Shipping Address */}
-      <h2 className="text-base font-semibold text-[#202020] mb-3">Shipping Address</h2>
+      <h2 className="text-base font-semibold text-[#202020] mb-3">Địa chỉ giao hàng</h2>
       <div className="flex flex-col gap-3">
-        {/* Country */}
-        <div className="relative">
-          <select value={form.country} onChange={set('country')}
-            className={`${inputBase} appearance-none pr-10`}>
-            <option value="" disabled>Country/Region</option>
-            <option value="US">United States</option>
-            <option value="CA">Canada</option>
-            <option value="GB">United Kingdom</option>
-            <option value="AU">Australia</option>
-            <option value="VN">Vietnam</option>
-          </select>
-          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a9a9a] pointer-events-none" />
+        <div>
+          <input type="text" placeholder="Họ" value={form.firstName} onChange={set('firstName')} className={getInputClass('firstName')} />
+          <ErrorMsg field="firstName" />
         </div>
-        <input type="text" placeholder="First Name" value={form.firstName} onChange={set('firstName')} className={inputBase} />
-        <input type="text" placeholder="Last Name" value={form.lastName} onChange={set('lastName')} className={inputBase} />
-        <input type="text" placeholder="Company(Optional)" value={form.company} onChange={set('company')} className={inputBase} />
-        <input type="text" placeholder="Address" value={form.address} onChange={set('address')} className={inputBase} />
-        <input type="text" placeholder="Apartment, Suite, Etc.(Optional)" value={form.apartment} onChange={set('apartment')} className={inputBase} />
-        <input type="text" placeholder="Postal Code" value={form.postalCode} onChange={set('postalCode')} className={inputBase} />
-        <input type="text" placeholder="City" value={form.city} onChange={set('city')} className={inputBase} />
-        <div className="relative">
-          <input type="tel" placeholder="Phone" value={form.phone} onChange={set('phone')}
-            className={`${inputBase} pr-10`} />
-          <Phone size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a9a9a]" />
+        <div>
+          <input type="text" placeholder="Tên" value={form.lastName} onChange={set('lastName')} className={getInputClass('lastName')} />
+          <ErrorMsg field="lastName" />
         </div>
+        <div>
+          <input type="text" placeholder="Số điện thoại" value={form.phone} onChange={set('phone')}
+            className={getInputClass('phone')} />
+          <ErrorMsg field="phone" />
+        </div>
+        <div>
+          <input type="text" placeholder="Địa chỉ (số nhà, tên đường)" value={form.address} onChange={set('address')} className={getInputClass('address')} />
+          <ErrorMsg field="address" />
+        </div>
+        <input type="text" placeholder="Căn hộ, Tầng, Tòa nhà (không bắt buộc)" value={form.apartment} onChange={set('apartment')} className={getInputClass('apartment')} />
+        
+        <div>
+          <div className="relative">
+            <select value={form.cityId ? `${form.cityId}|${form.city}` : ""} onChange={handleCityChange}
+              className={`${getInputClass('city')} appearance-none pr-10`}>
+              <option value="" disabled>Tỉnh / Thành phố</option>
+              {provinces.map(p => <option key={p.code} value={`${p.code}|${p.name}`}>{p.name}</option>)}
+            </select>
+            <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a9a9a] pointer-events-none" />
+          </div>
+          <ErrorMsg field="city" />
+        </div>
+        
+        <div>
+          <div className="relative">
+            <select value={form.districtId ? `${form.districtId}|${form.district}` : ""} onChange={handleDistrictChange}
+              disabled={!form.cityId}
+              className={`${getInputClass('district')} appearance-none pr-10 disabled:bg-gray-100 disabled:cursor-not-allowed`}>
+              <option value="" disabled>Quận / Huyện</option>
+              {districts.map(d => <option key={d.code} value={`${d.code}|${d.name}`}>{d.name}</option>)}
+            </select>
+            <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a9a9a] pointer-events-none" />
+          </div>
+          <ErrorMsg field="district" />
+        </div>
+        
+        <div>
+          <div className="relative">
+            <select value={form.wardId ? `${form.wardId}|${form.ward}` : ""} onChange={handleWardChange}
+              disabled={!form.districtId}
+              className={`${getInputClass('ward')} appearance-none pr-10 disabled:bg-gray-100 disabled:cursor-not-allowed`}>
+              <option value="" disabled>Phường / Xã</option>
+              {wards.map(w => <option key={w.code} value={`${w.code}|${w.name}`}>{w.name}</option>)}
+            </select>
+            <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a9a9a] pointer-events-none" />
+          </div>
+          <ErrorMsg field="ward" />
+        </div>
+
+        <input type="text" placeholder="Công ty (không bắt buộc)" value={form.company} onChange={set('company')} className={getInputClass('company')} />
       </div>
+
+      {/* Payment Method */}
+      <h2 className="text-base font-semibold text-[#202020] mt-6 mb-3">Phương thức thanh toán</h2>
+      <div className="flex flex-col gap-2">
+        {[
+          { value: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
+          { value: 'VNPAY', label: 'VNPay' },
+        ].map((opt) => (
+          <label key={opt.value} className="flex items-center gap-3 p-3 border border-[#dfdfdf] cursor-pointer hover:border-[#5A6D57] transition-colors">
+            <input type="radio" name="paymentMethod" value={opt.value}
+              checked={form.paymentMethod === opt.value}
+              onChange={set('paymentMethod')}
+              className="w-4 h-4 accent-[#5A6D57]" />
+            <span className="text-sm text-[#202020]">{opt.label}</span>
+          </label>
+        ))}
+      </div>
+
+      {/* Note */}
+      <h2 className="text-base font-semibold text-[#202020] mt-6 mb-3">Ghi chú đơn hàng</h2>
+      <textarea
+        placeholder="Ghi chú cho đơn hàng (không bắt buộc)"
+        value={form.note}
+        onChange={set('note')}
+        rows={3}
+        className={`${getInputClass('note')} resize-none`}
+      />
+
       <label className="flex items-center gap-2 text-sm text-[#404040] mt-4 cursor-pointer select-none">
         <input type="checkbox" checked={form.saveInfo} onChange={set('saveInfo')}
           className="w-4 h-4 border-[#dfdfdf] accent-[#5A6D57]" />
-        Save This Information For Next Time
+        Lưu thông tin cho lần sau
       </label>
     </>
   )
@@ -205,10 +399,11 @@ export default function CheckoutPage() {
 
         {/* Continue To Shipping */}
         <button
-          onClick={() => navigate('/checkout/shipping')}
-          className="w-full bg-[#5A6D57] hover:bg-[#748C70] text-white text-sm font-medium py-4 mt-6 transition-colors"
+          onClick={handleContinue}
+          disabled={isSubmitting}
+          className="w-full bg-[#5A6D57] hover:bg-[#748C70] text-white text-sm font-medium py-4 mt-6 transition-colors disabled:opacity-70"
         >
-          Continue To Shipping
+          {isSubmitting ? 'Đang xử lý...' : 'Tiếp tục & Hoàn tất'}
         </button>
 
         {/* Return To Card */}
@@ -217,7 +412,7 @@ export default function CheckoutPage() {
           className="flex items-center justify-center gap-1 text-sm text-[#404040] hover:text-[#5A6D57] transition-colors mt-4"
         >
           <ChevronLeft size={16} />
-          Return To Card
+          Quay lại Giỏ hàng
         </button>
       </div>
 
@@ -255,59 +450,121 @@ export default function CheckoutPage() {
 
           {/* Contact */}
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-[#202020]">Contact</h2>
+            <h2 className="text-lg font-semibold text-[#202020]">Liên hệ</h2>
             <p className="text-sm text-[#404040]">
-              Have An Account?{' '}
-              <button className="underline font-medium hover:text-[#5A6D57] transition-colors">Log In</button>
+              Đã có tài khoản?{' '}
+              <button className="underline font-medium hover:text-[#5A6D57] transition-colors">Đăng nhập</button>
             </p>
           </div>
           <div className="relative mb-2">
-            <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9a9a9a]" />
+            <User size={16} className={`absolute left-3 top-1/2 -translate-y-1/2 ${errors.email ? 'text-red-500' : 'text-[#9a9a9a]'}`} />
             <input type="email" placeholder="Email" value={form.email} onChange={set('email')}
-              className={`${inputBase} pl-9`} />
+              className={`${getInputClass('email')} pl-9`} />
           </div>
+          <ErrorMsg field="email" />
           <label className="flex items-center gap-2 text-sm text-[#404040] mb-8 cursor-pointer select-none">
             <input type="checkbox" checked={form.emailOffers} onChange={set('emailOffers')}
               className="w-4 h-4 accent-[#5A6D57]" />
-            Email Me With News And Offers
+            Gửi email khuyến mãi cho tôi
           </label>
 
           {/* Shipping Address */}
-          <h2 className="text-lg font-semibold text-[#202020] mb-4">Shipping Address</h2>
+          <h2 className="text-lg font-semibold text-[#202020] mb-4">Địa chỉ giao hàng</h2>
           <div className="flex flex-col gap-4">
-            <div className="relative">
-              <select value={form.country} onChange={set('country')}
-                className={`${inputBase} appearance-none pr-10`}>
-                <option value="" disabled>Country/Region</option>
-                <option value="US">United States</option>
-                <option value="CA">Canada</option>
-                <option value="GB">United Kingdom</option>
-                <option value="AU">Australia</option>
-                <option value="VN">Vietnam</option>
-              </select>
-              <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a9a9a] pointer-events-none" />
-            </div>
             <div className="grid grid-cols-2 gap-4">
-              <input type="text" placeholder="First Name" value={form.firstName} onChange={set('firstName')} className={inputBase} />
-              <input type="text" placeholder="Last Name" value={form.lastName} onChange={set('lastName')} className={inputBase} />
+              <div>
+                <input type="text" placeholder="Họ" value={form.firstName} onChange={set('firstName')} className={getInputClass('firstName')} />
+                <ErrorMsg field="firstName" />
+              </div>
+              <div>
+                <input type="text" placeholder="Tên" value={form.lastName} onChange={set('lastName')} className={getInputClass('lastName')} />
+                <ErrorMsg field="lastName" />
+              </div>
             </div>
-            <input type="text" placeholder="Company(Optional)" value={form.company} onChange={set('company')} className={inputBase} />
-            <input type="text" placeholder="Address" value={form.address} onChange={set('address')} className={inputBase} />
-            <input type="text" placeholder="Apartment, Suite, Etc.(Optional)" value={form.apartment} onChange={set('apartment')} className={inputBase} />
+            <div>
+              <input type="text" placeholder="Số điện thoại" value={form.phone} onChange={set('phone')} className={getInputClass('phone')} />
+              <ErrorMsg field="phone" />
+            </div>
+            <div>
+              <input type="text" placeholder="Địa chỉ (số nhà, tên đường)" value={form.address} onChange={set('address')} className={getInputClass('address')} />
+              <ErrorMsg field="address" />
+            </div>
+            <input type="text" placeholder="Căn hộ, Tầng, Tòa nhà (không bắt buộc)" value={form.apartment} onChange={set('apartment')} className={getInputClass('apartment')} />
+            
+            <div>
+              <div className="relative">
+                <select value={form.cityId ? `${form.cityId}|${form.city}` : ""} onChange={handleCityChange}
+                  className={`${getInputClass('city')} appearance-none pr-10`}>
+                  <option value="" disabled>Tỉnh / Thành phố</option>
+                  {provinces.map(p => <option key={p.code} value={`${p.code}|${p.name}`}>{p.name}</option>)}
+                </select>
+                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a9a9a] pointer-events-none" />
+              </div>
+              <ErrorMsg field="city" />
+            </div>
+            
             <div className="grid grid-cols-2 gap-4">
-              <input type="text" placeholder="Postal Code" value={form.postalCode} onChange={set('postalCode')} className={inputBase} />
-              <input type="text" placeholder="City" value={form.city} onChange={set('city')} className={inputBase} />
+              <div>
+                <div className="relative">
+                  <select value={form.districtId ? `${form.districtId}|${form.district}` : ""} onChange={handleDistrictChange}
+                    disabled={!form.cityId}
+                    className={`${getInputClass('district')} appearance-none pr-10 disabled:bg-gray-100 disabled:cursor-not-allowed`}>
+                    <option value="" disabled>Quận / Huyện</option>
+                    {districts.map(d => <option key={d.code} value={`${d.code}|${d.name}`}>{d.name}</option>)}
+                  </select>
+                  <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a9a9a] pointer-events-none" />
+                </div>
+                <ErrorMsg field="district" />
+              </div>
+              
+              <div>
+                <div className="relative">
+                  <select value={form.wardId ? `${form.wardId}|${form.ward}` : ""} onChange={handleWardChange}
+                    disabled={!form.districtId}
+                    className={`${getInputClass('ward')} appearance-none pr-10 disabled:bg-gray-100 disabled:cursor-not-allowed`}>
+                    <option value="" disabled>Phường / Xã</option>
+                    {wards.map(w => <option key={w.code} value={`${w.code}|${w.name}`}>{w.name}</option>)}
+                  </select>
+                  <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a9a9a] pointer-events-none" />
+                </div>
+                <ErrorMsg field="ward" />
+              </div>
             </div>
-            <div className="relative">
-              <input type="tel" placeholder="Phone" value={form.phone} onChange={set('phone')}
-                className={`${inputBase} pr-10`} />
-              <Phone size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a9a9a]" />
-            </div>
+
+            <input type="text" placeholder="Công ty (không bắt buộc)" value={form.company} onChange={set('company')} className={getInputClass('company')} />
           </div>
+
+          {/* Payment Method */}
+          <h2 className="text-lg font-semibold text-[#202020] mt-8 mb-4">Phương thức thanh toán</h2>
+          <div className="flex flex-col gap-2">
+            {[
+              { value: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
+              { value: 'VNPAY', label: 'VNPay' },
+            ].map((opt) => (
+              <label key={opt.value} className="flex items-center gap-3 p-3 border border-[#dfdfdf] cursor-pointer hover:border-[#5A6D57] transition-colors">
+                <input type="radio" name="paymentMethodDesktop" value={opt.value}
+                  checked={form.paymentMethod === opt.value}
+                  onChange={set('paymentMethod')}
+                  className="w-4 h-4 accent-[#5A6D57]" />
+                <span className="text-sm text-[#202020]">{opt.label}</span>
+              </label>
+            ))}
+          </div>
+
+          {/* Note */}
+          <h2 className="text-lg font-semibold text-[#202020] mt-8 mb-4">Ghi chú đơn hàng</h2>
+          <textarea
+            placeholder="Ghi chú cho đơn hàng (không bắt buộc)"
+            value={form.note}
+            onChange={set('note')}
+            rows={3}
+            className={`${getInputClass('note')} resize-none`}
+          />
+
           <label className="flex items-center gap-2 text-sm text-[#404040] mt-4 cursor-pointer select-none">
             <input type="checkbox" checked={form.saveInfo} onChange={set('saveInfo')}
               className="w-4 h-4 accent-[#5A6D57]" />
-            Save This Information For Next Time
+            Lưu thông tin cho lần sau
           </label>
 
           {/* Bottom actions */}
@@ -317,9 +574,10 @@ export default function CheckoutPage() {
               <ChevronLeft size={16} />
               Return To Cart
             </button>
-            <button onClick={() => navigate('/checkout/shipping')}
-              className="bg-[#5A6D57] hover:bg-[#748C70] text-white text-sm font-medium px-10 py-3 transition-colors">
-              Continue To Shipping
+            <button onClick={handleContinue}
+              disabled={isSubmitting}
+              className="bg-[#5A6D57] hover:bg-[#748C70] text-white text-sm font-medium px-10 py-3 transition-colors disabled:opacity-70">
+              {isSubmitting ? 'Đang xử lý...' : 'Tiếp tục & Hoàn tất'}
             </button>
           </div>
         </div>
@@ -347,7 +605,7 @@ export default function CheckoutPage() {
                   <p className="text-sm text-[#404040] mt-1">Size: {item.size}</p>
                   <p className="text-sm text-[#404040]">Color: {item.color}</p>
                   <div className="flex items-center justify-between mt-3">
-                    <span className="text-sm font-bold text-[#202020]">$ {(item.price * item.quantity).toFixed(0)}</span>
+                    <span className="text-sm font-bold text-[#202020]">{formatCurrency(item.price * item.quantity)}</span>
                     <div className="flex items-center bg-[#D1D9CF] w-[80px] px-2 py-[4px]">
                       <button onClick={() => updateQuantity(item.id, item.quantity - 1)} aria-label="Decrease"
                         className="text-[#404E3E] hover:opacity-60 transition-opacity">

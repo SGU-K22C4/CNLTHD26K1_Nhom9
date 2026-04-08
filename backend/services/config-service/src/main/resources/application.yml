@@ -1,0 +1,21 @@
+server:
+  port: 8888
+
+spring:
+  application:
+    name: config-service
+  profiles:
+    active: native # Sử dụng hệ thống file nội bộ (Native) thay vì ép buộc dùng Git ngay lập tức để dễ test local
+  cloud:
+    config:
+      server:
+        native:
+          # Đường dẫn thư mục chứa cấu hình chung cho cả dự án
+          search-locations: file:../../config-repo/
+
+# Bật endpoint Actuator để giám sát Config Server
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"

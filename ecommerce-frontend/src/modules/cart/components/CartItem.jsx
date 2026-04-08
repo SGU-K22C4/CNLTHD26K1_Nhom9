@@ -1,4 +1,5 @@
 import { X } from 'lucide-react'
+import { formatCurrency } from '../../../shared/utils/format'
 
 /**
  * CartItem — a single product row in the Cart Drawer.
@@ -46,7 +47,7 @@ export default function CartItem({ item, onRemove, onUpdateQuantity }) {
         {/* Bottom row — price (left) + quantity stepper (right) */}
         <div className="flex justify-between items-center mt-auto">
           <p className="font-[Montserrat] font-bold text-sm text-[#202020]">
-            ${(price * quantity).toFixed(2)}
+            {formatCurrency(price * quantity)}
           </p>
 
           <div className="inline-flex items-center border border-[#dfdfdf]">

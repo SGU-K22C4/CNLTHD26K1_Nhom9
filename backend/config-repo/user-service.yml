@@ -1,0 +1,49 @@
+server:
+  port: 8081
+
+spring:
+  datasource:
+    # URL mặc định sẽ trỏ vào localhost:3306. Muốn đổi sang server prod thì map biến môi trường vào!
+    url: jdbc:mysql://localhost:3306/fashion_user_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: "@Manhtran11"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      #dùng validate khi đã có database cần validate , ngoài ra nếu chạy lần đầu thì dùng update
+      # ddl-auto: validate 
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  data:
+    jpa:
+      repositories:
+        bootstrap-mode: deferred
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+logging:
+  level:
+    com.fashion.userservice: DEBUG
+    org.springframework.security: INFO

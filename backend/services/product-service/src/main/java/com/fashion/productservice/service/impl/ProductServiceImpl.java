@@ -16,12 +16,14 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import lombok.extern.slf4j.Slf4j;
 import java.math.BigDecimal;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
+@SuppressWarnings("null")
 public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;
@@ -31,17 +33,17 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional(readOnly = true)
     public Page<ProductResponse> getAll(String categoryId, String search,
-                                        BigDecimal minPrice, BigDecimal maxPrice,
-                                        Pageable pageable) {
+            BigDecimal minPrice, BigDecimal maxPrice,
+            Pageable pageable) {
         return productRepository.search(categoryId, search, minPrice, maxPrice, pageable)
-            .map(productMapper::toResponse);
+                .map(productMapper::toResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
     public ProductResponse getById(String id) {
         return productRepository.findById(id)
-            .map(productMapper::toResponse)
+                .map(productMapper::toResponse)
                 .orElseThrow(() -> new RuntimeException("Product not found: " + id));
     }
 
@@ -149,8 +151,7 @@ public class ProductServiceImpl implements ProductService {
                                     .imageUrl(img.getImageUrl())
                                     .primary(img.isPrimary())
                                     .sortOrder(img.getSortOrder())
-                                    .build()
-                    ));
+                                    .build()));
                 }
 
                 if (v.getSizes() != null) {
@@ -160,9 +161,9 @@ public class ProductServiceImpl implements ProductService {
                                     .variant(variant)
                                     .sizeName(s.getSizeName())
                                     .quantity(s.getQuantity())
-                                    .status(s.getStatus() == null || s.getStatus().isBlank() ? "Con hang" : s.getStatus())
-                                    .build()
-                    ));
+                                    .status(s.getStatus() == null || s.getStatus().isBlank() ? "Con hang"
+                                            : s.getStatus())
+                                    .build()));
                 }
 
                 product.getVariants().add(variant);

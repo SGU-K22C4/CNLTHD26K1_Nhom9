@@ -38,27 +38,33 @@ spring:
         - id: product-service
           uri: ${PRODUCT_SERVICE_URL:http://localhost:8082}
           predicates:
-            - Path=/api/v1/products/**,/api/v1/categories/**
+            - Path=/api/v1/products/**,/api/v1/categories/**,/api/v1/wishlists/**
           filters:
             - StripPrefix=0
 
-        # Cart
+        # Cart (no JWT — supports guest users via X-User-Id header)
         - id: cart-service
           uri: ${CART_SERVICE_URL:http://localhost:8083}
           predicates:
             - Path=/api/v1/cart/**
           filters:
             - StripPrefix=0
-            - name: JwtAuthFilter
 
-        # Orders
+        # Orders (no JWT — supports guest checkout via X-User-Id header)
         - id: order-service
           uri: ${ORDER_SERVICE_URL:http://localhost:8084}
           predicates:
             - Path=/api/v1/orders/**
           filters:
             - StripPrefix=0
-            - name: JwtAuthFilter
+
+        # Payments / VNPay (no JWT — guest users can pay)
+        - id: payment-service
+          uri: ${ORDER_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/api/v1/payments/**
+          filters:
+            - StripPrefix=0
 
         # Promotions
         - id: promotion-service

@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @RestController
@@ -31,10 +32,14 @@ public class ReviewController {
 
     @GetMapping("/product/{productId}/stats")
     public ResponseEntity<Map<String, Object>> getStats(@PathVariable Long productId) {
-        Double avg = reviewRepository.getAverageRating(productId);
+        Double avg = reviewRepository.findByProductIdAndApprovedTrue(productId)
+            .stream()
+            .mapToInt(Review::getRating)
+            .average()
+            .orElse(0.0);
         long count = reviewRepository.countByProductIdAndApprovedTrue(productId);
         return ResponseEntity.ok(Map.of(
-                "averageRating", avg != null ? avg : 0.0,
+            "averageRating", avg,
                 "totalReviews", count));
     }
 
@@ -42,8 +47,10 @@ public class ReviewController {
     public ResponseEntity<Review> create(
             @RequestHeader("X-User-Id") String userId,
             @RequestBody Review review) {
+        review.setId(null);
         review.setUserId(userId);
         review.setApproved(false);
+        review.setCreatedAt(LocalDateTime.now());
         return ResponseEntity.status(HttpStatus.CREATED).body(reviewRepository.save(review));
     }
 }

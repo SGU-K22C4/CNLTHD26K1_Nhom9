@@ -1,19 +1,16 @@
 import { useState, useMemo } from 'react'
-import { FILTER_OPTIONS } from '../data/mockProducts'
 
 /* ─── Design tokens ────────────────────────────────────────── */
 const PRIMARY = '#5A6D57'        // Primary-600
 const NEUTRAL_GRAY = '#CBCBCB'   // Neutral Gray
 
-/* ─── Size label map (Figma spec) ──────────────────────────── */
-const SIZE_LABELS = {
-  XS: 'XS / US (0-4)',
-  S:  'S / US (4-6)',
-  M:  'M / US (6-10)',
-  L:  'L / US (10-14)',
-  XL: 'XL / US (12-16)',
-  XXL:'XXL / US (16+)',
-}
+/* ─── Sort options (static) ─────────────────────────────────── */
+const SORT_OPTIONS = [
+  { value: 'featured', label: 'Nổi bật' },
+  { value: 'price-asc', label: 'Giá: Thấp → Cao' },
+  { value: 'price-desc', label: 'Giá: Cao → Thấp' },
+  { value: 'newest', label: 'Mới nhất' },
+]
 
 /* ─── Tag close icon (14×14) ────────────────────────────────── */
 function TagXIcon() {
@@ -108,7 +105,7 @@ function FilterAccordion({ label, expanded, onToggle, children }) {
   )
 }
 
-/* ─── Checkbox row (Sort / Size / Collection / Fabric) ─────── */
+/* ─── Checkbox row ─────────────────────────────────────────── */
 function CheckRow({ label, checked, onClick }) {
   return (
     <button
@@ -126,71 +123,49 @@ function ActiveFilterTags({ tags, onClearAll }) {
   if (tags.length === 0) return null
 
   return (
-    <div className="mb-4" style={{ boxSizing: 'border-box' }}>
-      {/* ── Tag chips ────────────────────────────────────── */}
-      <div className="flex flex-col gap-2 mb-4">
+    <div className="mb-5">
+      {/* ── Header row: count + clear ─────────────────── */}
+      <div className="flex items-center justify-between mb-3">
+        <span
+          className="text-[12px] font-medium uppercase tracking-[0.1em]"
+          style={{ color: PRIMARY }}
+        >
+          {tags.length} bộ lọc đang chọn
+        </span>
+        <button
+          onClick={onClearAll}
+          className="flex items-center gap-1 text-[12px] text-[#888] hover:text-[#202020] transition-colors"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M9 3L3 9M3 3L9 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+          Xóa tất cả
+        </button>
+      </div>
+
+      {/* ── Tag chips ─────────────────────────────────── */}
+      <div className="flex flex-wrap gap-2">
         {tags.map((tag) => (
           <span
             key={tag.id}
-            className="inline-flex items-center justify-between gap-2 px-3 py-2 text-[14px] font-medium text-[#202020] w-fit min-w-[120px]"
-            style={{ backgroundColor: NEUTRAL_GRAY, boxSizing: 'border-box' }}
+            className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full text-[12px] font-medium text-[#3a3a3a] transition-all hover:shadow-sm"
+            style={{
+              backgroundColor: '#f3f1ee',
+              border: '1px solid #e0ddd8',
+            }}
           >
             <span>{tag.label}</span>
             <button
               onClick={tag.onRemove}
               aria-label={`Remove ${tag.label}`}
-              className="flex items-center justify-center flex-shrink-0 hover:opacity-60 transition-opacity"
+              className="flex items-center justify-center w-4 h-4 rounded-full hover:bg-[#d4d0ca] transition-colors"
             >
-              <TagXIcon />
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true">
+                <path d="M6 2L2 6M2 2L6 6" stroke="#666" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
             </button>
           </span>
         ))}
-      </div>
-
-      {/* ── Controls row ─────────────────────────────────── */}
-      {/* Section padding: exactly 16px */}
-      <div
-        className="flex items-center gap-2"
-        style={{ padding: '16px 0', boxSizing: 'border-box' }}
-      >
-        {/* Clear All Filters — bodyLG: 18px / Montserrat / weight 400 / capitalize / underline */}
-        <button
-          onClick={onClearAll}
-          className="underline underline-offset-2 hover:opacity-70 transition-opacity whitespace-nowrap capitalize"
-          style={{
-            fontFamily: 'Montserrat, sans-serif',
-            fontSize: '18px',
-            lineHeight: '180%',
-            fontWeight: 400,
-            color: '#202020',
-          }}
-        >
-          Clear All Filters
-        </button>
-
-        {/* APPLIED FILTERS — exact layer specs */}
-        <button
-          onClick={onClearAll}
-          className="uppercase tracking-wide transition-opacity hover:opacity-90"
-          style={{
-            display: 'flex',
-            height: '40px',
-            padding: '0 16px',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: '4px',
-            flex: '1 0 0',
-            backgroundColor: PRIMARY,
-            color: '#FFFFFF',
-            fontFamily: 'Montserrat, sans-serif',
-            fontSize: '13px',
-            fontWeight: 600,
-            letterSpacing: '0.1em',
-            boxSizing: 'border-box',
-          }}
-        >
-          Applied Filters
-        </button>
       </div>
     </div>
   )
@@ -203,7 +178,15 @@ export default function FilterSidebar({
   toggleArrayFilter,
   clearFilters,
   hasActiveFilters,
+  availableFilters = {},
 }) {
+  const {
+    sizes: availSizes = [],
+    colorLabels: availColors = [],
+    collections: availCollections = [],
+    fabrics: availFabrics = [],
+  } = availableFilters
+
   /* Desktop sidebar sections */
   const [openSections, setOpenSections] = useState({
     sortBy: false,
@@ -225,7 +208,7 @@ export default function FilterSidebar({
 
     // Sort By (only when not default)
     if (filters.sortBy && filters.sortBy !== 'featured') {
-      const opt = FILTER_OPTIONS.sortBy.find((o) => o.value === filters.sortBy)
+      const opt = SORT_OPTIONS.find((o) => o.value === filters.sortBy)
       if (opt) {
         tags.push({
           id: `sortBy-${filters.sortBy}`,
@@ -239,21 +222,18 @@ export default function FilterSidebar({
     ;(filters.sizes || []).forEach((s) => {
       tags.push({
         id: `size-${s}`,
-        label: SIZE_LABELS[s] || s,
+        label: s,
         onRemove: () => toggleArrayFilter('sizes', s),
       })
     })
 
-    // Colors
-    ;(filters.colors || []).forEach((hex) => {
-      const c = FILTER_OPTIONS.colors.find((x) => x.value === hex)
-      if (c) {
-        tags.push({
-          id: `color-${hex}`,
-          label: c.label,
-          onRemove: () => toggleArrayFilter('colors', hex),
-        })
-      }
+    // Colors (now using label names)
+    ;(filters.colors || []).forEach((colorLabel) => {
+      tags.push({
+        id: `color-${colorLabel}`,
+        label: colorLabel,
+        onRemove: () => toggleArrayFilter('colors', colorLabel),
+      })
     })
 
     // Collections
@@ -283,12 +263,12 @@ export default function FilterSidebar({
       case 'sortBy':
         return (
           <FilterAccordion
-            label="Sort By"
+            label="Sắp xếp"
             expanded={openState.sortBy}
             onToggle={() => toggleFn('sortBy')}
           >
             <div className="flex flex-col">
-              {FILTER_OPTIONS.sortBy.map((opt) => (
+              {SORT_OPTIONS.map((opt) => (
                 <CheckRow
                   key={opt.value}
                   label={opt.label}
@@ -301,66 +281,54 @@ export default function FilterSidebar({
         )
 
       case 'size':
-        return (
+        return availSizes.length > 0 ? (
           <FilterAccordion
-            label="Size"
+            label="Kích thước"
             expanded={openState.size}
             onToggle={() => toggleFn('size')}
           >
             <div className="flex flex-col">
-              {FILTER_OPTIONS.sizes.map((s) => (
+              {availSizes.map((s) => (
                 <CheckRow
                   key={s}
-                  label={SIZE_LABELS[s] || s}
+                  label={s}
                   checked={filters.sizes?.includes(s)}
                   onClick={() => toggleArrayFilter('sizes', s)}
                 />
               ))}
             </div>
           </FilterAccordion>
-        )
+        ) : null
 
       case 'color':
-        return (
+        return availColors.length > 0 ? (
           <FilterAccordion
-            label="Color"
+            label="Màu sắc"
             expanded={openState.color}
             onToggle={() => toggleFn('color')}
           >
-            <div className="flex flex-wrap gap-3 py-1">
-              {FILTER_OPTIONS.colors.map((c) => {
-                const active = filters.colors?.includes(c.value)
-                const needsBorder = ['#A8D5E2', '#D2B48C', '#C0C0C0', '#FFFFFF'].includes(c.value)
-                return (
-                  <button
-                    key={c.value}
-                    onClick={() => toggleArrayFilter('colors', c.value)}
-                    title={c.label}
-                    aria-label={c.label}
-                    aria-pressed={active}
-                    className="w-7 h-7 rounded-full flex-shrink-0 transition-transform hover:scale-110"
-                    style={{
-                      backgroundColor: c.value,
-                      border: needsBorder ? `1px solid ${NEUTRAL_GRAY}` : 'none',
-                      outline: active ? `2px solid ${PRIMARY}` : '2px solid transparent',
-                      outlineOffset: '2px',
-                    }}
-                  />
-                )
-              })}
+            <div className="flex flex-col">
+              {availColors.map((colorLabel) => (
+                <CheckRow
+                  key={colorLabel}
+                  label={colorLabel}
+                  checked={filters.colors?.includes(colorLabel)}
+                  onClick={() => toggleArrayFilter('colors', colorLabel)}
+                />
+              ))}
             </div>
           </FilterAccordion>
-        )
+        ) : null
 
       case 'collection':
-        return (
+        return availCollections.length > 0 ? (
           <FilterAccordion
-            label="Collection"
+            label="Danh mục"
             expanded={openState.collection}
             onToggle={() => toggleFn('collection')}
           >
             <div className="flex flex-col">
-              {FILTER_OPTIONS.collections.map((col) => (
+              {availCollections.map((col) => (
                 <CheckRow
                   key={col}
                   label={col}
@@ -370,17 +338,17 @@ export default function FilterSidebar({
               ))}
             </div>
           </FilterAccordion>
-        )
+        ) : null
 
       case 'fabric':
-        return (
+        return availFabrics.length > 0 ? (
           <FilterAccordion
-            label="Fabric"
+            label="Chất liệu"
             expanded={openState.fabric}
             onToggle={() => toggleFn('fabric')}
           >
             <div className="flex flex-col">
-              {FILTER_OPTIONS.fabrics.map((fab) => (
+              {availFabrics.map((fab) => (
                 <CheckRow
                   key={fab}
                   label={fab}
@@ -390,7 +358,7 @@ export default function FilterSidebar({
               ))}
             </div>
           </FilterAccordion>
-        )
+        ) : null
 
       default:
         return null
@@ -402,9 +370,9 @@ export default function FilterSidebar({
   /* ── Mobile overlay open/close state (mirrors desktop) ─── */
   const [mobileOpenSections, setMobileOpenSections] = useState({
     sortBy: false,
-    size: true,      // Size open by default (matches screenshot)
+    size: true,
     color: false,
-    collection: true, // Collection open by default (matches screenshot)
+    collection: true,
     fabric: false,
   })
 
@@ -419,7 +387,7 @@ export default function FilterSidebar({
       <aside className="hidden md:block w-full">
         {/* "Filters" heading */}
         <h2 className="text-[15px] font-semibold text-[#202020] mb-4 tracking-wide">
-          Filters
+          Bộ lọc
         </h2>
 
         {/* Active filter tags + Clear All / Applied Filters */}
@@ -447,7 +415,7 @@ export default function FilterSidebar({
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M2 4H14M4 8H12M6 12H10" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
-          Filters
+          Bộ lọc
           {hasActiveFilters && (
             <span className="ml-1 w-4 h-4 rounded-full bg-white text-[10px] font-bold flex items-center justify-center" style={{ color: PRIMARY }}>
               ·
@@ -475,7 +443,7 @@ export default function FilterSidebar({
             {/* ── Header ── */}
             <div className="flex items-center justify-between px-6 pt-8 pb-6">
               <h2 className="text-[24px] font-bold text-[#202020] leading-none">
-                Filters
+                Bộ lọc
               </h2>
               <button
                 onClick={() => setMobileOpen(false)}
@@ -515,7 +483,7 @@ export default function FilterSidebar({
                 }}
                 className="flex-1 h-[48px] text-[13px] font-medium text-[#202020] tracking-[0.06em] uppercase text-center"
               >
-                Clear Filter
+                Xóa bộ lọc
               </button>
 
               {/* Apply Filter */}
@@ -524,7 +492,7 @@ export default function FilterSidebar({
                 className="flex-1 h-[48px] text-[13px] font-medium text-white tracking-[0.06em] uppercase"
                 style={{ backgroundColor: PRIMARY }}
               >
-                Apply Filter
+                Áp dụng
               </button>
             </div>
           </div>

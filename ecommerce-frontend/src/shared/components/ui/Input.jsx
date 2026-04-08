@@ -8,6 +8,7 @@ const Input = forwardRef(({
   suffix,
   type = 'text',
   className,
+  suffix,
   ...props
 }, ref) => {
   return (
@@ -17,7 +18,7 @@ const Input = forwardRef(({
           {label}
         </label>
       )}
-      
+
       <div className="relative">
         <input
           ref={ref}
@@ -36,11 +37,11 @@ const Input = forwardRef(({
           </span>
         )}
       </div>
-      
+
       {error && (
         <p className="mt-1.5 text-sm text-red-600">{error}</p>
       )}
-      
+
       {helperText && !error && (
         <p className="mt-1.5 text-sm text-gray-500">{helperText}</p>
       )}

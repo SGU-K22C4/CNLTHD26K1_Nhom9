@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, useCallback, useMemo } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { cartService } from '../services/cartService'
+import { productService } from '../../product/services/productService'
 
 const CartContext = createContext(null)
 
@@ -12,71 +14,147 @@ export const useCartContext = () => {
   return ctx
 }
 
-/* ── Mock data — replace with real API integration ────────────────────────── */
-const MOCK_ITEMS = [
-  {
-    id: '1',
-    name: 'Linen Midi Dress',
-    color: 'Sage Green',
-    size: 'S',
-    price: 89.99,
-    quantity: 1,
-    image: 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=400&q=80',
-  },
-  {
-    id: '2',
-    name: 'Relaxed Linen Shirt',
-    color: 'Ivory',
-    size: 'M',
-    price: 59.99,
-    quantity: 2,
-    image: 'https://images.unsplash.com/photo-1594938298603-c8148c4b4f56?w=400&q=80',
-  },
-  {
-    id: '3',
-    name: 'Wide-Leg Trousers',
-    color: 'Ecru',
-    size: 'S',
-    price: 74.99,
-    quantity: 1,
-    image: 'https://images.unsplash.com/photo-1551163943-3f7253a97b2c?w=400&q=80',
-  },
-]
-
 export function CartProvider({ children }) {
-  const [items, setItems] = useState(MOCK_ITEMS)
+  const [items, setItems] = useState([])
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [drawerAnchor, setDrawerAnchor] = useState({ top: 96, right: 16 })
+  const productVariantIndexRef = useRef(null)
+
+  const ensureProductVariantIndex = useCallback(async () => {
+    if (productVariantIndexRef.current) return productVariantIndexRef.current
+
+    const { items: products = [] } = await productService.getAll({ page: 0, size: 500 })
+    const index = new Map()
+
+    products.forEach((product) => {
+      const fallbackImage = product.image || product.images?.[0] || ''
+
+      ;(product.variants || []).forEach((variant) => {
+        const variantImage = variant?.images?.find((img) => img.primary)?.imageUrl
+          || variant?.images?.[0]?.imageUrl
+          || fallbackImage
+
+        ;(variant.sizes || []).forEach((sizeObj) => {
+          if (!sizeObj?.id) return
+          index.set(sizeObj.id, {
+            id: sizeObj.id,
+            variantSizeId: sizeObj.id,
+            productId: product.id,
+            name: product.name || 'Unknown product',
+            color: variant.colorName || '',
+            size: sizeObj.sizeName || '',
+            price: Number(variant.price) || 0,
+            image: variantImage,
+            imageUrl: variantImage,
+            slug: product.slug || '',
+          })
+        })
+      })
+    })
+
+    productVariantIndexRef.current = index
+    return index
+  }, [])
+
+  const hydrateCartItems = useCallback(async (rawItems) => {
+    const index = await ensureProductVariantIndex()
+    return (rawItems || []).map((raw) => {
+      const variantSizeId = String(raw?.variantSizeId || raw?.id || '')
+      const quantity = Number(raw?.quantity) || 1
+      const base = index.get(variantSizeId)
+
+      if (!base) {
+        return {
+          id: variantSizeId,
+          variantSizeId,
+          productId: '',
+          name: `Variant ${variantSizeId}`,
+          color: '',
+          size: '',
+          price: 0,
+          image: '',
+          imageUrl: '',
+          slug: '',
+          quantity,
+        }
+      }
+
+      return { ...base, quantity }
+    })
+  }, [ensureProductVariantIndex])
+
+  const syncCart = useCallback(async () => {
+    const raw = await cartService.getCart()
+    const hydrated = await hydrateCartItems(raw)
+    setItems(hydrated)
+  }, [hydrateCartItems])
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadInitialCart = async () => {
+      try {
+        const raw = await cartService.getCart()
+        const hydrated = await hydrateCartItems(raw)
+        if (mounted) setItems(hydrated)
+      } catch (error) {
+        console.error('Failed to load cart:', error)
+        if (mounted) setItems([])
+      }
+    }
+
+    loadInitialCart()
+
+    return () => {
+      mounted = false
+    }
+  }, [hydrateCartItems])
 
   /* ── Drawer controls ─────────────────────────────────────────────────────── */
-  const openDrawer = useCallback(() => setIsDrawerOpen(true), [])
+  const openDrawer = useCallback((event) => {
+    if (event?.currentTarget) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      setDrawerAnchor({
+        top: Math.round(rect.bottom + 8),
+        right: Math.max(8, Math.round(window.innerWidth - rect.right)),
+      })
+    }
+    setIsDrawerOpen(true)
+  }, [])
   const closeDrawer = useCallback(() => setIsDrawerOpen(false), [])
 
   /* ── Item CRUD ───────────────────────────────────────────────────────────── */
-  const addItem = useCallback((product) => {
-    setItems((prev) => {
-      const existing = prev.find((i) => i.id === product.id)
-      if (existing) {
-        return prev.map((i) =>
-          i.id === product.id
-            ? { ...i, quantity: i.quantity + (product.quantity ?? 1) }
-            : i,
-        )
-      }
-      return [...prev, { ...product, quantity: product.quantity ?? 1 }]
-    })
-  }, [])
+  const addItem = useCallback(async (payload) => {
+    const variantSizeId = payload?.variantSizeId || payload?.id
+    const quantity = Number(payload?.quantity) || 1
 
-  const removeItem = useCallback(
-    (id) => setItems((prev) => prev.filter((i) => i.id !== id)),
-    [],
-  )
+    if (!variantSizeId) {
+      throw new Error('variantSizeId is required')
+    }
 
-  const updateQuantity = useCallback((id, qty) => {
-    setItems((prev) =>
-      qty <= 0
-        ? prev.filter((i) => i.id !== id)
-        : prev.map((i) => (i.id === id ? { ...i, quantity: qty } : i)),
-    )
+    await cartService.addItem(variantSizeId, quantity)
+    await syncCart()
+  }, [syncCart])
+
+  const removeItem = useCallback(async (id) => {
+    await cartService.removeItem(id)
+    await syncCart()
+  }, [syncCart])
+
+  const updateQuantity = useCallback(async (id, qty) => {
+    if (qty <= 0) {
+      await cartService.removeItem(id)
+      await syncCart()
+      return
+    }
+
+    await cartService.updateQuantity(id, qty)
+    await syncCart()
+  }, [syncCart])
+
+  const clearCart = useCallback(async () => {
+    await cartService.clearCart()
+    setItems([])
   }, [])
 
   /* ── Derived values (memoised) ───────────────────────────────────────────── */
@@ -95,15 +173,17 @@ export function CartProvider({ children }) {
     () => ({
       items,
       isDrawerOpen,
+      drawerAnchor,
       openDrawer,
       closeDrawer,
       addItem,
       removeItem,
       updateQuantity,
+      clearCart,
       subtotal,
       totalItems,
     }),
-    [items, isDrawerOpen, openDrawer, closeDrawer, addItem, removeItem, updateQuantity, subtotal, totalItems],
+    [items, isDrawerOpen, drawerAnchor, openDrawer, closeDrawer, addItem, removeItem, updateQuantity, clearCart, subtotal, totalItems],
   )
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>

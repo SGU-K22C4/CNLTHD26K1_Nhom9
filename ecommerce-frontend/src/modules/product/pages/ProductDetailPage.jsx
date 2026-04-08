@@ -5,6 +5,9 @@ import ProductGallery from '../components/ProductGallery'
 import SizeSelector from '../components/SizeSelector'
 import ColorSelector from '../components/ColorSelector'
 import ProductCard from '../components/ProductCard'
+import { formatCurrency } from '../../../shared/utils/format'
+import { useCartContext } from '../../cart/context/CartContext'
+import { useWishlistContext } from '../../wishlist/context/WishlistContext'
 
 const PRIMARY = '#5A6D57'
 
@@ -71,17 +74,21 @@ function DetailRow({ label, content, defaultOpen = false }) {
 export default function ProductDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { addItem, openDrawer } = useCartContext()
 
   const [product, setProduct] = useState(null)
   const [related, setRelated] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [cartError, setCartError] = useState('')
 
   const [selectedColor, setSelectedColor] = useState(null)
   const [selectedSize, setSelectedSize] = useState(null)
   const [qty, setQty] = useState(1)
-  const [wishlisted, setWishlisted] = useState(false)
   const [addedToCart, setAddedToCart] = useState(false)
+
+  const { isWishlisted, toggleWishlist } = useWishlistContext()
+  const wishlisted = product ? isWishlisted(product.id) : false
 
   useEffect(() => {
     let isMounted = true
@@ -161,12 +168,37 @@ export default function ProductDetailPage() {
     )
   }
 
-  const { name, category, price, isNew, colors, sizes, collection, fabric, description } = product
+  const { name, category, price, isNew, colors, sizes, collection, fabric, description, variants, colorLabels } = product
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async (e) => {
     if (!selectedSize) return
-    setAddedToCart(true)
-    setTimeout(() => setAddedToCart(false), 2000)
+    setCartError('')
+
+    // Find the matching variant by selected color
+    const selectedColorIndex = colors?.indexOf(selectedColor) ?? 0
+    const selectedColorLabel = colorLabels?.[selectedColorIndex] || ''
+    const variant = variants?.find((v) => v.colorName === selectedColorLabel) || variants?.[0]
+
+    // Find the size ID within that variant
+    const sizeObj = variant?.sizes?.find((s) => s.sizeName === selectedSize)
+    const variantSizeId = sizeObj?.id
+
+    if (!variantSizeId) {
+      console.error('Could not find variantSizeId for', selectedColorLabel, selectedSize)
+      setCartError('Không tìm thấy sản phẩm với kích thước này')
+      return
+    }
+
+    try {
+      setAddedToCart(true)
+      await addItem({ variantSizeId, quantity: qty })
+      openDrawer(e)
+      setTimeout(() => setAddedToCart(false), 2000)
+    } catch (err) {
+      console.error('Add to cart failed:', err)
+      setCartError(err?.message || 'Không thể thêm vào giỏ hàng')
+      setAddedToCart(false)
+    }
   }
 
   return (
@@ -206,7 +238,7 @@ export default function ProductDetailPage() {
                 {name}
               </h1>
               <button
-                onClick={() => setWishlisted((p) => !p)}
+                onClick={() => toggleWishlist(product.id)}
                 className="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
                 aria-label="Toggle wishlist"
               >
@@ -218,7 +250,7 @@ export default function ProductDetailPage() {
 
             {/* Price */}
             <p className="text-[20px] font-semibold text-[#202020] mb-5">
-              ${price}
+              {formatCurrency(price)}
             </p>
 
             <div className="border-t border-[#E8E8E8] mb-5" />
@@ -281,9 +313,13 @@ export default function ProductDetailPage() {
               {addedToCart ? 'Added to Cart ✓' : 'Add to Cart'}
             </button>
 
+            {cartError && (
+              <p className="text-[13px] text-red-500 mb-3 text-center">{cartError}</p>
+            )}
+
             {/* Add to Wishlist text button */}
             <button
-              onClick={() => setWishlisted((p) => !p)}
+              onClick={() => toggleWishlist(product.id)}
               className="w-full h-[52px] text-[13px] font-medium tracking-[0.1em] uppercase text-[#202020] border border-[#CBCBCB] hover:border-[#202020] transition-colors mb-6"
             >
               {wishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}

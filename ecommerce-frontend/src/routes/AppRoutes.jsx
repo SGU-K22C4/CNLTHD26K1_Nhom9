@@ -14,6 +14,7 @@ import WishlistPage from '../modules/wishlist/pages/WishlistPage'
 import LoginPage from '../modules/auth/pages/LoginPage'
 import RegisterPage from '../modules/auth/pages/RegisterPage'
 import VerifyEmailPage from '../modules/auth/pages/VerifyEmailPage'
+import ContactPage from '../modules/contact/pages/ContactPage'
 
 function WithLayout({ children }) {
   return <Layout>{children}</Layout>
@@ -30,6 +31,7 @@ export default function AppRoutes() {
       <Route path="/collection/:gender" element={<WithLayout><ProductListPage /></WithLayout>} />
       <Route path="/products/:id" element={<WithLayout><ProductDetailPage /></WithLayout>} />
       <Route path="/verify-email" element={<WithLayout><VerifyEmailPage /></WithLayout>} />
+      <Route path="/contact" element={<WithLayout><ContactPage /></WithLayout>} />
 
       {/* -------------------------------------------------- */}
       {/* NHÓM 2: GUEST ONLY — Đã login thì về trang chủ     */}

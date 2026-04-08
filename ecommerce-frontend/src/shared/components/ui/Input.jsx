@@ -5,6 +5,7 @@ const Input = forwardRef(({
   label,
   error,
   helperText,
+  suffix,
   type = 'text',
   className,
   suffix,

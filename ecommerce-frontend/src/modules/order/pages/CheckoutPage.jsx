@@ -5,6 +5,7 @@ import { useCartContext } from '../../cart/context/CartContext'
 import { formatCurrency } from '../../../shared/utils/format'
 import { orderService } from '../services/orderService'
 import { paymentService } from '../services/paymentService'
+import { loyaltyService } from '../services/loyaltyService'
 
 const TAX_RATE = 0.08
 
@@ -38,6 +39,13 @@ export default function CheckoutPage() {
 
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [walletPoints, setWalletPoints] = useState(0)
+  const [pointInput, setPointInput] = useState('')
+  const [appliedPoints, setAppliedPoints] = useState(0)
+  const [loyaltyDiscount, setLoyaltyDiscount] = useState(0)
+  const [loyaltyMessage, setLoyaltyMessage] = useState('')
+  const [loyaltyError, setLoyaltyError] = useState('')
+  const [applyingPoints, setApplyingPoints] = useState(false)
 
   /* ── Address Dropdowns State ── */
   const [provinces, setProvinces] = useState([])
@@ -51,6 +59,24 @@ export default function CheckoutPage() {
         setProvinces(data)
       })
       .catch(err => console.error('Failed to load provinces:', err))
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+    loyaltyService.getWallet()
+      .then((wallet) => {
+        if (!mounted) return
+        setWalletPoints(Number(wallet?.currentPoints) || 0)
+      })
+      .catch((err) => {
+        if (!mounted) return
+        setWalletPoints(0)
+        setLoyaltyError(err?.message || 'Không tải được số dư điểm')
+      })
+
+    return () => {
+      mounted = false
+    }
   }, [])
 
   const handleCityChange = (e) => {
@@ -116,6 +142,11 @@ export default function CheckoutPage() {
 
   const handleContinue = async () => {
     if (validateForm()) {
+      if (pointInput && Number(pointInput) > 0 && appliedPoints <= 0) {
+        setLoyaltyError('Hãy nhấn "Áp dụng" điểm trước khi đặt hàng')
+        return
+      }
+
       try {
         setIsSubmitting(true)
         const payload = buildOrderPayload()
@@ -133,11 +164,66 @@ export default function CheckoutPage() {
         navigate(`/orders/${savedOrder.id}?from=payment`, { replace: true })
       } catch (err) {
         console.error('Submit order failed:', err)
-        alert('Tạo đơn hàng thất bại. Vui lòng thử lại.')
+        alert(err?.message || 'Tạo đơn hàng thất bại. Vui lòng thử lại.')
       } finally {
         setIsSubmitting(false)
       }
     }
+  }
+
+  const handleApplyPoints = async () => {
+    const requested = Number(pointInput)
+    if (!Number.isInteger(requested) || requested <= 0) {
+      setLoyaltyError('Số điểm không hợp lệ')
+      return
+    }
+
+    setApplyingPoints(true)
+    setLoyaltyError('')
+    setLoyaltyMessage('')
+
+    try {
+      const preview = await loyaltyService.previewRedeem({
+        orderAmount: subtotal,
+        requestedPoints: requested,
+      })
+
+      if (!preview?.valid) {
+        setAppliedPoints(0)
+        setLoyaltyDiscount(0)
+        setLoyaltyError(preview?.message || 'Không thể áp dụng điểm')
+        return
+      }
+
+      setAppliedPoints(Number(preview?.appliedPoints) || 0)
+      setLoyaltyDiscount(Number(preview?.discountAmount) || 0)
+      setWalletPoints(Number(preview?.currentPoints) || walletPoints)
+      setLoyaltyMessage(preview?.message || 'Áp dụng điểm thành công')
+      setLoyaltyError('')
+    } catch (err) {
+      setAppliedPoints(0)
+      setLoyaltyDiscount(0)
+      setLoyaltyError(err?.message || 'Không thể áp dụng điểm')
+    } finally {
+      setApplyingPoints(false)
+    }
+  }
+
+  const handleClearPoints = () => {
+    setPointInput('')
+    setAppliedPoints(0)
+    setLoyaltyDiscount(0)
+    setLoyaltyMessage('')
+    setLoyaltyError('')
+  }
+
+  const handleUseMaxPoints = () => {
+    if (walletPoints <= 0) {
+      setLoyaltyError('Bạn chưa có điểm để sử dụng')
+      return
+    }
+    setPointInput(String(walletPoints))
+    setLoyaltyError('')
   }
 
   const getInputClass = (field) =>
@@ -156,6 +242,7 @@ export default function CheckoutPage() {
     paymentMethod: form.paymentMethod,
     note: form.note || null,
     email: form.email || null,
+    usedPoints: appliedPoints,
     items: items.map(item => ({
       productId: item.productId || item.id,
       productName: item.name,
@@ -221,8 +308,14 @@ export default function CheckoutPage() {
       <div className="flex justify-between text-sm text-[#404040]">
         <span>Shipping</span><span>Free</span>
       </div>
+      {loyaltyDiscount > 0 && (
+        <div className="flex justify-between text-sm text-[#10B981]">
+          <span>Điểm tích lũy ({appliedPoints} điểm)</span>
+          <span>-{formatCurrency(loyaltyDiscount)}</span>
+        </div>
+      )}
       <div className="flex justify-between text-sm font-bold text-[#202020] pt-3 border-t border-[#dfdfdf]">
-        <span>Order Totals:</span><span>{formatCurrency(total)}</span>
+        <span>Order Totals:</span><span>{formatCurrency(Math.max(total - loyaltyDiscount, 0))}</span>
       </div>
       <p className="text-[11px] text-[#202020] font-semibold leading-relaxed mt-1">
         The Total Amount You Pay Includes All Applicable Customs Duties &amp; Taxes. We Guarantee No Additional Charges On Delivery
@@ -318,6 +411,52 @@ export default function CheckoutPage() {
 
       {/* Payment Method */}
       <h2 className="text-base font-semibold text-[#202020] mt-6 mb-3">Phương thức thanh toán</h2>
+
+      <h2 className="text-base font-semibold text-[#202020] mt-6 mb-3">Sử dụng điểm tích lũy</h2>
+      <div className="border border-[#dfdfdf] p-3">
+        <p className="text-xs text-[#666] mb-2">Số dư hiện tại: <span className="font-semibold text-[#202020]">{walletPoints} điểm</span></p>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="number"
+            min="1"
+            value={pointInput}
+            onChange={(e) => {
+              setPointInput(e.target.value)
+              setLoyaltyError('')
+              setLoyaltyMessage('')
+            }}
+            placeholder="Nhập số điểm muốn dùng"
+            className={`${getInputClass('usedPoints')} flex-1`}
+          />
+          <button
+            type="button"
+            onClick={handleUseMaxPoints}
+            className="h-[46px] px-4 border border-[#dfdfdf] text-xs font-medium text-[#202020] hover:border-[#5A6D57]"
+          >
+            Dùng tối đa
+          </button>
+          <button
+            type="button"
+            onClick={handleApplyPoints}
+            disabled={applyingPoints}
+            className="h-[46px] px-4 bg-[#5A6D57] text-white text-xs font-medium disabled:opacity-70"
+          >
+            {applyingPoints ? 'Đang áp dụng...' : 'Áp dụng'}
+          </button>
+          {(appliedPoints > 0 || pointInput) && (
+            <button
+              type="button"
+              onClick={handleClearPoints}
+              className="h-[46px] px-4 border border-[#dfdfdf] text-xs font-medium text-[#404040]"
+            >
+              Bỏ
+            </button>
+          )}
+        </div>
+        {loyaltyMessage && <p className="text-xs text-[#0f766e] mt-2">{loyaltyMessage}</p>}
+        {loyaltyError && <p className="text-xs text-red-500 mt-2">{loyaltyError}</p>}
+      </div>
+
       <div className="flex flex-col gap-2">
         {[
           { value: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
@@ -532,6 +671,51 @@ export default function CheckoutPage() {
             </div>
 
             <input type="text" placeholder="Công ty (không bắt buộc)" value={form.company} onChange={set('company')} className={getInputClass('company')} />
+          </div>
+
+          <h2 className="text-lg font-semibold text-[#202020] mt-8 mb-4">Sử dụng điểm tích lũy</h2>
+          <div className="border border-[#dfdfdf] p-3">
+            <p className="text-xs text-[#666] mb-2">Số dư hiện tại: <span className="font-semibold text-[#202020]">{walletPoints} điểm</span></p>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                value={pointInput}
+                onChange={(e) => {
+                  setPointInput(e.target.value)
+                  setLoyaltyError('')
+                  setLoyaltyMessage('')
+                }}
+                placeholder="Nhập số điểm muốn dùng"
+                className={`${getInputClass('usedPoints')} flex-1`}
+              />
+              <button
+                type="button"
+                onClick={handleUseMaxPoints}
+                className="h-[46px] px-4 border border-[#dfdfdf] text-xs font-medium text-[#202020] hover:border-[#5A6D57]"
+              >
+                Dùng tối đa
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyPoints}
+                disabled={applyingPoints}
+                className="h-[46px] px-4 bg-[#5A6D57] text-white text-xs font-medium disabled:opacity-70"
+              >
+                {applyingPoints ? 'Đang áp dụng...' : 'Áp dụng'}
+              </button>
+              {(appliedPoints > 0 || pointInput) && (
+                <button
+                  type="button"
+                  onClick={handleClearPoints}
+                  className="h-[46px] px-4 border border-[#dfdfdf] text-xs font-medium text-[#404040]"
+                >
+                  Bỏ
+                </button>
+              )}
+            </div>
+            {loyaltyMessage && <p className="text-xs text-[#0f766e] mt-2">{loyaltyMessage}</p>}
+            {loyaltyError && <p className="text-xs text-red-500 mt-2">{loyaltyError}</p>}
           </div>
 
           {/* Payment Method */}

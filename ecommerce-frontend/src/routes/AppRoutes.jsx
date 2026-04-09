@@ -7,6 +7,8 @@ import PaymentSuccessPage from '../modules/order/pages/PaymentSuccessPage'
 import PaymentFailedPage from '../modules/order/pages/PaymentFailedPage'
 import VNPayReturnPage from '../modules/order/pages/VNPayReturnPage'
 import OrderDetailPage from '../modules/order/pages/OrderDetailPage'
+import OrderHistoryPage from '../modules/order/pages/OrderHistoryPage'
+import LoyaltyWalletPage from '../modules/order/pages/LoyaltyWalletPage'
 import Layout from '../shared/components/layout/Layout'
 import ProductListPage from '../modules/product/pages/ProductListPage'
 import ProductDetailPage from '../modules/product/pages/ProductDetailPage'
@@ -49,6 +51,8 @@ export default function AppRoutes() {
       <Route path="/checkout/success" element={<PrivateRoute><WithLayout><PaymentSuccessPage /></WithLayout></PrivateRoute>} />
       <Route path="/checkout/failed" element={<PrivateRoute><WithLayout><PaymentFailedPage /></WithLayout></PrivateRoute>} />
       <Route path="/payment/vnpay-return" element={<PrivateRoute><WithLayout><VNPayReturnPage /></WithLayout></PrivateRoute>} />
+      <Route path="/orders" element={<PrivateRoute><WithLayout><OrderHistoryPage /></WithLayout></PrivateRoute>} />
+      <Route path="/wallet" element={<PrivateRoute><WithLayout><LoyaltyWalletPage /></WithLayout></PrivateRoute>} />
       <Route path="/orders/:orderId" element={<PrivateRoute><WithLayout><OrderDetailPage /></WithLayout></PrivateRoute>} />
       <Route path="/checkout" element={<PrivateRoute><CheckoutPage /></PrivateRoute>} />
     </Routes>

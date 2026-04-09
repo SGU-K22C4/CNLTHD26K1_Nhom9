@@ -8,6 +8,7 @@ import ProductCard from '../components/ProductCard'
 import { formatCurrency } from '../../../shared/utils/format'
 import { useCartContext } from '../../cart/context/CartContext'
 import { useWishlistContext } from '../../wishlist/context/WishlistContext'
+import ProductReviewSection from '../../review/components/ProductReviewSection'
 
 const PRIMARY = '#5A6D57'
 
@@ -341,6 +342,8 @@ export default function ProductDetailPage() {
             />
           </div>
         </div>
+
+        <ProductReviewSection productId={product.id} />
 
         {/* ── Related Products ───────────────────────────── */}
         {related.length > 0 && (

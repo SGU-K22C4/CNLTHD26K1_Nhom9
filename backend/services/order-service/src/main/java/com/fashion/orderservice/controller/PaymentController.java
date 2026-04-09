@@ -1,5 +1,6 @@
 package com.fashion.orderservice.controller;
 
+import com.fashion.orderservice.client.LoyaltyServiceClient;
 import com.fashion.orderservice.config.VNPayConfig;
 import com.fashion.orderservice.entity.Order;
 import com.fashion.orderservice.repository.OrderRepository;
@@ -20,6 +21,7 @@ public class PaymentController {
 
     private final VNPayService vnPayService;
     private final OrderRepository orderRepository;
+    private final LoyaltyServiceClient loyaltyServiceClient;
 
     /**
      * GET /api/v1/payments/vnpay/create-payment?orderId=123
@@ -90,6 +92,16 @@ public class PaymentController {
                 order.setStatus(Order.OrderStatus.CONFIRMED);
                 order.setPaymentStatus(Order.PaymentStatus.PAID);
                 orderRepository.save(order);
+
+                try {
+                    loyaltyServiceClient.earnPointsFromOrder(
+                            order.getUserId(),
+                            String.valueOf(order.getId()),
+                            order.getTotal()
+                    );
+                } catch (RuntimeException ignored) {
+                    // Keep payment success flow stable if loyalty awarding is temporarily unavailable.
+                }
 
                 result.put("success", true);
                 result.put("message", "Payment successful");

@@ -17,5 +17,6 @@ public class OrderRequest {
     private String couponCode;
     private BigDecimal discount;
     private BigDecimal shippingFee;
+    private Integer usedPoints;
     private List<OrderItemRequest> items;
 }

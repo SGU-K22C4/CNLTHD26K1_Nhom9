@@ -51,6 +51,8 @@ public class AuthService {
                 .phone(request.getPhone())
                 .gender(request.getGender())
                 .avatar(request.getAvatar())
+                .role(User.Role.CUSTOMER)
+                .createdAt(LocalDateTime.now())
                 .build();
 
         userRepository.save(user);
@@ -60,16 +62,19 @@ public class AuthService {
                 .userId(user.getId())
                 .token(token)
                 .expiresAt(LocalDateTime.now().plusHours(24))
+                .createdAt(LocalDateTime.now())
                 .build();
         emailVerificationTokenRepository.save(verificationToken);
 
         // Phát sự kiện gửi mail xác thực
         mailService.sendVerificationEmail(user.getEmail(), user.getFullName(), token);
 
+        String role = user.getRole() != null ? user.getRole().name() : User.Role.CUSTOMER.name();
+
         return AuthResponse.builder()
                 .email(user.getEmail())
                 .firstName(user.getFullName())
-                .role(user.getRole().name())
+                .role(role)
                 .build();
     }
 

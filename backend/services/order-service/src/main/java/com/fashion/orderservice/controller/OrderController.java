@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import com.fashion.orderservice.dto.request.OrderRequest;
 import com.fashion.orderservice.dto.request.OrderItemRequest;
@@ -104,19 +105,25 @@ public class OrderController {
     }
 
     @GetMapping
+    @Transactional(readOnly = true)
     public ResponseEntity<Page<Order>> getUserOrders(
             @RequestHeader("X-User-Id") String userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(
-                orderRepository.findByUserId(userId, PageRequest.of(page, size, Sort.by("createdAt").descending())));
+        Page<Order> orderPage = orderRepository.findByUserId(
+                userId,
+                PageRequest.of(page, size, Sort.by("createdAt").descending()));
+        orderPage.getContent().forEach(this::initializeItems);
+        return ResponseEntity.ok(orderPage);
     }
 
     @GetMapping("/{id}")
+    @Transactional(readOnly = true)
     public ResponseEntity<Order> getOrder(
             @PathVariable Long id,
             @RequestHeader("X-User-Id") String userId) {
         return orderRepository.findByIdAndUserId(id, userId)
+                .map(this::initializeItems)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -126,8 +133,10 @@ public class OrderController {
      * Get full order detail by order number (used after payment success).
      */
     @GetMapping("/by-number/{orderNumber}")
+    @Transactional(readOnly = true)
     public ResponseEntity<Order> getOrderByNumber(@PathVariable String orderNumber) {
         return orderRepository.findByOrderNumber(orderNumber)
+                .map(this::initializeItems)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -137,8 +146,10 @@ public class OrderController {
      * Get full order detail by ID (used by order detail page).
      */
     @GetMapping("/detail/{id}")
+    @Transactional(readOnly = true)
     public ResponseEntity<Order> getOrderDetail(@PathVariable Long id) {
         return orderRepository.findById(id)
+                .map(this::initializeItems)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -158,5 +169,12 @@ public class OrderController {
         }
 
         return ResponseEntity.badRequest().build();
+    }
+
+    private Order initializeItems(Order order) {
+        if (order.getItems() != null) {
+            order.getItems().size();
+        }
+        return order;
     }
 }

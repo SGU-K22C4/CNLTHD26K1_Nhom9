@@ -30,3 +30,7 @@ vnpay:
   payment-url: ${VNPAY_PAYMENT_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
   api-url: ${VNPAY_API_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
   return-url: ${VNPAY_RETURN_URL:http://localhost:5173/payment/vnpay-return}
+
+order:
+  integration:
+    promotion-service-url: ${PROMOTION_SERVICE_URL:http://localhost:8085}

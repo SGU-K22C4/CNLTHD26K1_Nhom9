@@ -43,9 +43,17 @@ export const orderService = {
       body: JSON.stringify(orderData),
     });
     if (!res.ok) {
-      const errBody = await res.text();
+      let errBody = '';
+      let message = 'Failed to create order';
+      try {
+        const data = await res.json();
+        errBody = JSON.stringify(data);
+        message = data?.error || data?.message || message;
+      } catch {
+        errBody = await res.text();
+      }
       console.error('[orderService] Error response:', res.status, errBody);
-      throw new Error('Failed to create order');
+      throw new Error(message);
     }
     return res.json();
   },

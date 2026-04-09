@@ -168,6 +168,12 @@ export default function OrderHistoryPage() {
                     <div className="text-right">
                       <p className="text-[12px] text-[#666]">Trạng thái: <span className="font-medium text-[#202020]">{order.status || '-'}</span></p>
                       <p className="text-[12px] text-[#666] mt-1">Tổng: <span className="font-semibold text-[#202020]">{formatCurrency(Number(order.total) || 0)}</span></p>
+                      <Link
+                        to={`/orders/${order.id}`}
+                        className="inline-flex mt-2 h-8 items-center border border-[#D9D9D9] px-3 text-[11px] uppercase tracking-[0.08em] text-[#404040] hover:border-[#202020] transition-colors"
+                      >
+                        Xem chi tiết
+                      </Link>
                     </div>
                   </header>
 

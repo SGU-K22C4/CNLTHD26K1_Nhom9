@@ -1,5 +1,6 @@
 package com.fashion.reviewservice.service;
 
+import com.fashion.reviewservice.client.LoyaltyServiceClient;
 import com.fashion.reviewservice.client.OrderServiceClient;
 import com.fashion.reviewservice.client.dto.OrderSummary;
 import com.fashion.reviewservice.dto.request.CreateReviewRequest;
@@ -28,6 +29,7 @@ public class ReviewService {
 
     private final ReviewRepository reviewRepository;
     private final OrderServiceClient orderServiceClient;
+    private final LoyaltyServiceClient loyaltyServiceClient;
 
     public Page<ReviewResponse> getByProduct(String productId, int page, int size, Integer star) {
         String normalizedProductId = requireNonBlank(productId, "productId không được để trống");
@@ -120,6 +122,13 @@ public class ReviewService {
             savedReview = reviewRepository.save(review);
         } catch (DuplicateKeyException ex) {
             throw new IllegalArgumentException("Bạn đã đánh giá sản phẩm này trong đơn hàng đã chọn");
+        }
+
+        try {
+            loyaltyServiceClient.earnReviewPoints(normalizedUserId, savedReview.getReviewId());
+        } catch (RuntimeException ex) {
+            reviewRepository.deleteById(savedReview.getId());
+            throw ex;
         }
 
         return ReviewResponse.from(savedReview);

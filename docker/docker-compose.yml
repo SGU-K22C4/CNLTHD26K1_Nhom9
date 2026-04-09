@@ -135,6 +135,7 @@ services:
       - VNPAY_PAYMENT_URL=${VNPAY_PAYMENT_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
       - VNPAY_API_URL=${VNPAY_API_URL:-https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
       - VNPAY_RETURN_URL=${VNPAY_RETURN_URL:-http://localhost:5173/payment/vnpay-return}
+      - PROMOTION_SERVICE_URL=http://promotion-service:8085
     depends_on:
       mysql:
         condition: service_healthy
@@ -170,6 +171,7 @@ services:
       - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/fashion_review_db
       - JWT_SECRET=${JWT_SECRET}
       - ORDER_SERVICE_URL=http://order-service:8084
+      - PROMOTION_SERVICE_URL=http://promotion-service:8085
     depends_on:
       mongo:
         condition: service_healthy

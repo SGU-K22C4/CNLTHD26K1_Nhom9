@@ -1,11 +1,14 @@
 package com.fashion.orderservice.controller;
 
+import com.fashion.orderservice.client.LoyaltyServiceClient;
+import com.fashion.orderservice.client.dto.LoyaltyMutationResponse;
 import com.fashion.orderservice.entity.Order;
 import com.fashion.orderservice.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -28,6 +31,7 @@ public class OrderController {
 
     private final OrderRepository orderRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final LoyaltyServiceClient loyaltyServiceClient;
 
     @PostMapping
     public ResponseEntity<?> createOrder(
@@ -48,6 +52,16 @@ public class OrderController {
         order.setCouponCode(request.getCouponCode());
         order.setDiscount(request.getDiscount() != null ? request.getDiscount() : BigDecimal.ZERO);
         order.setShippingFee(request.getShippingFee() != null ? request.getShippingFee() : BigDecimal.ZERO);
+        order.setLoyaltyDiscount(BigDecimal.ZERO);
+        order.setUsedPoints(0);
+
+        int requestedPoints = request.getUsedPoints() == null ? 0 : request.getUsedPoints();
+        if (requestedPoints < 0) {
+            return ResponseEntity.badRequest().body(Map.of("error", "usedPoints must be non-negative"));
+        }
+        if (requestedPoints > 0 && (userId == null || userId.isBlank() || userId.startsWith("guest-"))) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Guest user cannot redeem loyalty points"));
+        }
 
         BigDecimal subtotal = BigDecimal.ZERO;
         List<OrderItem> orderItems = new ArrayList<>();
@@ -101,6 +115,58 @@ public class OrderController {
         }
 
         Order savedOrder = orderRepository.save(order);
+
+        if (requestedPoints > 0) {
+            try {
+                LoyaltyMutationResponse redeem = loyaltyServiceClient.redeemPoints(
+                        effectiveUserId,
+                        String.valueOf(savedOrder.getId()),
+                        savedOrder.getTotal(),
+                        requestedPoints
+                );
+
+                int appliedPoints = redeem != null && redeem.getAppliedPoints() != null ? redeem.getAppliedPoints() : 0;
+                BigDecimal loyaltyDiscount = redeem != null && redeem.getDiscountAmount() != null
+                        ? redeem.getDiscountAmount()
+                        : BigDecimal.ZERO;
+
+                if (appliedPoints <= 0 || loyaltyDiscount.compareTo(BigDecimal.ZERO) <= 0) {
+                    orderRepository.deleteById(savedOrder.getId());
+                    return ResponseEntity.badRequest().body(Map.of("error", "Requested points are not applicable"));
+                }
+
+                BigDecimal finalTotal = savedOrder.getTotal().subtract(loyaltyDiscount);
+                if (finalTotal.compareTo(BigDecimal.ZERO) < 0) {
+                    finalTotal = BigDecimal.ZERO;
+                }
+
+                savedOrder.setUsedPoints(appliedPoints);
+                savedOrder.setLoyaltyDiscount(loyaltyDiscount);
+                savedOrder.setTotal(finalTotal);
+                savedOrder = orderRepository.save(savedOrder);
+            } catch (IllegalArgumentException ex) {
+                orderRepository.deleteById(savedOrder.getId());
+                return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+            } catch (IllegalStateException ex) {
+                orderRepository.deleteById(savedOrder.getId());
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("error", ex.getMessage()));
+            }
+        }
+
+        // Best effort award for successful COD order; idempotent by order id in loyalty service.
+        if (savedOrder.getPaymentMethod() == Order.PaymentMethod.COD
+                && savedOrder.getPaymentStatus() == Order.PaymentStatus.PAID) {
+            try {
+                loyaltyServiceClient.earnPointsFromOrder(
+                        effectiveUserId,
+                        String.valueOf(savedOrder.getId()),
+                        savedOrder.getTotal()
+                );
+            } catch (RuntimeException ignored) {
+                // Keep order flow stable if loyalty awarding is temporarily unavailable.
+            }
+        }
+
         return ResponseEntity.ok(savedOrder);
     }
 
@@ -164,6 +230,15 @@ public class OrderController {
         }
 
         if (order.getStatus() == Order.OrderStatus.PENDING) {
+            if (order.getUsedPoints() != null && order.getUsedPoints() > 0) {
+                try {
+                    loyaltyServiceClient.refundPoints(order.getUserId(), String.valueOf(order.getId()));
+                } catch (IllegalArgumentException ex) {
+                    return ResponseEntity.badRequest().build();
+                } catch (IllegalStateException ex) {
+                    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+                }
+            }
             order.setStatus(Order.OrderStatus.CANCELLED);
             return ResponseEntity.ok(orderRepository.save(order));
         }

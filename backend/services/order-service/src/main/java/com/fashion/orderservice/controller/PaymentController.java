@@ -1,9 +1,11 @@
 package com.fashion.orderservice.controller;
 
+import com.fashion.common.event.PaymentResultEvent;
 import com.fashion.orderservice.config.VNPayConfig;
 import com.fashion.orderservice.entity.Order;
 import com.fashion.orderservice.repository.OrderRepository;
 import com.fashion.orderservice.service.VNPayService;
+import com.fashion.orderservice.saga.SagaEventPublisher;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +22,7 @@ public class PaymentController {
 
     private final VNPayService vnPayService;
     private final OrderRepository orderRepository;
+    private final SagaEventPublisher sagaEventPublisher;
 
     /**
      * GET /api/v1/payments/vnpay/create-payment?orderId=123
@@ -85,26 +88,22 @@ public class PaymentController {
                 return ResponseEntity.badRequest().body(result);
             }
 
-            if ("00".equals(responseCode)) {
-                // Payment successful
-                order.setStatus(Order.OrderStatus.CONFIRMED);
-                order.setPaymentStatus(Order.PaymentStatus.PAID);
-                orderRepository.save(order);
+            boolean success = "00".equals(responseCode);
+            sagaEventPublisher.publishPaymentResult(PaymentResultEvent.builder()
+                    .orderId(order.getId())
+                    .success(success)
+                    .transactionNo(transactionNo)
+                    .provider("VNPAY")
+                    .reason(success ? null : "VNPAY response code: " + responseCode)
+                    .build());
 
-                result.put("success", true);
-                result.put("message", "Payment successful");
-                result.put("orderId", order.getId());
-                result.put("orderNumber", order.getOrderNumber());
-                result.put("transactionNo", transactionNo);
-            } else {
-                // Payment failed
-                order.setPaymentStatus(Order.PaymentStatus.FAILED);
-                orderRepository.save(order);
-
-                result.put("success", false);
-                result.put("message", "Payment failed");
-                result.put("responseCode", responseCode);
-            }
+            result.put("success", success);
+            result.put("message", "Payment callback received and queued for async processing");
+            result.put("orderId", order.getId());
+            result.put("orderNumber", order.getOrderNumber());
+            result.put("transactionNo", transactionNo);
+            result.put("processingAsync", true);
+            result.put("responseCode", responseCode);
         } catch (NumberFormatException e) {
             result.put("success", false);
             result.put("message", "Invalid transaction reference");

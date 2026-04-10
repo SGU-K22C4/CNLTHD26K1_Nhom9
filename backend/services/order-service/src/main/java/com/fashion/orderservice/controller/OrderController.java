@@ -1,7 +1,10 @@
 package com.fashion.orderservice.controller;
 
+import com.fashion.common.event.OrderCreatedEvent;
+import com.fashion.common.event.OrderItemEvent;
 import com.fashion.orderservice.entity.Order;
 import com.fashion.orderservice.repository.OrderRepository;
+import com.fashion.orderservice.saga.SagaEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -18,6 +21,7 @@ import java.util.ArrayList;
 import java.util.UUID;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/orders")
@@ -27,6 +31,7 @@ public class OrderController {
 
     private final OrderRepository orderRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final SagaEventPublisher sagaEventPublisher;
 
     @PostMapping
     public ResponseEntity<?> createOrder(
@@ -90,16 +95,28 @@ public class OrderController {
         order.setSubtotal(subtotal);
         order.setTotal(subtotal.add(order.getShippingFee()).subtract(order.getDiscount()));
         order.setItems(orderItems);
-        // COD → auto-confirm; other methods stay PENDING until payment verified
-        if (request.getPaymentMethod() == Order.PaymentMethod.COD) {
-            order.setStatus(Order.OrderStatus.CONFIRMED);
-            order.setPaymentStatus(Order.PaymentStatus.PAID);
-        } else {
-            order.setStatus(Order.OrderStatus.PENDING);
-            order.setPaymentStatus(Order.PaymentStatus.PENDING);
-        }
+        // Saga-first flow: order starts as pending and will be progressed by inventory/payment events.
+        order.setStatus(Order.OrderStatus.PENDING);
+        order.setPaymentStatus(Order.PaymentStatus.PENDING);
 
         Order savedOrder = orderRepository.save(order);
+
+        List<OrderItemEvent> itemEvents = savedOrder.getItems().stream()
+            .map(item -> OrderItemEvent.builder()
+                .productId(item.getProductId())
+                .color(item.getColor())
+                .size(item.getSize())
+                .quantity(item.getQuantity())
+                .build())
+            .collect(Collectors.toList());
+
+        sagaEventPublisher.publishOrderCreated(OrderCreatedEvent.builder()
+            .orderId(savedOrder.getId())
+            .orderNumber(savedOrder.getOrderNumber())
+            .paymentMethod(savedOrder.getPaymentMethod().name())
+            .items(itemEvents)
+            .build());
+
         return ResponseEntity.ok(savedOrder);
     }
 

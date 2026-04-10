@@ -44,6 +44,14 @@ public class Order {
     @Builder.Default
     private BigDecimal discount = BigDecimal.ZERO;
 
+    @Column(name = "loyalty_discount", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal loyaltyDiscount = BigDecimal.ZERO;
+
+    @Column(name = "used_points")
+    @Builder.Default
+    private Integer usedPoints = 0;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal total;
 

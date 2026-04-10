@@ -10,7 +10,7 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-huytran123}
     ports:
-      - "3307:3306"
+      - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d
@@ -103,13 +103,23 @@ services:
     ports:
       - "8081:8081"
     environment:
+      - SERVER_PORT=8081
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_user_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
       - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
+      - JWT_REFRESH_EXPIRATION=${JWT_REFRESH_EXPIRATION:-604800000}
       - MAIL_USERNAME=${MAIL_USERNAME}
       - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - SPRING_MAIL_HOST=${SPRING_MAIL_HOST:-smtp.gmail.com}
+      - SPRING_MAIL_PORT=${SPRING_MAIL_PORT:-587}
+      - SPRING_MAIL_USERNAME=${MAIL_USERNAME}
+      - SPRING_MAIL_PASSWORD=${MAIL_PASSWORD}
+      - SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
+      - SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - APP_FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
     depends_on:
       mysql:
         condition: service_healthy
@@ -144,6 +154,7 @@ services:
     ports:
       - "8083:8083"
     environment:
+      - SERVER_PORT=8083
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - JWT_SECRET=${JWT_SECRET}
@@ -171,6 +182,7 @@ services:
       - VNPAY_PAYMENT_URL=${VNPAY_PAYMENT_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
       - VNPAY_API_URL=${VNPAY_API_URL:-https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
       - VNPAY_RETURN_URL=${VNPAY_RETURN_URL:-http://localhost:5173/payment/vnpay-return}
+      - PROMOTION_SERVICE_URL=http://promotion-service:8085
     depends_on:
       mysql:
         condition: service_healthy
@@ -186,6 +198,7 @@ services:
     ports:
       - "8085:8085"
     environment:
+      - SERVER_PORT=8085
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_promotion_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
@@ -203,8 +216,11 @@ services:
     ports:
       - "8086:8086"
     environment:
+      - SERVER_PORT=8086
       - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/fashion_review_db
       - JWT_SECRET=${JWT_SECRET}
+      - ORDER_SERVICE_URL=http://order-service:8084
+      - PROMOTION_SERVICE_URL=http://promotion-service:8085
     depends_on:
       mongo:
         condition: service_healthy
@@ -218,6 +234,7 @@ services:
     ports:
       - "8087:8087"
     environment:
+      - SERVER_PORT=8087
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - JWT_SECRET=${JWT_SECRET}
 

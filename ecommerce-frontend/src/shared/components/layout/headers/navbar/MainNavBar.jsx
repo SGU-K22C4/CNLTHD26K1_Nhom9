@@ -135,6 +135,9 @@ function MainNavBar(props) {
             <MenuItem onClick={() => { handleUserMenuClose(); navigate('/orders'); }} sx={{ fontSize: 14 }}>
               Đơn hàng của tôi
             </MenuItem>
+            <MenuItem onClick={() => { handleUserMenuClose(); navigate('/wallet'); }} sx={{ fontSize: 14 }}>
+              Ví điểm tích lũy
+            </MenuItem>
             <MenuItem onClick={handleLogout} sx={{ fontSize: 14, color: 'error.main' }}>
               Đăng xuất
             </MenuItem>

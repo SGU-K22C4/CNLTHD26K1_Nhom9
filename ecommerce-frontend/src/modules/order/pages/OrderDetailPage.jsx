@@ -418,6 +418,19 @@ export default function OrderDetailPage() {
                     <span className="font-medium">-{formatCurrency(order.discount)}</span>
                   </div>
                 )}
+                {order.loyaltyDiscount > 0 && (
+                  <div className="flex justify-between text-sm text-[#0f766e]">
+                    <span className="flex items-center gap-1">
+                      Điểm tích lũy
+                      {order.usedPoints > 0 && (
+                        <span className="text-[10px] bg-[#CCFBF1] text-[#115E59] px-1.5 py-0.5 rounded font-medium">
+                          {order.usedPoints} điểm
+                        </span>
+                      )}
+                    </span>
+                    <span className="font-medium">-{formatCurrency(order.loyaltyDiscount)}</span>
+                  </div>
+                )}
                 <div className="pt-3 border-t-2 border-[#5A6D57]">
                   <div className="flex justify-between items-baseline">
                     <span className="text-base font-bold text-[#202020]">Tổng cộng</span>

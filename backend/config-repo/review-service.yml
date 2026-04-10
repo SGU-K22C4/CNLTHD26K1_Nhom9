@@ -5,3 +5,8 @@ spring:
   data:
     mongodb:
       uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/fashion_review_db}
+
+review:
+  integration:
+    order-service-url: ${ORDER_SERVICE_URL:http://localhost:8084}
+    promotion-service-url: ${PROMOTION_SERVICE_URL:http://localhost:8085}

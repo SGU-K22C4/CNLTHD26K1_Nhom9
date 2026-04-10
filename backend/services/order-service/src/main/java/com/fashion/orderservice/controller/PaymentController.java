@@ -1,6 +1,7 @@
 package com.fashion.orderservice.controller;
 
 import com.fashion.common.event.PaymentResultEvent;
+import com.fashion.orderservice.client.LoyaltyServiceClient;
 import com.fashion.orderservice.config.VNPayConfig;
 import com.fashion.orderservice.entity.Order;
 import com.fashion.orderservice.repository.OrderRepository;
@@ -23,6 +24,9 @@ public class PaymentController {
     private final VNPayService vnPayService;
     private final OrderRepository orderRepository;
     private final SagaEventPublisher sagaEventPublisher;
+    private final LoyaltyServiceClient loyaltyServiceClient;
+    private final SagaEventPublisher sagaEventPublisher;
+    private final LoyaltyServiceClient loyaltyServiceClient;
 
     /**
      * GET /api/v1/payments/vnpay/create-payment?orderId=123
@@ -96,6 +100,18 @@ public class PaymentController {
                     .provider("VNPAY")
                     .reason(success ? null : "VNPAY response code: " + responseCode)
                     .build());
+
+            if (success) {
+                try {
+                    loyaltyServiceClient.earnPointsFromOrder(
+                            order.getUserId(),
+                            String.valueOf(order.getId()),
+                            order.getTotal()
+                    );
+                } catch (RuntimeException ignored) {
+                    // Keep payment success flow stable if loyalty awarding is temporarily unavailable.
+                }
+            }
 
             result.put("success", success);
             result.put("message", "Payment callback received and queued for async processing");

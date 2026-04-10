@@ -5,6 +5,7 @@ WORKDIR /app
 COPY pom.xml .
 COPY api-gateway/pom.xml api-gateway/pom.xml
 COPY common/pom.xml common/pom.xml
+COPY services/config-service/pom.xml services/config-service/pom.xml
 COPY services/user-service/pom.xml services/user-service/pom.xml
 COPY services/product-service/pom.xml services/product-service/pom.xml
 COPY common/src common/src

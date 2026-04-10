@@ -25,8 +25,6 @@ public class PaymentController {
     private final OrderRepository orderRepository;
     private final SagaEventPublisher sagaEventPublisher;
     private final LoyaltyServiceClient loyaltyServiceClient;
-    private final SagaEventPublisher sagaEventPublisher;
-    private final LoyaltyServiceClient loyaltyServiceClient;
 
     /**
      * GET /api/v1/payments/vnpay/create-payment?orderId=123

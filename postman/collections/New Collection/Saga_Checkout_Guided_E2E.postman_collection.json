@@ -1,0 +1,483 @@
+{
+  "info": {
+    "_postman_id": "f2d1df8e-94fb-49dd-9b91-1f06a22ba992",
+    "name": "Saga Checkout - Guided E2E",
+    "description": "Guided Postman flow to test Saga checkout end-to-end through Kong Gateway.\n\nRun in order:\n1) Health checks\n2) Inventory success path (COD)\n3) Inventory failure path\n4) VNPAY success path\n5) VNPAY failure path\n\nNotes:\n- Default gateway URL is http://localhost:8080\n- Collection scripts auto-store orderId/orderNumber variables\n- VNPay callback secure hash is auto-generated in pre-request scripts\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "xUserId", "value": "postman-saga-user" },
+    { "key": "vnpHashSecret", "value": "V0UJ9R7MWMJLFJREF60KQR5P9RO1XIYH" },
+
+    { "key": "productId", "value": "02a6ad8f-6f1e-45cd-b4ca-beab32a99668" },
+    { "key": "productName", "value": "Saga Demo Product" },
+    { "key": "productSlug", "value": "saga-demo-product" },
+    { "key": "itemColor", "value": "Kaki" },
+    { "key": "itemSize", "value": "XS" },
+    { "key": "unitPrice", "value": "1199000" },
+
+    { "key": "codQty", "value": "1" },
+    { "key": "overQty", "value": "50" },
+    { "key": "vnpQty", "value": "1" },
+
+    { "key": "orderIdCOD", "value": "" },
+    { "key": "orderIdInventoryFail", "value": "" },
+    { "key": "orderIdVnpSuccess", "value": "" },
+    { "key": "orderIdVnpFail", "value": "" },
+    { "key": "orderNumber", "value": "" },
+
+    { "key": "vnpResponseCode", "value": "00" },
+    { "key": "vnpTransactionNo", "value": "" },
+    { "key": "vnpSecureHash", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0. Health Checks",
+      "item": [
+        {
+          "name": "Kong Admin Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8001/",
+              "host": ["http://localhost:8001"],
+              "path": [""]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Kong admin reachable', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Orders API Reachable Through Kong",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders?page=0&size=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "orders"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "5" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Orders API reachable', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Inventory Success Path (COD)",
+      "item": [
+        {
+          "name": "Create COD Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientName\": \"Postman Saga\",\n  \"recipientPhone\": \"0900000000\",\n  \"shippingAddress\": \"HCM\",\n  \"paymentMethod\": \"COD\",\n  \"note\": \"inventory success path\",\n  \"couponCode\": null,\n  \"discount\": 0,\n  \"shippingFee\": 0,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"productName\": \"{{productName}}\",\n      \"productSlug\": \"{{productSlug}}\",\n      \"imageUrl\": \"\",\n      \"color\": \"{{itemColor}}\",\n      \"size\": \"{{itemSize}}\",\n      \"quantity\": {{codQty}},\n      \"unitPrice\": {{unitPrice}}\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Create COD order status 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('orderIdCOD', String(data.id));",
+                  "pm.collectionVariables.set('orderNumber', String(data.orderNumber || ''));",
+                  "pm.test('COD order id exists', function () { pm.expect(data.id).to.exist; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check COD Final State",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/detail/{{orderIdCOD}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "orders", "detail", "{{orderIdCOD}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order detail reachable', function () { pm.response.to.have.status(200); });",
+                  "const d = pm.response.json();",
+                  "pm.test('COD should become CONFIRMED/PAID', function () {",
+                  "  pm.expect(d.status).to.eql('CONFIRMED');",
+                  "  pm.expect(d.paymentStatus).to.eql('PAID');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Inventory Failure Path",
+      "item": [
+        {
+          "name": "Create Over-Quantity Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientName\": \"Postman Saga\",\n  \"recipientPhone\": \"0900000000\",\n  \"shippingAddress\": \"HCM\",\n  \"paymentMethod\": \"COD\",\n  \"note\": \"inventory failure path\",\n  \"couponCode\": null,\n  \"discount\": 0,\n  \"shippingFee\": 0,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"productName\": \"{{productName}}\",\n      \"productSlug\": \"{{productSlug}}\",\n      \"imageUrl\": \"\",\n      \"color\": \"{{itemColor}}\",\n      \"size\": \"{{itemSize}}\",\n      \"quantity\": {{overQty}},\n      \"unitPrice\": {{unitPrice}}\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Create over-qty order status 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('orderIdInventoryFail', String(data.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check Inventory Fail Final State",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/detail/{{orderIdInventoryFail}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "orders", "detail", "{{orderIdInventoryFail}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('orderIdInventoryFail');",
+                  "if (!id || id === 'undefined' || id === 'null') {",
+                  "  throw new Error('Missing orderIdInventoryFail. Run Create Over-Quantity Order first and ensure it returns 200.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order detail reachable', function () { pm.response.to.have.status(200); });",
+                  "const d = pm.response.json();",
+                  "pm.test('Over-qty should become CANCELLED/FAILED', function () {",
+                  "  pm.expect(d.status).to.eql('CANCELLED');",
+                  "  pm.expect(d.paymentStatus).to.eql('FAILED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. VNPAY Success Path",
+      "item": [
+        {
+          "name": "Create VNPAY Order (Success Case)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientName\": \"Postman Saga\",\n  \"recipientPhone\": \"0900000000\",\n  \"shippingAddress\": \"HCM\",\n  \"paymentMethod\": \"VNPAY\",\n  \"note\": \"vnpay success path\",\n  \"couponCode\": null,\n  \"discount\": 0,\n  \"shippingFee\": 0,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"productName\": \"{{productName}}\",\n      \"productSlug\": \"{{productSlug}}\",\n      \"imageUrl\": \"\",\n      \"color\": \"{{itemColor}}\",\n      \"size\": \"{{itemSize}}\",\n      \"quantity\": {{vnpQty}},\n      \"unitPrice\": {{unitPrice}}\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Create VNPAY order status 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('orderIdVnpSuccess', String(data.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Callback VNPAY Success (ResponseCode=00)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/vnpay/payment-return?vnp_TxnRef={{orderIdVnpSuccess}}&vnp_ResponseCode=00&vnp_TransactionNo={{vnpTransactionNo}}&vnp_SecureHash={{vnpSecureHash}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "payments", "vnpay", "payment-return"],
+              "query": [
+                { "key": "vnp_TxnRef", "value": "{{orderIdVnpSuccess}}" },
+                { "key": "vnp_ResponseCode", "value": "00" },
+                { "key": "vnp_TransactionNo", "value": "{{vnpTransactionNo}}" },
+                { "key": "vnp_SecureHash", "value": "{{vnpSecureHash}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function javaUrlEncode(val) {",
+                  "  return encodeURIComponent(String(val)).replace(/%20/g, '+').replace(/[!'()*]/g, function (c) {",
+                  "    return '%' + c.charCodeAt(0).toString(16).toUpperCase();",
+                  "  });",
+                  "}",
+                  "const txnRef = pm.collectionVariables.get('orderIdVnpSuccess');",
+                  "if (!txnRef) throw new Error('Missing orderIdVnpSuccess');",
+                  "const transactionNo = 'SIM' + Date.now();",
+                  "pm.collectionVariables.set('vnpTransactionNo', transactionNo);",
+                  "const params = {",
+                  "  vnp_ResponseCode: '00',",
+                  "  vnp_TransactionNo: transactionNo,",
+                  "  vnp_TxnRef: String(txnRef)",
+                  "};",
+                  "const hashData = Object.keys(params).sort().map(k => k + '=' + javaUrlEncode(params[k])).join('&');",
+                  "const secret = pm.collectionVariables.get('vnpHashSecret');",
+                  "if (!secret) throw new Error('Missing vnpHashSecret');",
+                  "const secureHash = CryptoJS.HmacSHA512(hashData, secret).toString(CryptoJS.enc.Hex);",
+                  "pm.collectionVariables.set('vnpSecureHash', secureHash);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Callback accepted', function () { pm.response.to.have.status(200); });",
+                  "const d = pm.response.json();",
+                  "pm.test('Callback success=true for code 00', function () { pm.expect(d.success).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check VNPAY Success Final State",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/detail/{{orderIdVnpSuccess}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "orders", "detail", "{{orderIdVnpSuccess}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order detail reachable', function () { pm.response.to.have.status(200); });",
+                  "const d = pm.response.json();",
+                  "pm.test('VNPAY success should be CONFIRMED/PAID', function () {",
+                  "  pm.expect(d.status).to.eql('CONFIRMED');",
+                  "  pm.expect(d.paymentStatus).to.eql('PAID');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. VNPAY Failure Path",
+      "item": [
+        {
+          "name": "Create VNPAY Order (Fail Case)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientName\": \"Postman Saga\",\n  \"recipientPhone\": \"0900000000\",\n  \"shippingAddress\": \"HCM\",\n  \"paymentMethod\": \"VNPAY\",\n  \"note\": \"vnpay fail path\",\n  \"couponCode\": null,\n  \"discount\": 0,\n  \"shippingFee\": 0,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"productName\": \"{{productName}}\",\n      \"productSlug\": \"{{productSlug}}\",\n      \"imageUrl\": \"\",\n      \"color\": \"{{itemColor}}\",\n      \"size\": \"{{itemSize}}\",\n      \"quantity\": {{vnpQty}},\n      \"unitPrice\": {{unitPrice}}\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Create VNPAY order status 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('orderIdVnpFail', String(data.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Callback VNPAY Fail (ResponseCode=24)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/vnpay/payment-return?vnp_TxnRef={{orderIdVnpFail}}&vnp_ResponseCode=24&vnp_TransactionNo={{vnpTransactionNo}}&vnp_SecureHash={{vnpSecureHash}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "payments", "vnpay", "payment-return"],
+              "query": [
+                { "key": "vnp_TxnRef", "value": "{{orderIdVnpFail}}" },
+                { "key": "vnp_ResponseCode", "value": "24" },
+                { "key": "vnp_TransactionNo", "value": "{{vnpTransactionNo}}" },
+                { "key": "vnp_SecureHash", "value": "{{vnpSecureHash}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function javaUrlEncode(val) {",
+                  "  return encodeURIComponent(String(val)).replace(/%20/g, '+').replace(/[!'()*]/g, function (c) {",
+                  "    return '%' + c.charCodeAt(0).toString(16).toUpperCase();",
+                  "  });",
+                  "}",
+                  "const txnRef = pm.collectionVariables.get('orderIdVnpFail');",
+                  "if (!txnRef) throw new Error('Missing orderIdVnpFail');",
+                  "const transactionNo = 'SIM' + Date.now();",
+                  "pm.collectionVariables.set('vnpTransactionNo', transactionNo);",
+                  "const params = {",
+                  "  vnp_ResponseCode: '24',",
+                  "  vnp_TransactionNo: transactionNo,",
+                  "  vnp_TxnRef: String(txnRef)",
+                  "};",
+                  "const hashData = Object.keys(params).sort().map(k => k + '=' + javaUrlEncode(params[k])).join('&');",
+                  "const secret = pm.collectionVariables.get('vnpHashSecret');",
+                  "if (!secret) throw new Error('Missing vnpHashSecret');",
+                  "const secureHash = CryptoJS.HmacSHA512(hashData, secret).toString(CryptoJS.enc.Hex);",
+                  "pm.collectionVariables.set('vnpSecureHash', secureHash);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Callback accepted', function () { pm.response.to.have.status(200); });",
+                  "const d = pm.response.json();",
+                  "pm.test('Callback success=false for code 24', function () { pm.expect(d.success).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check VNPAY Fail Final State",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/detail/{{orderIdVnpFail}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "orders", "detail", "{{orderIdVnpFail}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order detail reachable', function () { pm.response.to.have.status(200); });",
+                  "const d = pm.response.json();",
+                  "pm.test('VNPAY fail should be CANCELLED/FAILED', function () {",
+                  "  pm.expect(d.status).to.eql('CANCELLED');",
+                  "  pm.expect(d.paymentStatus).to.eql('FAILED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

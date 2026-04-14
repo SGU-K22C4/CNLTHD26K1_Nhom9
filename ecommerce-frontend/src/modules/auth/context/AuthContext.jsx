@@ -1,17 +1,20 @@
-import { createContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useState, useCallback } from 'react';
 import { authService } from '../services/authService';
 
 const AuthContext = createContext(null);
 
-export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-
-    useEffect(() => {
+function getStoredUser() {
+    try {
         const userInfo = localStorage.getItem('userInfo');
-        if (userInfo) {
-            setUser(JSON.parse(userInfo));
-        }
-    }, []);
+        return userInfo ? JSON.parse(userInfo) : null;
+    } catch {
+        localStorage.removeItem('userInfo');
+        return null;
+    }
+}
+
+export const AuthProvider = ({ children }) => {
+    const [user, setUser] = useState(() => getStoredUser());
 
     const login = useCallback((data, navigateTo) => {
         const userInfo = {
@@ -51,4 +54,4 @@ export const AuthProvider = ({ children }) => {
     );
 };
 
-export default AuthContext;
+export default AuthContext;

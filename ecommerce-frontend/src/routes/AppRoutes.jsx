@@ -17,6 +17,7 @@ import LoginPage from '../modules/auth/pages/LoginPage'
 import RegisterPage from '../modules/auth/pages/RegisterPage'
 import VerifyEmailPage from '../modules/auth/pages/VerifyEmailPage'
 import ContactPage from '../modules/contact/pages/ContactPage'
+import ChatbotPage from '../modules/chatbot/pages/ChatbotPage'
 
 function WithLayout({ children }) {
   return <Layout>{children}</Layout>
@@ -34,6 +35,7 @@ export default function AppRoutes() {
       <Route path="/products/:id" element={<WithLayout><ProductDetailPage /></WithLayout>} />
       <Route path="/verify-email" element={<WithLayout><VerifyEmailPage /></WithLayout>} />
       <Route path="/contact" element={<WithLayout><ContactPage /></WithLayout>} />
+      <Route path="/chatbot" element={<PrivateRoute><ChatbotPage /></PrivateRoute>} />
 
       {/* -------------------------------------------------- */}
       {/* NHÓM 2: GUEST ONLY — Đã login thì về trang chủ     */}

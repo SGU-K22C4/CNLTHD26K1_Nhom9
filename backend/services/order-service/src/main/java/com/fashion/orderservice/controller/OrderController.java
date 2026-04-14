@@ -37,7 +37,6 @@ public class OrderController {
     private final JdbcTemplate jdbcTemplate;
     private final SagaEventPublisher sagaEventPublisher;
     private final LoyaltyServiceClient loyaltyServiceClient;
-    private final SagaEventPublisher sagaEventPublisher;
 
     @PostMapping
     public ResponseEntity<?> createOrder(

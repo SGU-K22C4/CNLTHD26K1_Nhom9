@@ -59,9 +59,10 @@ services:
     environment:
       - KAFKA_NODE_ID=1
       - KAFKA_PROCESS_ROLES=broker,controller
-      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
-      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_LISTENERS=INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      - KAFKA_ADVERTISED_LISTENERS=INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL
       - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
       - CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk
@@ -86,7 +87,7 @@ services:
       - "8088:8080"
     environment:
       - KAFKA_CLUSTERS_0_NAME=fashion
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092
       - KAFKA_CLUSTERS_0_READONLY=false
       - DYNAMIC_CONFIG_ENABLED=true
     depends_on:
@@ -138,7 +139,7 @@ services:
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
       - JWT_SECRET=${JWT_SECRET}
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
     depends_on:
       mysql:
         condition: service_healthy
@@ -176,7 +177,7 @@ services:
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
       - JWT_SECRET=${JWT_SECRET}
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - VNPAY_TMN_CODE=${VNPAY_TMN_CODE:-XWJEG5N8}
       - VNPAY_HASH_SECRET=${VNPAY_HASH_SECRET:-V0UJ9R7MWMJLFJREF60KQR5P9RO1XIYH}
       - VNPAY_PAYMENT_URL=${VNPAY_PAYMENT_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
@@ -217,7 +218,7 @@ services:
       - "8086:8086"
     environment:
       - SERVER_PORT=8086
-      - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/fashion_review_db
+      - SPRING_DATA_MONGODB_URI=mongodb+srv://tienle:pass123@cluster0.y6jck.mongodb.net/fashion_review_db
       - JWT_SECRET=${JWT_SECRET}
       - ORDER_SERVICE_URL=http://order-service:8084
       - PROMOTION_SERVICE_URL=http://promotion-service:8085
@@ -235,8 +236,16 @@ services:
       - "8087:8087"
     environment:
       - SERVER_PORT=8087
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SPRING_DATA_MONGODB_URI=mongodb+srv://tienle:pass123@cluster0.y6jck.mongodb.net/fashion_chatbot_db
+      - OPENROUTER_API_KEY=${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}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-4o-mini}
       - JWT_SECRET=${JWT_SECRET}
+      - PRODUCT_SERVICE_URL=http://product-service:8082
+      - PROMOTION_SERVICE_URL=http://promotion-service:8085
+      - ORDER_SERVICE_URL=http://order-service:8084
+    depends_on:
+      mongo:
+        condition: service_healthy
 
   # ── Kong Gateway (replaces Spring Cloud API Gateway) ─────────────────────
   # DB-less mode: all config loaded from kong.yml declarative file.

@@ -11,8 +11,9 @@ import { useAuth } from '../modules/auth/hooks/useAuth';
 export default function PrivateRoute({ children }) {
   const { user } = useAuth();
   const location = useLocation();
+  const hasAccessToken = Boolean(localStorage.getItem('accessToken'));
 
-  if (!user) {
+  if (!user && !hasAccessToken) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
@@ -26,10 +27,11 @@ export default function PrivateRoute({ children }) {
  */
 export function GuestOnlyRoute() {
   const { user } = useAuth();
+  const hasAccessToken = Boolean(localStorage.getItem('accessToken'));
 
-  if (user) {
+  if (user || hasAccessToken) {
     return <Navigate to="/" replace />;
   }
 
   return <Outlet />;
-}
+}

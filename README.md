@@ -75,7 +75,7 @@ Then open `docker/.env` and fill in **required** fields:
 | `MAIL_PASSWORD` | ⚠️ | Gmail App Password ([guide](https://myaccount.google.com/apppasswords)) |
 | `VNPAY_TMN_CODE` | ⚠️ | VNPay Sandbox terminal code |
 | `VNPAY_HASH_SECRET` | ⚠️ | VNPay Sandbox hash secret |
-| `OPENAI_API_KEY` | ⚠️ | Only needed for chatbot feature |
+| `OPENROUTER_API_KEY` | ⚠️ | Only needed for chatbot feature |
 
 > ⚠️ fields are optional (the app still runs without them, specific features just won't work)
 

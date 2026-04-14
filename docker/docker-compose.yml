@@ -237,7 +237,7 @@ services:
     environment:
       - SERVER_PORT=8087
       - SPRING_DATA_MONGODB_URI=mongodb://localhost:27017/fashion_chatbot_db
-      - OPENROUTER_API_KEY=${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}
+      - OPENROUTER_API_KEY=${your-api-key}
       - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-4o-mini}
       - JWT_SECRET=${JWT_SECRET}
       - PRODUCT_SERVICE_URL=http://product-service:8082

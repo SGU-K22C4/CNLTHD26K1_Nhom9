@@ -2,6 +2,7 @@ package com.fashion.orderservice.saga;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fashion.common.event.OrderCancelledEvent;
 import com.fashion.common.event.OrderCreatedEvent;
 import com.fashion.common.event.PaymentResultEvent;
 import com.fashion.common.event.SagaTopics;
@@ -24,6 +25,10 @@ public class SagaEventPublisher {
 
     public void publishPaymentResult(PaymentResultEvent event) {
         publish(SagaTopics.PAYMENT_RESULT, String.valueOf(event.getOrderId()), event);
+    }
+
+    public void publishOrderCancelled(OrderCancelledEvent event) {
+        publish(SagaTopics.ORDER_CANCELLED, String.valueOf(event.getOrderId()), event);
     }
 
     private void publish(String topic, String key, Object payload) {

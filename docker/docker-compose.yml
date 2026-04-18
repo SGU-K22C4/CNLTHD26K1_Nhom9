@@ -221,8 +221,9 @@ services:
     environment:
       - SERVER_PORT=8087
       - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/fashion_chatbot_db
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-42b83dd233354023ae8b9a30553ed0cd.l0FOSj4VLLT9-FZNPUzF0GFP}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434/v1}
       - JWT_SECRET=${JWT_SECRET}
       - PRODUCT_SERVICE_URL=http://product-service:8082
       - PROMOTION_SERVICE_URL=http://promotion-service:8085

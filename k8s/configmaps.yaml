@@ -49,5 +49,6 @@ data:
   PROMOTION_SERVICE_URL: "http://promotion-service:8085"
   ORDER_SERVICE_URL: "http://order-service:8084"
 
-  # ── AI Model ──────────────────────────────────────────────────────────────
-  OPENROUTER_MODEL: "openai/gpt-4o-mini"
+  # ── AI Model (Ollama) ─────────────────────────────────────────────────────
+  OLLAMA_MODEL: "qwen2.5:7b"
+  OLLAMA_BASE_URL: "http://localhost:11434/v1"

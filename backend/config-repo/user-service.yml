@@ -12,7 +12,7 @@ spring:
   jpa:
     hibernate:
       #dùng validate khi đã có database cần validate , ngoài ra nếu chạy lần đầu thì dùng update
-      # ddl-auto: validate 
+      # ddl-auto: validate
       ddl-auto: update
     show-sql: true
     properties:
@@ -34,8 +34,8 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
-    username: ${MAIL_USERNAME:your-email@gmail.com}
-    password: ${MAIL_PASSWORD:your-app-password}
+    username: ${EMAIL_USERNAME:pcshop7153@gmail.com}
+    password: ${EMAIL_PASSWORD:tvpwqiovicyfkbfq}
     properties:
       mail:
         smtp:
@@ -47,3 +47,7 @@ logging:
   level:
     com.fashion.userservice: DEBUG
     org.springframework.security: INFO
+
+app:
+  auth:
+    email-verification-required: ${EMAIL_VERIFICATION_REQUIRED:true}

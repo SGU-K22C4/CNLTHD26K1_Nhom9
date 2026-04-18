@@ -16,6 +16,8 @@ import java.time.Duration;
 
 /**
  * Wiring LangChain4j components: model, memory, tools → FashionAgent.
+ * Uses Ollama (OpenAI-compatible API) as LLM provider.
+ * Supports both local Ollama (localhost:11434) and cloud Ollama endpoints.
  */
 @Configuration
 public class AgentConfig {
@@ -37,29 +39,29 @@ public class AgentConfig {
 
     @Bean
     public ChatLanguageModel chatLanguageModel() {
-        // Model chính (thông minh, tool-calling tốt nhưng tốn credit)
+        // Model chính (Ollama - chạy local hoặc cloud, miễn phí không giới hạn)
         ChatLanguageModel primaryModel = OpenAiChatModel.builder()
                 .apiKey(apiKey)
                 .baseUrl(baseUrl)
-                .modelName(modelName) // Ví dụ: google/gemini-1.5-pro
+                .modelName(modelName) // Ví dụ: qwen2.5:7b (Ollama)
                 .maxTokens(maxTokens)
                 .temperature(0.3)
-                .timeout(Duration.ofSeconds(30))
+                .timeout(Duration.ofSeconds(60)) // Ollama local có thể chậm hơn cloud
                 .logRequests(true)
                 .logResponses(true)
                 .build();
 
-        // Model dự phòng (giá rẻ, miễn phí hoặc public, dùng để chữa cháy khi Model chính hết credit)
+        // Model dự phòng (Ollama fallback - model nhẹ hơn nếu model chính quá tải)
         ChatLanguageModel fallbackModel = OpenAiChatModel.builder()
-                .apiKey(apiKey) // Dùng chung key hoặc key provider khác
+                .apiKey(apiKey)
                 .baseUrl(baseUrl)
-                .modelName("google/gemini-pro") // Model giá rẻ/free của OpenRouter
+                .modelName("llama3.1:8b") // Model dự phòng nhẹ của Ollama
                 .maxTokens(maxTokens)
                 .temperature(0.3)
-                .timeout(Duration.ofSeconds(15))
+                .timeout(Duration.ofSeconds(30))
                 .build();
 
-        // Langchain4j sẽ tự động chuyển sang fallbackModel nếu primaryModel ném ra Exception (Timeout, 429 Rate Limit, 402 Payment Required...)
+        // Tự động chuyển sang fallbackModel nếu primaryModel fail (Timeout, model not found...)
         return new FallbackChatLanguageModel(primaryModel, fallbackModel);
     }
 

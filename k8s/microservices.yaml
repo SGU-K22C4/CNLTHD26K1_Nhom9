@@ -586,7 +586,7 @@ spec:
       targetPort: 8086
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 7. Chatbot Service (port 8087) — MongoDB + AI (OpenRouter)
+# 7. Chatbot Service (port 8087) — MongoDB + AI (Ollama)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ---
 apiVersion: apps/v1
@@ -620,16 +620,21 @@ spec:
                 configMapKeyRef:
                   name: fashion-config
                   key: CHATBOT_MONGODB_URI
-            - name: OPENROUTER_API_KEY
+            - name: OLLAMA_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: fashion-secrets
-                  key: OPENROUTER_API_KEY
-            - name: OPENROUTER_MODEL
+                  key: OLLAMA_API_KEY
+            - name: OLLAMA_MODEL
               valueFrom:
                 configMapKeyRef:
                   name: fashion-config
-                  key: OPENROUTER_MODEL
+                  key: OLLAMA_MODEL
+            - name: OLLAMA_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: OLLAMA_BASE_URL
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:

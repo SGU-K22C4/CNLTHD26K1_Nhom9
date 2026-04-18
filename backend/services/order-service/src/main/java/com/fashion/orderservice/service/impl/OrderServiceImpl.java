@@ -177,7 +177,7 @@ public class OrderServiceImpl implements OrderService {
     private Order buildOrder(String effectiveUserId, OrderRequest request) {
         Order order = new Order();
         order.setUserId(effectiveUserId);
-        order.setOrderNumber("ORD-" + System.currentTimeMillis());
+        order.setOrderNumber("ORD-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 6));
         order.setRecipientName(request.getRecipientName());
         order.setRecipientPhone(request.getRecipientPhone());
         order.setShippingAddress(request.getShippingAddress());

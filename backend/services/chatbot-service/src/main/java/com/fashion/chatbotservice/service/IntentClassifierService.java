@@ -21,12 +21,12 @@ import java.util.regex.Pattern;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@SuppressWarnings("null")
 public class IntentClassifierService {
 
     public static final String CONSULT_SIZE = "CONSULT_SIZE";
     public static final String CONSULT_SEASON = "CONSULT_SEASON";
     public static final String ASK_PROMOTION = "ASK_PROMOTION";
+    public static final String SEARCH_PRODUCT = "SEARCH_PRODUCT";
     public static final String GENERAL = "GENERAL";
 
     private static final Pattern NON_ALPHANUMERIC = Pattern.compile("[^a-z0-9\\s]");
@@ -68,24 +68,37 @@ public class IntentClassifierService {
             return null;
         }
 
+        // 1. Khuyến mãi — ưu tiên cao nhất, keyword rõ ràng
         if (containsAny(normalizedMessage,
                 "khuyen mai", "giam gia", "coupon", "ma giam", "voucher", "uu dai", "deal")) {
             return new IntentScore(ASK_PROMOTION, 0.9d);
         }
 
-        if (containsAny(normalizedMessage,
-                "size", "so do", "v1", "v2", "v3", "nguc", "eo", "hong", "cm", "kg", "can nang", "chieu cao")) {
+        // 2. Size — CHỈ khi có keyword ĐẶC THÙ về số đo (size, cm, kg, số đo cơ thể)
+        boolean hasSizeKeyword = containsAny(normalizedMessage,
+                "size", "so do", "nguc", "eo", "hong", "can nang", "chieu cao");
+        boolean hasMeasurement = normalizedMessage.matches(".*\\d+\\s*(cm|kg|m\\d).*")
+                || normalizedMessage.matches(".*\\b(1m\\d{2}|\\d{2,3}kg)\\b.*");
+        if (hasSizeKeyword || hasMeasurement) {
             return new IntentScore(CONSULT_SIZE, 0.88d);
         }
 
+        // 3. Outfit theo mùa / dịp
         if (containsAny(normalizedMessage,
                 "outfit", "phoi do", "mua he", "mua dong", "mua thu", "mua xuan", "trend", "di lam", "cong so", "di tiec", "su kien")) {
             return new IntentScore(CONSULT_SEASON, 0.86d);
         }
 
+        // 4. Tìm sản phẩm — keyword các loại đồ thời trang
+        if (containsAny(normalizedMessage,
+                "tim", "co ban", "san pham", "ao", "quan", "vay", "dam", "giay",
+                "tui", "non", "mu", "khoac", "so mi", "thun", "jean", "con hang",
+                "ton kho", "mau sac", "chat lieu")) {
+            return new IntentScore(SEARCH_PRODUCT, 0.85d);
+        }
+
         return null;
     }
-
     private boolean containsAny(String text, String... keywords) {
         for (String keyword : keywords) {
             if (text.contains(keyword)) {
@@ -133,6 +146,18 @@ public class IntentClassifierService {
                         "deal hom nay"
                     ))
                     .responseTemplate("Mình sẽ kiểm tra khuyến mãi đang hiệu lực để tư vấn chính xác.")
+                    .createdAt(Instant.now())
+                    .build(),
+                IntentTrainingData.builder()
+                    .intentName(SEARCH_PRODUCT)
+                    .examples(List.of(
+                        "tim ao khoac trang",
+                        "co ban quan jean khong",
+                        "san pham moi",
+                        "dam du tiec mau den",
+                        "ao thun nu gia duoi 300k"
+                    ))
+                    .responseTemplate("Mình sẽ tìm sản phẩm phù hợp cho bạn ngay.")
                     .createdAt(Instant.now())
                     .build(),
                 IntentTrainingData.builder()
@@ -194,6 +219,13 @@ public class IntentClassifierService {
                 "giam gia",
                 "coupon",
                 "deal"
+        ));
+        defaults.put(SEARCH_PRODUCT, List.of(
+                "tim ao",
+                "co ban quan",
+                "san pham",
+                "dam du tiec",
+                "ao khoac"
         ));
         defaults.put(GENERAL, List.of(
                 "xin chao",

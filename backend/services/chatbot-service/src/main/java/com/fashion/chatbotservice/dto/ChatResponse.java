@@ -38,6 +38,7 @@ public class ChatResponse {
         private String link;
         private String price;
         private List<String> availableSizes;
+        private List<String> availableColors;
         private String reason;
     }
 

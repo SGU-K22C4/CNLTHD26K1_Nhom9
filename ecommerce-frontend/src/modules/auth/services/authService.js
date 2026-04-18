@@ -21,4 +21,9 @@ export const authService = {
     const response = await axiosClient.post('/api/v1/auth/refresh', { refreshToken });
     return response;
   },
+
+  resendVerification: async (email) => {
+    const response = await axiosClient.post('/api/v1/auth/resend-verification', { email });
+    return response;
+  },
 };

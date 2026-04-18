@@ -6,7 +6,6 @@ import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
-@SuppressWarnings("null")
 public interface WishlistService {
 
     Page<ProductResponse> getWishlist(String userId, Pageable pageable);

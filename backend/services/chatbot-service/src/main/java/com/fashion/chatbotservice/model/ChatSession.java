@@ -82,6 +82,13 @@ public class ChatSession {
         @Builder.Default
         private Set<String> preferredCategories = new LinkedHashSet<>();
 
+        /** Lưu số đo cơ thể gần nhất để dùng cho câu tiếp theo (context memory) */
+        private Integer lastHeightCm;
+        private Integer lastWeightKg;
+        private Integer lastChestCm;
+        private Integer lastWaistCm;
+        private Integer lastHipCm;
+
         public static PreferenceProfile empty() {
             return PreferenceProfile.builder().build();
         }

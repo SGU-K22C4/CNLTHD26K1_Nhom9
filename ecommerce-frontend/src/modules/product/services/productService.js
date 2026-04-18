@@ -2,8 +2,8 @@ import axios from 'axios'
 import { API_CONFIG } from '../../../config/api.config'
 
 const api = axios.create({
-  baseURL: API_CONFIG.baseURL,
-  timeout: API_CONFIG.timeout,
+  baseURL: API_CONFIG.BASE_URL,
+  timeout: API_CONFIG.TIMEOUT,
 })
 
 const COLOR_TO_HEX = {

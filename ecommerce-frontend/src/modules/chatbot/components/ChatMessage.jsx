@@ -39,6 +39,9 @@ function ProductCard({ item }) {
       {Array.isArray(item.availableSizes) && item.availableSizes.length > 0 && (
         <p className="mt-1 text-[11px] text-[#666]">Size: {item.availableSizes.slice(0, 4).join(', ')}</p>
       )}
+      {Array.isArray(item.availableColors) && item.availableColors.length > 0 && (
+        <p className="mt-1 text-[11px] text-[#666]">Màu: {item.availableColors.slice(0, 4).join(', ')}</p>
+      )}
     </a>
   )
 }

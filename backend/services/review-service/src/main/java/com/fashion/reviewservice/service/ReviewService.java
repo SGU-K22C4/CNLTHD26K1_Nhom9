@@ -178,7 +178,6 @@ public class ReviewService {
                 .filter(Objects::nonNull)
                 .map(String::trim)
                 .filter(value -> !value.isBlank())
-                .limit(4)
                 .toList();
 
         if (normalized.size() > 4) {

@@ -120,7 +120,15 @@ export default function RegisterForm({ onSuccess }) {
         isOpen={!!verifyEmail}
         email={verifyEmail}
         onClose={() => setVerifyEmail('')}
-        onResend={() => console.log('Resend email to', verifyEmail)}
+        onResend={async () => {
+          try {
+            await authService.resendVerification(verifyEmail);
+            alert('Email xác thực đã được gửi lại thành công! Vui lòng kiểm tra hộp thư.');
+          } catch (err) {
+            const msg = err.response?.data?.message || 'Gửi lại email thất bại.';
+            alert(msg);
+          }
+        }}
       />
 
       <div className="w-full max-w-[500px] mx-auto flex flex-col gap-6 px-4 py-8 sm:px-0">

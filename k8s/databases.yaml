@@ -1,0 +1,359 @@
+# ============================================================================
+# Kubernetes Database StatefulSets — Fashion E-commerce
+# All databases use StatefulSet (not Deployment) for stable network identity
+# and persistent storage. Optimized for student VPS (replicas: 1).
+# ============================================================================
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 1. MySQL 8.0 — Used by: user, product, order, promotion services
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+  namespace: fashion
+  labels:
+    app: mysql
+spec:
+  serviceName: mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          ports:
+            - containerPort: 3306
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: MYSQL_ROOT_PASSWORD
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+            - name: mysql-init
+              mountPath: /docker-entrypoint-initdb.d
+          livenessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "localhost"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "localhost"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: mysql-init
+          configMap:
+            name: mysql-init-scripts
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: fashion
+  labels:
+    app: mysql
+spec:
+  clusterIP: None  # Headless service for StatefulSet
+  selector:
+    app: mysql
+  ports:
+    - port: 3306
+      targetPort: 3306
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 2. Redis 7.0 — Used by: cart-service (TTL-based cart storage)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: fashion
+  labels:
+    app: redis
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7.0-alpine
+          command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: redis-config
+              mountPath: /usr/local/etc/redis
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: redis-config
+          configMap:
+            name: redis-config
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: fashion
+  labels:
+    app: redis
+spec:
+  clusterIP: None
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 3. MongoDB 7.0 — Used by: review-service, chatbot-service
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+  namespace: fashion
+  labels:
+    app: mongo
+spec:
+  serviceName: mongo
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:7.0
+          ports:
+            - containerPort: 27017
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+          livenessProbe:
+            exec:
+              command: ["mongosh", "--eval", "db.adminCommand('ping')"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["mongosh", "--eval", "db.adminCommand('ping')"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  namespace: fashion
+  labels:
+    app: mongo
+spec:
+  clusterIP: None
+  selector:
+    app: mongo
+  ports:
+    - port: 27017
+      targetPort: 27017
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 4. Kafka (KRaft mode — NO ZooKeeper) — Used by: order, product services
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: fashion
+  labels:
+    app: kafka
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.6.1
+          ports:
+            - containerPort: 9092
+              name: external
+            - containerPort: 29092
+              name: internal
+            - containerPort: 9093
+              name: controller
+          env:
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: "broker,controller"
+            - name: KAFKA_LISTENERS
+              value: "INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "INTERNAL://kafka:29092,EXTERNAL://localhost:9092"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: "INTERNAL"
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: "CONTROLLER"
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "1@kafka:9093"
+            - name: CLUSTER_ID
+              value: "MkU3OEVBNTcwNTJENDM2Qk"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+              value: "0"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1"
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1"
+            initialDelaySeconds: 40
+            periodSeconds: 15
+            timeoutSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: kafka-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: fashion
+  labels:
+    app: kafka
+spec:
+  clusterIP: None
+  selector:
+    app: kafka
+  ports:
+    - name: internal
+      port: 29092
+      targetPort: 29092
+    - name: external
+      port: 9092
+      targetPort: 9092

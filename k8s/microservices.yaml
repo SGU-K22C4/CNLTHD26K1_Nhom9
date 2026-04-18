@@ -1,0 +1,688 @@
+# ============================================================================
+# Kubernetes Microservices — Fashion E-commerce
+# All 7 backend services + frontend in a single file.
+# Each service has: Deployment + ClusterIP Service
+# Optimized for student VPS: replicas=1, JVM memory limited.
+#
+# ⚠️ IMPORTANT: Before deploying, Docker images must be built and pushed:
+#    docker build -t fashion/user-service:latest -f services/user-service/Dockerfile .
+#    docker push fashion/user-service:latest  (or use a private registry)
+# ============================================================================
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 1. User Service (port 8081) — MySQL
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: fashion
+  labels:
+    app: user-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      containers:
+        - name: user-service
+          image: fashion/user-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+          env:
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: USER_DB_URL
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: SPRING_DATASOURCE_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: MYSQL_ROOT_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: JWT_SECRET
+            - name: MAIL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: MAIL_USERNAME
+            - name: MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: MAIL_PASSWORD
+            - name: FRONTEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: FRONTEND_URL
+            - name: JAVA_OPTS
+              value: "-Xmx256m -Xms128m"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "400Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8081
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: fashion
+  labels:
+    app: user-service
+spec:
+  selector:
+    app: user-service
+  ports:
+    - port: 8081
+      targetPort: 8081
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 2. Product Service (port 8082) — MySQL + Kafka
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-service
+  namespace: fashion
+  labels:
+    app: product-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: product-service
+  template:
+    metadata:
+      labels:
+        app: product-service
+    spec:
+      containers:
+        - name: product-service
+          image: fashion/product-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          env:
+            - name: SERVER_PORT
+              value: "8082"
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: PRODUCT_DB_URL
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: SPRING_DATASOURCE_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: MYSQL_ROOT_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: JWT_SECRET
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: JAVA_OPTS
+              value: "-Xmx256m -Xms128m"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "400Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8082
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8082
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-service
+  namespace: fashion
+  labels:
+    app: product-service
+spec:
+  selector:
+    app: product-service
+  ports:
+    - port: 8082
+      targetPort: 8082
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 3. Cart Service (port 8083) — Redis
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart-service
+  namespace: fashion
+  labels:
+    app: cart-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cart-service
+  template:
+    metadata:
+      labels:
+        app: cart-service
+    spec:
+      containers:
+        - name: cart-service
+          image: fashion/cart-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8083
+          env:
+            - name: SPRING_DATA_REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: SPRING_DATA_REDIS_HOST
+            - name: SPRING_DATA_REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: SPRING_DATA_REDIS_PORT
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: JWT_SECRET
+            - name: JAVA_OPTS
+              value: "-Xmx256m -Xms128m"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "400Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cart-service
+  namespace: fashion
+  labels:
+    app: cart-service
+spec:
+  selector:
+    app: cart-service
+  ports:
+    - port: 8083
+      targetPort: 8083
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 4. Order Service (port 8084) — MySQL + Kafka + VNPay + HPA
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+  namespace: fashion
+  labels:
+    app: order-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      containers:
+        - name: order-service
+          image: fashion/order-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8084
+          env:
+            - name: SERVER_PORT
+              value: "8084"
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: ORDER_DB_URL
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: SPRING_DATASOURCE_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: MYSQL_ROOT_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: JWT_SECRET
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: VNPAY_TMN_CODE
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: VNPAY_TMN_CODE
+            - name: VNPAY_HASH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: VNPAY_HASH_SECRET
+            - name: VNPAY_PAYMENT_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: VNPAY_PAYMENT_URL
+            - name: VNPAY_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: VNPAY_API_URL
+            - name: VNPAY_RETURN_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: VNPAY_RETURN_URL
+            - name: JAVA_OPTS
+              value: "-Xmx256m -Xms128m"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "400Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+  namespace: fashion
+  labels:
+    app: order-service
+spec:
+  selector:
+    app: order-service
+  ports:
+    - port: 8084
+      targetPort: 8084
+
+---
+# HPA — Auto-scale order-service from 1 to 5 pods when CPU > 70%
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: order-service-hpa
+  namespace: fashion
+  labels:
+    app: order-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: order-service
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 5. Promotion Service (port 8085) — MySQL
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: promotion-service
+  namespace: fashion
+  labels:
+    app: promotion-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: promotion-service
+  template:
+    metadata:
+      labels:
+        app: promotion-service
+    spec:
+      containers:
+        - name: promotion-service
+          image: fashion/promotion-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8085
+          env:
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: PROMOTION_DB_URL
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: SPRING_DATASOURCE_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: MYSQL_ROOT_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: JWT_SECRET
+            - name: JAVA_OPTS
+              value: "-Xmx256m -Xms128m"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "400Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8085
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8085
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: promotion-service
+  namespace: fashion
+  labels:
+    app: promotion-service
+spec:
+  selector:
+    app: promotion-service
+  ports:
+    - port: 8085
+      targetPort: 8085
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 6. Review Service (port 8086) — MongoDB
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: review-service
+  namespace: fashion
+  labels:
+    app: review-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: review-service
+  template:
+    metadata:
+      labels:
+        app: review-service
+    spec:
+      containers:
+        - name: review-service
+          image: fashion/review-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8086
+          env:
+            - name: SERVER_PORT
+              value: "8086"
+            - name: SPRING_DATA_MONGODB_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: REVIEW_MONGODB_URI
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: JWT_SECRET
+            - name: JAVA_OPTS
+              value: "-Xmx256m -Xms128m"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "400Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8086
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8086
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: review-service
+  namespace: fashion
+  labels:
+    app: review-service
+spec:
+  selector:
+    app: review-service
+  ports:
+    - port: 8086
+      targetPort: 8086
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 7. Chatbot Service (port 8087) — MongoDB + AI (OpenRouter)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatbot-service
+  namespace: fashion
+  labels:
+    app: chatbot-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chatbot-service
+  template:
+    metadata:
+      labels:
+        app: chatbot-service
+    spec:
+      containers:
+        - name: chatbot-service
+          image: fashion/chatbot-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8087
+          env:
+            - name: SERVER_PORT
+              value: "8087"
+            - name: SPRING_DATA_MONGODB_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: CHATBOT_MONGODB_URI
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: OPENROUTER_API_KEY
+            - name: OPENROUTER_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: OPENROUTER_MODEL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: JWT_SECRET
+            - name: PRODUCT_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: PRODUCT_SERVICE_URL
+            - name: PROMOTION_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: PROMOTION_SERVICE_URL
+            - name: ORDER_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: ORDER_SERVICE_URL
+            - name: JAVA_OPTS
+              value: "-Xmx256m -Xms128m"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "400Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8087
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8087
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chatbot-service
+  namespace: fashion
+  labels:
+    app: chatbot-service
+spec:
+  selector:
+    app: chatbot-service
+  ports:
+    - port: 8087
+      targetPort: 8087

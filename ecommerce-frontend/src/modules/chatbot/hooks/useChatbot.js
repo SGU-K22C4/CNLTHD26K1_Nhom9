@@ -66,6 +66,11 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
         }))
       }
     } catch (err) {
+      if (err?.message === 'Không tìm thấy phiên chat' || err?.response?.status === 404) {
+        // Đây là session mới, server chưa có data => bỏ qua lỗi chứ không hiện đỏ UI
+        setError('')
+        return
+      }
       setError(err?.message || 'Không thể tải lịch sử chatbot')
     } finally {
       setIsHydrating(false)

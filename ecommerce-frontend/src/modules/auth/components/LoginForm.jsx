@@ -56,6 +56,7 @@ export default function LoginForm() {
   const {
     register,
     handleSubmit,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm();
   const onSubmit = async (data) => {
@@ -75,6 +76,18 @@ export default function LoginForm() {
     }
   };
 
+  const handleResendEmail = async () => {
+    const email = getValues('email');
+    if (!email) return;
+    try {
+      await authService.resendVerification(email);
+      alert('Email xác thực đã được gửi lại thành công! Vui lòng kiểm tra hộp thư.');
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Gửi lại email thất bại.';
+      alert(msg);
+    }
+  };
+
   return (
     <>
       <WelcomeModal isOpen={showWelcome} onClose={() => setShowWelcome(false)} />
@@ -87,8 +100,17 @@ export default function LoginForm() {
 
         {/* Server Error Banner */}
         {serverError && (
-          <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-            {serverError}
+          <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex flex-col gap-2">
+            <span>{serverError}</span>
+            {serverError.includes('kích hoạt') && (
+              <button 
+                type="button" 
+                onClick={handleResendEmail}
+                className="self-start text-[#5A6D57] font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer text-sm"
+              >
+                Gửi lại email xác thực
+              </button>
+            )}
           </div>
         )}
 

@@ -23,7 +23,6 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-@SuppressWarnings("null")
 public class AuthService {
 
     private static final long REFRESH_TOKEN_DAYS = 7;
@@ -76,6 +75,33 @@ public class AuthService {
                 .firstName(user.getFullName())
                 .role(role)
                 .build();
+    }
+
+    @Transactional
+    public void resendVerificationEmail(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Email chưa được đăng ký. Vui lòng đăng ký tài khoản trước!"));
+
+        if (user.isEmailVerified()) {
+            throw new IllegalStateException("Email đã được xác thực. Bạn có thể đăng nhập ngay!");
+        }
+
+        // Xóa token cũ để tránh spam
+        emailVerificationTokenRepository.deleteAllByUserId(user.getId());
+
+        // Tạo token mới hạn 24h
+        String token = UUID.randomUUID().toString();
+        com.fashion.userservice.entity.EmailVerificationToken verificationToken =
+                com.fashion.userservice.entity.EmailVerificationToken.builder()
+                        .userId(user.getId())
+                        .token(token)
+                        .expiresAt(LocalDateTime.now().plusHours(24))
+                        .createdAt(LocalDateTime.now())
+                        .build();
+        emailVerificationTokenRepository.save(verificationToken);
+
+        mailService.sendVerificationEmail(user.getEmail(), user.getFullName(), token);
     }
 
     @Transactional

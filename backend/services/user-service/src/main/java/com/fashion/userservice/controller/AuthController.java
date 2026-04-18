@@ -55,4 +55,10 @@ public class AuthController {
         authService.verifyEmail(token);
         return ResponseEntity.ok("Xác thực email thành công! Bạn có thể đăng nhập ngay bây giờ.");
     }
+
+    @PostMapping("/resend-verification")
+    public ResponseEntity<Map<String, String>> resendVerification(@RequestBody Map<String, String> body) {
+        authService.resendVerificationEmail(body.get("email"));
+        return ResponseEntity.ok(Map.of("message", "Email xác thực đã được gửi lại thành công!"));
+    }
 }

@@ -11,7 +11,6 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
-@SuppressWarnings("null")
 public class VNPayService {
 
     private final VNPayConfig vnPayConfig;
@@ -66,21 +65,23 @@ public class VNPayService {
         StringBuilder query = new StringBuilder();
 
         Iterator<Map.Entry<String, String>> itr = params.entrySet().iterator();
+        boolean first = true;
         while (itr.hasNext()) {
             Map.Entry<String, String> entry = itr.next();
             String fieldName = entry.getKey();
             String fieldValue = entry.getValue();
             if (fieldValue != null && !fieldValue.isEmpty()) {
+                if (!first) {
+                    hashData.append('&');
+                    query.append('&');
+                }
                 // Build hash data
                 hashData.append(fieldName).append('=').append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
                 // Build query
                 query.append(URLEncoder.encode(fieldName, StandardCharsets.US_ASCII))
                      .append('=')
                      .append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
-                if (itr.hasNext()) {
-                    hashData.append('&');
-                    query.append('&');
-                }
+                first = false;
             }
         }
 
@@ -107,15 +108,17 @@ public class VNPayService {
 
         StringBuilder hashData = new StringBuilder();
         Iterator<Map.Entry<String, String>> itr = fields.entrySet().iterator();
+        boolean first = true;
         while (itr.hasNext()) {
             Map.Entry<String, String> entry = itr.next();
             String fieldName = entry.getKey();
             String fieldValue = entry.getValue();
             if (fieldValue != null && !fieldValue.isEmpty()) {
-                hashData.append(fieldName).append('=').append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
-                if (itr.hasNext()) {
+                if (!first) {
                     hashData.append('&');
                 }
+                hashData.append(fieldName).append('=').append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
+                first = false;
             }
         }
 

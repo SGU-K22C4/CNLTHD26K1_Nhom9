@@ -1,16 +1,21 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { X, Minus, Plus, User, ChevronLeft, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useContext } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { X, Minus, Plus, User, ChevronLeft, ChevronDown, MapPin } from 'lucide-react'
 import { useCartContext } from '../../cart/context/CartContext'
 import { formatCurrency } from '../../../shared/utils/format'
 import { orderService } from '../services/orderService'
 import { paymentService } from '../services/paymentService'
 import { loyaltyService } from '../services/loyaltyService'
+import { userService } from '../../user/services/userService'
+import AuthContext from '../../auth/context/AuthContext'
+import BannerHeader from '../../../shared/components/layout/headers/BannerHeader'
+import NavBar from '../../../shared/components/layout/headers/NavBar'
 
 const TAX_RATE = 0.08
 
 export default function CheckoutPage() {
   const { items, removeItem, updateQuantity, subtotal, totalItems, clearCart = () => {} } = useCartContext()
+  const { user } = useContext(AuthContext)
   const navigate = useNavigate()
 
   const tax = subtotal * TAX_RATE
@@ -46,11 +51,37 @@ export default function CheckoutPage() {
   const [loyaltyMessage, setLoyaltyMessage] = useState('')
   const [loyaltyError, setLoyaltyError] = useState('')
   const [applyingPoints, setApplyingPoints] = useState(false)
+  const [useRegisteredAddress, setUseRegisteredAddress] = useState(true)
 
   /* ── Address Dropdowns State ── */
   const [provinces, setProvinces] = useState([])
   const [districts, setDistricts] = useState([])
   const [wards, setWards] = useState([])
+
+  /* ── Auto-fill from user profile ── */
+  useEffect(() => {
+    if (!user) return
+    // Fill from AuthContext immediately
+    setForm(prev => ({
+      ...prev,
+      email: prev.email || user.email || '',
+      firstName: prev.firstName || user.firstName || '',
+      lastName: prev.lastName || user.lastName || '',
+    }))
+    // Then fetch full profile for phone
+    userService.getProfile()
+      .then(profile => {
+        if (!profile) return
+        setForm(prev => ({
+          ...prev,
+          email: prev.email || profile.email || '',
+          firstName: prev.firstName || profile.firstName || '',
+          lastName: prev.lastName || profile.lastName || '',
+          phone: prev.phone || profile.phoneNumber || '',
+        }))
+      })
+      .catch(err => console.warn('Could not load user profile for auto-fill:', err))
+  }, [user])
 
   useEffect(() => {
     fetch('https://provinces.open-api.vn/api/p/')
@@ -329,10 +360,14 @@ export default function CheckoutPage() {
       {/* Contact */}
       <div className="flex items-center justify-between mb-3 mt-6">
         <h2 className="text-base font-semibold text-[#202020]">Liên hệ</h2>
-        <p className="text-sm text-[#404040]">
-          Đã có tài khoản?{' '}
-          <button className="underline font-medium hover:text-[#5A6D57] transition-colors">Đăng nhập</button>
-        </p>
+        {user ? (
+          <p className="text-sm text-[#5A6D57] font-medium">👋 Xin chào, {user.firstName} {user.lastName}</p>
+        ) : (
+          <p className="text-sm text-[#404040]">
+            Đã có tài khoản?{' '}
+            <Link to="/login" className="underline font-medium hover:text-[#5A6D57] transition-colors">Đăng nhập</Link>
+          </p>
+        )}
       </div>
       <div className="relative mb-2">
         <User size={16} className={`absolute left-3 top-1/2 -translate-y-1/2 ${errors.email ? 'text-red-500' : 'text-[#9a9a9a]'}`} />
@@ -347,7 +382,19 @@ export default function CheckoutPage() {
       </label>
 
       {/* Shipping Address */}
-      <h2 className="text-base font-semibold text-[#202020] mb-3">Địa chỉ giao hàng</h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-base font-semibold text-[#202020]">Địa chỉ giao hàng</h2>
+        {user && (
+          <button
+            type="button"
+            onClick={() => setUseRegisteredAddress(!useRegisteredAddress)}
+            className="text-xs text-[#5A6D57] underline hover:text-[#748C70] transition-colors flex items-center gap-1"
+          >
+            <MapPin size={12} />
+            {useRegisteredAddress ? 'Nhập địa chỉ khác' : 'Dùng thông tin đã đăng ký'}
+          </button>
+        )}
+      </div>
       <div className="flex flex-col gap-3">
         <div>
           <input type="text" placeholder="Họ" value={form.firstName} onChange={set('firstName')} className={getInputClass('firstName')} />
@@ -493,9 +540,13 @@ export default function CheckoutPage() {
   return (
     <div className="min-h-screen bg-white font-[Montserrat]">
 
-      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      {/* ── Site Header ── */}
+      <BannerHeader />
+      <NavBar />
+
+      {/* ═══════════════════════════════════════════
           MOBILE LAYOUT (hidden on lg+)
-      â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+      ═══════════════════════════════════════════ */}
       <div className="lg:hidden flex flex-col min-h-screen px-4 pt-6 pb-10">
 
         {/* Logo */}
@@ -590,10 +641,14 @@ export default function CheckoutPage() {
           {/* Contact */}
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-[#202020]">Liên hệ</h2>
-            <p className="text-sm text-[#404040]">
-              Đã có tài khoản?{' '}
-              <button className="underline font-medium hover:text-[#5A6D57] transition-colors">Đăng nhập</button>
-            </p>
+            {user ? (
+              <p className="text-sm text-[#5A6D57] font-medium">👋 Xin chào, {user.firstName} {user.lastName}</p>
+            ) : (
+              <p className="text-sm text-[#404040]">
+                Đã có tài khoản?{' '}
+                <Link to="/login" className="underline font-medium hover:text-[#5A6D57] transition-colors">Đăng nhập</Link>
+              </p>
+            )}
           </div>
           <div className="relative mb-2">
             <User size={16} className={`absolute left-3 top-1/2 -translate-y-1/2 ${errors.email ? 'text-red-500' : 'text-[#9a9a9a]'}`} />
@@ -608,7 +663,19 @@ export default function CheckoutPage() {
           </label>
 
           {/* Shipping Address */}
-          <h2 className="text-lg font-semibold text-[#202020] mb-4">Địa chỉ giao hàng</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-[#202020]">Địa chỉ giao hàng</h2>
+            {user && (
+              <button
+                type="button"
+                onClick={() => setUseRegisteredAddress(!useRegisteredAddress)}
+                className="text-xs text-[#5A6D57] underline hover:text-[#748C70] transition-colors flex items-center gap-1"
+              >
+                <MapPin size={14} />
+                {useRegisteredAddress ? 'Nhập địa chỉ khác' : 'Dùng thông tin đã đăng ký'}
+              </button>
+            )}
+          </div>
           <div className="flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-4">
               <div>

@@ -22,6 +22,9 @@ data:
       - name: cors
         config:
           origins:
+            - "http://146.190.5.69"
+            - "http://modimal.tranhuy.dev"
+            - "https://modimal.tranhuy.dev"
             - "http://localhost:5173"
             - "http://localhost:3000"
           methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
@@ -110,6 +113,7 @@ data:
           - name: chatbot-route
             paths: ["/api/v1/chatbot"]
             strip_path: false
+
 
 ---
 # ── Kong Entrypoint Wrapper Script ──────────────────────────────────────────
@@ -346,13 +350,16 @@ spec:
           livenessProbe:
             exec:
               command: ["kong", "health"]
-            initialDelaySeconds: 30
-            periodSeconds: 10
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
           readinessProbe:
             exec:
               command: ["kong", "health"]
-            initialDelaySeconds: 15
+            initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
       volumes:
         - name: kong-config-template
           configMap:

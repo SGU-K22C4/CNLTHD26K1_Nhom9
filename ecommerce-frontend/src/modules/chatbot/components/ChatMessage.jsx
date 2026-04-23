@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 function intentLabel(intentName) {
   switch (intentName) {
     case 'CONSULT_SIZE':
@@ -13,10 +15,8 @@ function intentLabel(intentName) {
 
 function ProductCard({ item }) {
   return (
-    <a
-      href={item.link || '#'}
-      target="_blank"
-      rel="noreferrer"
+    <Link
+      to={item.link || '#'}
       className="block min-w-44 rounded-lg border border-[#e7e7e7] bg-white p-2 transition hover:border-[#cfcfcf]"
     >
       {item.imageUrl ? (
@@ -42,7 +42,7 @@ function ProductCard({ item }) {
       {Array.isArray(item.availableColors) && item.availableColors.length > 0 && (
         <p className="mt-1 text-[11px] text-[#666]">Màu: {item.availableColors.slice(0, 4).join(', ')}</p>
       )}
-    </a>
+    </Link>
   )
 }
 

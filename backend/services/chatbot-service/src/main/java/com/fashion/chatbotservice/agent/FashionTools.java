@@ -85,51 +85,64 @@ public class FashionTools {
             Tìm kiếm sản phẩm thời trang theo từ khóa, mức giá.
             Gọi khi người dùng hỏi về sản phẩm, giá cả, màu sắc, chất liệu, tồn kho.
             VD: 'áo sơ mi đen', 'quần jean dưới 500k', 'váy mùa hè'.
+
+            CÁCH TÁCH TỪ KHÓA — RẤT QUAN TRỌNG:
+            - search: CHỈ chứa TÊN LOẠI SẢN PHẨM, KHÔNG gộp màu sắc/chất liệu.
+              VD: 'áo thun nam màu đen' → search='áo thun', color='đen'
+              VD: 'quần jean nữ xanh' → search='quần jean', color='xanh'
+              VD: 'váy đầm dự tiệc' → search='váy đầm', color=null
+            - color: tách riêng thông tin màu sắc nếu có
+            - Nếu user nói 'nam' hoặc 'nữ', BỎ QUA từ này trong search (hệ thống không phân biệt giới tính theo tên)
+
+            QUY ĐỔI GIÁ TIẾNG VIỆT sang VND:
+            - "500k" = 500000, "300k" = 300000
+            - "2 triệu" hoặc "2tr" = 2000000
+            - "dưới 500k" → minPrice=null, maxPrice=500000
+            - "từ 300 đến 500k" → minPrice=300000, maxPrice=500000
+            - "dưới 2 triệu" → minPrice=null, maxPrice=2000000
+
+            CRITICAL: Extract the search keyword ONLY from what the user actually said.
+            Do NOT invent product names or add details the user did not mention.
             """)
     public String searchProducts(
-            @P("Từ khóa tìm kiếm sản phẩm") String search,
-            @P("Giá tối thiểu (VND), null nếu không giới hạn") Long minPrice,
-            @P("Giá tối đa (VND), null nếu không giới hạn") Long maxPrice) {
+            @P("Từ khóa tìm kiếm: CHỈ tên loại đồ (VD: 'quần jean', 'áo thun', 'váy đầm'). KHÔNG gộp màu/giá/giới tính") String search,
+            @P("Giá tối thiểu (VND), null nếu không giới hạn. VD: 300k=300000") Long minPrice,
+            @P("Giá tối đa (VND), null nếu không giới hạn. VD: 500k=500000, 2 triệu=2000000") Long maxPrice,
+            @P("Màu sắc sản phẩm nếu user có đề cập (VD: 'đen', 'trắng', 'xanh'). null nếu không đề cập.") String color) {
         try {
-            String encodedSearch = search != null
-                    ? URLEncoder.encode(search, StandardCharsets.UTF_8)
-                    : "";
-            StringBuilder uri = new StringBuilder(productServiceUrl)
-                    .append("/api/v1/products?search=").append(encodedSearch)
-                    .append("&page=0&size=5&sortBy=createdAt&sortDir=desc");
-            if (minPrice != null) uri.append("&minPrice=").append(minPrice);
-            if (maxPrice != null) uri.append("&maxPrice=").append(maxPrice);
+            // Try search with original keyword first
+            List<ChatResponse.ProductSuggestion> suggestions = executeSearch(search, minPrice, maxPrice);
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> payload = webClient.get()
-                    .uri(uri.toString())
-                    .accept(MediaType.APPLICATION_JSON)
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .timeout(TOOL_TIMEOUT)
-                    .block();
+            // If no results, try progressively shorter keywords (fallback)
+            if (suggestions.isEmpty() && search != null) {
+                for (String fallback : generateFallbackKeywords(search)) {
+                    suggestions = executeSearch(fallback, minPrice, maxPrice);
+                    if (!suggestions.isEmpty()) {
+                        log.info("Fallback search succeeded with keyword: '{}'", fallback);
+                        break;
+                    }
+                }
+            }
 
-            List<ChatResponse.ProductSuggestion> suggestions = mapProductPage(payload);
             if (collector() != null) collector().addProducts(suggestions);
 
             if (suggestions.isEmpty()) {
-                return "Không tìm thấy sản phẩm nào phù hợp với \"" + search + "\".";
+                return "Không tìm thấy sản phẩm nào phù hợp. Bạn có thể thử từ khóa khác (VD: 'áo thun', 'quần jean', 'váy').";
             }
 
+            // Post-filter: highlight color matches if user specified color
             StringBuilder result = new StringBuilder("Tìm thấy " + suggestions.size() + " sản phẩm:\n");
             for (var s : suggestions) {
+                boolean colorMatch = (color != null && !color.isBlank())
+                        && s.getAvailableColors().stream()
+                                .anyMatch(c -> c.toLowerCase(Locale.ROOT).contains(color.toLowerCase(Locale.ROOT)));
+
                 result.append("- ").append(s.getName())
                         .append(" | Giá: ").append(s.getPrice())
                         .append(" | Size: ").append(String.join(", ", s.getAvailableSizes()))
-                        .append(" | Màu: ").append(String.join(", ", s.getAvailableColors()))
-                        .append("\n");
-            }
-            // Ghi chú nếu còn nhiều sản phẩm hơn
-            @SuppressWarnings("unchecked")
-            Object totalElements = payload != null ? payload.get("totalElements") : null;
-            if (totalElements instanceof Number total && total.intValue() > suggestions.size()) {
-                result.append("\n\uD83D\uDC49 Còn ").append(total.intValue() - suggestions.size())
-                        .append(" sản phẩm khác. Bạn có thể xem thêm tại trang sản phẩm!");
+                        .append(" | Màu: ").append(String.join(", ", s.getAvailableColors()));
+                if (colorMatch) result.append(" ✓ (có màu ").append(color).append(")");
+                result.append("\n");
             }
             return result.toString();
         } catch (Exception ex) {
@@ -138,12 +151,66 @@ public class FashionTools {
         }
     }
 
+    /**
+     * Execute search against product-service API.
+     */
+    @SuppressWarnings("unchecked")
+    private List<ChatResponse.ProductSuggestion> executeSearch(String search, Long minPrice, Long maxPrice) {
+        String encodedSearch = search != null
+                ? URLEncoder.encode(search, StandardCharsets.UTF_8)
+                : "";
+        StringBuilder uri = new StringBuilder(productServiceUrl)
+                .append("/api/v1/products?search=").append(encodedSearch)
+                .append("&page=0&size=5&sortBy=createdAt&sortDir=desc");
+        if (minPrice != null) uri.append("&minPrice=").append(minPrice);
+        if (maxPrice != null) uri.append("&maxPrice=").append(maxPrice);
+
+        Map<String, Object> payload = webClient.get()
+                .uri(uri.toString())
+                .accept(MediaType.APPLICATION_JSON)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .timeout(TOOL_TIMEOUT)
+                .block();
+
+        return mapProductPage(payload);
+    }
+
+    /**
+     * Generate progressively shorter search keywords for fallback.
+     * "áo thun nam" → ["áo thun", "áo"]
+     * "quần jean nữ" → ["quần jean", "quần"]
+     */
+    private List<String> generateFallbackKeywords(String original) {
+        // Strip common non-searchable words first
+        String cleaned = original.toLowerCase(Locale.ROOT)
+                .replaceAll("\\b(nam|nữ|mau|màu|cho|của|cái|chiếc|loại|kiểu)\\b", "")
+                .replaceAll("\\s+", " ").trim();
+
+        List<String> fallbacks = new ArrayList<>();
+        // If cleaned differs from original, try it first
+        if (!cleaned.equalsIgnoreCase(original.trim())) {
+            fallbacks.add(cleaned);
+        }
+        // Progressively remove last word
+        String[] words = cleaned.split("\\s+");
+        for (int len = words.length - 1; len >= 1; len--) {
+            fallbacks.add(String.join(" ", java.util.Arrays.copyOf(words, len)));
+        }
+        return fallbacks;
+    }
+
     // ========== ORDER TOOLS ==========
 
     @Tool("""
             Kiểm tra trạng thái đơn hàng theo mã đơn.
             Gọi khi người dùng hỏi về đơn hàng, giao hàng, trạng thái.
             VD: 'đơn ORD-123 giao chưa', 'kiểm tra đơn hàng'.
+
+            CRITICAL: Do NOT invent or guess the Order Number.
+            If the user has not explicitly provided an Order ID (e.g., ORD-xxx),
+            you MUST ask them to provide it before calling this tool.
+            NEVER fabricate an order number.
             """)
     public String checkOrderByNumber(
             @P("Mã đơn hàng, VD: ORD-1713200000000") String orderNumber) {
@@ -175,6 +242,10 @@ public class FashionTools {
             Kiểm tra mã giảm giá / coupon có hợp lệ với đơn hàng không.
             Gọi khi người dùng hỏi về mã giảm giá, coupon, voucher.
             VD: 'mã SALE20 dùng được không', 'coupon cho đơn 1 triệu'.
+
+            CRITICAL: Do NOT invent or guess the Coupon Code or Order Amount.
+            If the user has not explicitly provided BOTH the coupon code AND the order amount,
+            you MUST ask them to provide the missing information before calling this tool.
             """)
     public String validateCoupon(
             @P("Mã coupon") String code,
@@ -245,6 +316,10 @@ public class FashionTools {
             Tư vấn size thời trang dựa trên số đo cơ thể.
             Gọi khi người dùng cung cấp chiều cao, cân nặng, vòng ngực/eo/hông
             và muốn biết nên mặc size gì.
+
+            CRITICAL: Only pass measurement values the user has EXPLICITLY stated.
+            Use null for any measurement NOT mentioned by the user.
+            Do NOT guess height, weight, or body measurements.
             """)
     public String consultSize(
             @P("Chiều cao (cm)") Integer heightCm,
@@ -289,7 +364,7 @@ public class FashionTools {
         StringBuilder allResults = new StringBuilder();
 
         for (String query : queries) {
-            String toolResult = searchProducts(query, null, null);
+            String toolResult = searchProducts(query, null, null, null);
             allResults.append(toolResult).append("\n");
         }
 
@@ -364,7 +439,7 @@ public class FashionTools {
                     if (price != null && (minPrice == null || price.compareTo(minPrice) < 0)) {
                         minPrice = price;
                     }
-                    if (link.isBlank()) link = stringValue(variant.get("productUrl"));
+                    // Không dùng variant.get("productUrl") vì DB có thể chứa link ngoài (Zara, H&M...)
                     if (imageUrl.isBlank()) {
                         Object images = variant.get("images");
                         if (images instanceof List<?> imgList && !imgList.isEmpty()) {
@@ -388,7 +463,8 @@ public class FashionTools {
                 }
             }
 
-            if (link.isBlank()) link = "/products/" + productId;
+            // Luôn dùng link nội bộ frontend, không lấy link ngoài từ DB
+            link = "/products/" + productId;
 
             suggestions.add(ChatResponse.ProductSuggestion.builder()
                     .productId(productId)

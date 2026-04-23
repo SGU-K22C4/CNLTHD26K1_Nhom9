@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { cartService } from '../services/cartService'
 import { productService } from '../../product/services/productService'
+import { useAuth } from '../../auth/hooks/useAuth'
 
 const CartContext = createContext(null)
 
@@ -15,6 +16,7 @@ export const useCartContext = () => {
 }
 
 export function CartProvider({ children }) {
+  const { user } = useAuth()
   const [items, setItems] = useState([])
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [drawerAnchor, setDrawerAnchor] = useState({ top: 96, right: 16 })
@@ -109,6 +111,20 @@ export function CartProvider({ children }) {
       mounted = false
     }
   }, [hydrateCartItems])
+
+  // === Clear cart on logout, re-sync on login ===
+  useEffect(() => {
+    if (!user) {
+      // User just logged out → clear cart state immediately
+      setItems([])
+      productVariantIndexRef.current = null
+    } else {
+      // User just logged in → re-sync cart from backend
+      syncCart().catch((err) => {
+        console.warn('Failed to sync cart after login:', err)
+      })
+    }
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Drawer controls ─────────────────────────────────────────────────────── */
   const openDrawer = useCallback((event) => {

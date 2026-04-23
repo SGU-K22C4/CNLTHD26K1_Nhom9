@@ -52,3 +52,47 @@ data:
   # ── AI Model (Ollama) ─────────────────────────────────────────────────────
   OLLAMA_MODEL: "qwen2.5:7b"
   OLLAMA_BASE_URL: "http://localhost:11434/v1"
+
+---
+# ============================================================================
+# MySQL Init Scripts — Create databases on first startup
+# Referenced by: databases.yaml → mysql StatefulSet → volumeMount mysql-init
+# Without this ConfigMap, MySQL starts but NO databases are created,
+# causing all Spring Boot services to crash on startup.
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init-scripts
+  namespace: fashion
+  labels:
+    app.kubernetes.io/part-of: fashion-ecommerce
+data:
+  01-create-databases.sql: |
+    CREATE DATABASE IF NOT EXISTS fashion_user_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    CREATE DATABASE IF NOT EXISTS fashion_product_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    CREATE DATABASE IF NOT EXISTS fashion_order_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    CREATE DATABASE IF NOT EXISTS fashion_promotion_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+---
+# ============================================================================
+# Redis Configuration — Persistence settings
+# Referenced by: databases.yaml → redis StatefulSet → volumeMount redis-config
+# Without this ConfigMap, Redis container fails to start because the command
+# explicitly loads /usr/local/etc/redis/redis.conf which doesn't exist.
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: fashion
+  labels:
+    app.kubernetes.io/part-of: fashion-ecommerce
+data:
+  redis.conf: |
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    save 900 1
+    save 300 10
+    save 60 10000

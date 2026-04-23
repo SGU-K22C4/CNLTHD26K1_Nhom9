@@ -11,6 +11,15 @@ import java.util.Map;
 @RestControllerAdvice
 public class ChatbotExceptionHandler {
 
+    @ExceptionHandler(ChatSessionNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleSessionNotFound(ChatSessionNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                "timestamp", Instant.now().toString(),
+                "status", 404,
+                "message", ex.getMessage()
+        ));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleBadRequest(IllegalArgumentException ex) {
         return ResponseEntity.badRequest().body(Map.of(

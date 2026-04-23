@@ -5,7 +5,6 @@ WORKDIR /app
 COPY pom.xml .
 COPY common/pom.xml common/pom.xml
 COPY common/src common/src
-COPY api-gateway/pom.xml api-gateway/pom.xml
 COPY services/config-service/pom.xml services/config-service/pom.xml
 COPY services/user-service/pom.xml services/user-service/pom.xml
 COPY services/order-service/pom.xml services/order-service/pom.xml
@@ -25,4 +24,4 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/services/product-service/target/*.jar app.jar
 EXPOSE 8082
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

@@ -1,7 +1,9 @@
+import { generateUUID } from './uuid'
+
 function getGuestUserId() {
   let id = localStorage.getItem('guestUserId')
   if (!id) {
-    id = crypto.randomUUID()
+    id = generateUUID()
     localStorage.setItem('guestUserId', id)
   }
   return id

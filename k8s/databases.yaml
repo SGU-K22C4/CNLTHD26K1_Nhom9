@@ -208,13 +208,16 @@ spec:
           livenessProbe:
             exec:
               command: ["mongosh", "--eval", "db.adminCommand('ping')"]
-            initialDelaySeconds: 30
-            periodSeconds: 10
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
           readinessProbe:
             exec:
               command: ["mongosh", "--eval", "db.adminCommand('ping')"]
-            initialDelaySeconds: 15
+            initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
   volumeClaimTemplates:
     - metadata:
         name: mongo-data
@@ -262,6 +265,18 @@ spec:
       labels:
         app: kafka
     spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      initContainers:
+        - name: remove-lost-found
+          image: busybox:1.36
+          command: ["sh", "-c", "rm -rf /var/lib/kafka/data/lost+found"]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
       containers:
         - name: kafka
           image: confluentinc/cp-kafka:7.6.1
@@ -278,17 +293,17 @@ spec:
             - name: KAFKA_PROCESS_ROLES
               value: "broker,controller"
             - name: KAFKA_LISTENERS
-              value: "INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+              value: "INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093"
             - name: KAFKA_ADVERTISED_LISTENERS
-              value: "INTERNAL://kafka:29092,EXTERNAL://localhost:9092"
+              value: "INTERNAL://kafka-0.kafka.fashion.svc.cluster.local:29092"
             - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
-              value: "CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
+              value: "CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT"
             - name: KAFKA_INTER_BROKER_LISTENER_NAME
               value: "INTERNAL"
             - name: KAFKA_CONTROLLER_LISTENER_NAMES
               value: "CONTROLLER"
             - name: KAFKA_CONTROLLER_QUORUM_VOTERS
-              value: "1@kafka:9093"
+              value: "1@localhost:9093"
             - name: CLUSTER_ID
               value: "MkU3OEVBNTcwNTJENDM2Qk"
             - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
@@ -301,34 +316,24 @@ spec:
               value: "0"
             - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
               value: "true"
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xmx512m -Xms256m"
           resources:
             requests:
-              memory: "512Mi"
+              memory: "768Mi"
               cpu: "250m"
             limits:
-              memory: "1Gi"
+              memory: "1536Mi"
               cpu: "500m"
           volumeMounts:
             - name: kafka-data
               mountPath: /var/lib/kafka/data
-          livenessProbe:
-            exec:
-              command:
-                - sh
-                - -c
-                - "kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1"
-            initialDelaySeconds: 60
-            periodSeconds: 15
-            timeoutSeconds: 10
           readinessProbe:
-            exec:
-              command:
-                - sh
-                - -c
-                - "kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1"
-            initialDelaySeconds: 40
-            periodSeconds: 15
-            timeoutSeconds: 10
+            tcpSocket:
+              port: 29092
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
   volumeClaimTemplates:
     - metadata:
         name: kafka-data

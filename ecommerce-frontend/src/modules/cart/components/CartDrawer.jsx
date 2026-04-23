@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useCartContext } from '../context/CartContext'
 import CartItem from './CartItem'
+import { formatCurrency } from '../../../shared/utils/format'
 
 export default function CartDrawer() {
   const {
@@ -93,7 +94,7 @@ export default function CartDrawer() {
             <div className="flex items-center justify-between mb-4">
               <span className="font-[Montserrat] text-sm text-[#404040]">Subtotal</span>
               <span className="font-[Montserrat] text-base font-bold text-[#0C0C0C]">
-                ${subtotal.toFixed(2)}
+                {formatCurrency(subtotal)}
               </span>
             </div>
             <button

@@ -1,8 +1,9 @@
-import { Bot, Circle, RefreshCcw, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { ArrowLeft, Bot, Circle, RefreshCcw, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ChatInput from '../components/ChatInput'
 import ChatMessage from '../components/ChatMessage'
 import { useChatbot } from '../hooks/useChatbot'
+import { Link } from 'react-router-dom'
 
 const STYLE_OPTIONS = ['Minimalist', 'Classic', 'Avant-garde', 'Capsule wardrobe']
 const TONE_OPTIONS = ['Professional', 'Friendly', 'Concise', 'Luxury']
@@ -63,14 +64,23 @@ export default function ChatbotPage() {
               <h1 className="text-[34px] font-bold leading-tight text-[#1c1c1c]">Stylist Concierge</h1>
             </div>
 
-            <button
-              type="button"
-              onClick={startNewSession}
-              className="inline-flex items-center gap-2 rounded-lg border border-[#c9c9c9] bg-white px-3 py-2 text-xs font-semibold text-[#333] transition hover:bg-[#f9f9f9]"
-            >
-              <RefreshCcw size={14} />
-              New session
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/"
+                className="inline-flex items-center gap-2 rounded-lg border border-[#c9c9c9] bg-white px-3 py-2 text-xs font-semibold text-[#333] transition hover:bg-[#f9f9f9]"
+              >
+                <ArrowLeft size={14} />
+                Trang chủ
+              </Link>
+              <button
+                type="button"
+                onClick={startNewSession}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#c9c9c9] bg-white px-3 py-2 text-xs font-semibold text-[#333] transition hover:bg-[#f9f9f9]"
+              >
+                <RefreshCcw size={14} />
+                New session
+              </button>
+            </div>
           </header>
 
           <div className="mb-4 grid gap-3 md:grid-cols-2">
@@ -94,11 +104,9 @@ export default function ChatbotPage() {
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#757575]">Latest Curated Picks</p>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                 {lastBotSuggestions.slice(0, 3).map((item, idx) => (
-                  <a
+                  <Link
                     key={`${item.productId || 'pick'}-${idx}`}
-                    href={item.link || '#'}
-                    target="_blank"
-                    rel="noreferrer"
+                    to={item.link || '#'}
                     className="rounded-lg border border-[#e6e6e6] bg-[#fafafa] p-2 transition hover:border-[#cacaca]"
                   >
                     {item.imageUrl ? (
@@ -108,7 +116,7 @@ export default function ChatbotPage() {
                     )}
                     <p className="mt-2 text-sm font-semibold text-[#232323]">{item.name}</p>
                     <p className="text-xs text-[#727272]">{item.price}</p>
-                  </a>
+                  </Link>
                 ))}
               </div>
             </div>

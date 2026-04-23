@@ -9,6 +9,7 @@ import com.fashion.userservice.entity.Address;
 import com.fashion.userservice.entity.User;
 import com.fashion.userservice.exception.ResourceNotFoundException;
 import com.fashion.userservice.repository.AddressRepository;
+import com.fashion.userservice.repository.RefreshTokenRepository;
 import com.fashion.userservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,6 +24,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final AddressRepository addressRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
 
     public UserProfileResponse getProfile(String userId) {
@@ -48,6 +50,9 @@ public class UserService {
         }
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+
+        // Password rotation invalidates all existing sessions.
+        refreshTokenRepository.revokeAllByUserId(userId);
     }
 
     // ─── Address ───────────────────────────────────────────────────────────────

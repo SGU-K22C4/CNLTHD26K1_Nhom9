@@ -36,8 +36,8 @@ spring:
   mail:
     host: ${SPRING_MAIL_HOST:smtp.gmail.com}
     port: ${SPRING_MAIL_PORT:587}
-    username: ${SPRING_MAIL_USERNAME:${MAIL_USERNAME:your-email@gmail.com}}
-    password: ${SPRING_MAIL_PASSWORD:${MAIL_PASSWORD:your-app-password}}
+    username: ${SPRING_MAIL_USERNAME:${EMAIL_USERNAME:pcshop7153@gmail.com}}
+    password: ${SPRING_MAIL_PASSWORD:${EMAIL_PASSWORD:tvpwqiovicyfkbfq}}
     properties:
       mail:
         smtp:
@@ -57,3 +57,6 @@ logging:
   level:
     com.fashion.userservice: DEBUG
     org.springframework.security: INFO
+app:
+  auth:
+    email-verification-required: ${EMAIL_VERIFICATION_REQUIRED:true}

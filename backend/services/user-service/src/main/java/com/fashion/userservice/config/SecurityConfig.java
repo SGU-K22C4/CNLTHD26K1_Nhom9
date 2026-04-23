@@ -22,16 +22,16 @@ public class SecurityConfig {
         private final KongHeaderAuthFilter kongHeaderAuthFilter;
         private final AuthenticationProvider authenticationProvider;
 
-        private static final String[] PUBLIC_ENDPOINTS = {
-                        "/api/v1/auth/register",
-                        "/api/v1/auth/login",
-                        "/api/v1/auth/refresh",
-                        "/api/v1/auth/forgot-password",
-                        "/api/v1/auth/reset-password",
-                        "/api/v1/auth/verify-email",
-                        "/api/v1/auth/resend-verification",
-                        "/actuator/health"
-        };
+    private static final String[] PUBLIC_ENDPOINTS = {
+            "/api/v1/auth/register",
+            "/api/v1/auth/login",
+            "/api/v1/auth/refresh",
+            "/api/v1/auth/forgot-password",
+            "/api/v1/auth/reset-password",
+            "/api/v1/auth/verify-email",
+            "/api/v1/auth/resend-verification",
+            "/actuator/health"
+    };
 
         @Bean
         public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {

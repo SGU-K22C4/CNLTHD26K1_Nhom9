@@ -39,10 +39,10 @@ data:
   # ── VNPay URLs (non-sensitive) ────────────────────────────────────────────
   VNPAY_PAYMENT_URL: "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
   VNPAY_API_URL: "https://sandbox.vnpayment.vn/merchant_webapi/api/transaction"
-  VNPAY_RETURN_URL: "http://localhost:5173/payment/vnpay-return"
+  VNPAY_RETURN_URL: "https://modimal.tranhuy.dev/payment/vnpay-return"
 
   # ── App URLs ──────────────────────────────────────────────────────────────
-  FRONTEND_URL: "http://localhost:5173"
+  FRONTEND_URL: "https://modimal.tranhuy.dev"
 
   # ── Chatbot Cross-Service URLs ────────────────────────────────────────────
   PRODUCT_SERVICE_URL: "http://product-service:8082"

@@ -10,7 +10,7 @@ spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3307/fashion_user_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:huytran123}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -46,7 +46,7 @@ spring:
             enable: true
 
 jwt:
-  secret: ${JWT_SECRET:ZmFzaGlvbi1lLWNvbW1lcmNlLXNlY3JldC1rZXktdGhhdC1pcy1sb25nLWVub3VnaC0zMmJ5dGVz}
+  secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:900000}
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
 

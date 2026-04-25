@@ -6,7 +6,7 @@ spring:
     # URL mặc định sẽ trỏ vào localhost:3306. Muốn đổi sang server prod thì map biến môi trường vào!
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3307/fashion_user_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:huytran123}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:

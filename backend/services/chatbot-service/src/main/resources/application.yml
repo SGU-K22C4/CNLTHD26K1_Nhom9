@@ -5,7 +5,7 @@ spring:
     import: "optional:configserver:http://localhost:8888"
   data:
     mongodb:
-      uri: ${SPRING_DATA_MONGODB_URI:mongodb+srv://tienle:pass123@cluster0.y6jck.mongodb.net/fashion_chatbot_db}
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/fashion_chatbot_db}
 
 # === Service URLs ===
 chatbot:
@@ -32,7 +32,7 @@ chatbot:
 # Supports both local Ollama (http://localhost:11434/v1) and cloud providers.
 # Ollama API is OpenAI-compatible, so LangChain4j OpenAiChatModel works seamlessly.
 openrouter:
-  api-key: ${OLLAMA_API_KEY:42b83dd233354023ae8b9a30553ed0cd.l0FOSj4VLLT9-FZNPUzF0GFP}
+  api-key: ${OLLAMA_API_KEY:}
   model: ${OLLAMA_MODEL:qwen2.5:7b}
   fallback-model: ${OLLAMA_FALLBACK_MODEL:llama3.1:8b}
   base-url: ${OLLAMA_BASE_URL:http://localhost:11434/v1}

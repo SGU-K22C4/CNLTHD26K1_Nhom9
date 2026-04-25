@@ -34,10 +34,10 @@ spring:
         bootstrap-mode: deferred
 
   mail:
-    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
-    port: ${SPRING_MAIL_PORT:587}
-    username: ${SPRING_MAIL_USERNAME:${EMAIL_USERNAME:pcshop7153@gmail.com}}
-    password: ${SPRING_MAIL_PASSWORD:${EMAIL_PASSWORD:tvpwqiovicyfkbfq}}
+    host: ${SPRING_MAIL_HOST:${MAIL_HOST:smtp-relay.brevo.com}}
+    port: ${SPRING_MAIL_PORT:${MAIL_PORT:2525}}
+    username: ${SPRING_MAIL_USERNAME:${MAIL_USERNAME:${EMAIL_USERNAME:}}}
+    password: ${SPRING_MAIL_PASSWORD:${MAIL_PASSWORD:${EMAIL_PASSWORD:}}}
     properties:
       mail:
         smtp:
@@ -52,11 +52,12 @@ jwt:
 
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  mail:
+    from: ${MAIL_FROM:${spring.mail.username}}
+  auth:
+    email-verification-required: ${EMAIL_VERIFICATION_REQUIRED:true}
 
 logging:
   level:
     com.fashion.userservice: DEBUG
     org.springframework.security: INFO
-app:
-  auth:
-    email-verification-required: ${EMAIL_VERIFICATION_REQUIRED:true}

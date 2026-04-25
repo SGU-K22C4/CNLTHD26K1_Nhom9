@@ -66,6 +66,26 @@ spec:
                 secretKeyRef:
                   name: fashion-secrets
                   key: MAIL_PASSWORD
+            - name: MAIL_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: MAIL_HOST
+            - name: MAIL_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: MAIL_PORT
+            - name: MAIL_FROM
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: MAIL_FROM
+            - name: EMAIL_VERIFICATION_REQUIRED
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: EMAIL_VERIFICATION_REQUIRED
             - name: FRONTEND_URL
               valueFrom:
                 configMapKeyRef:

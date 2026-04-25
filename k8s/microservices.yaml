@@ -91,6 +91,8 @@ spec:
                 configMapKeyRef:
                   name: fashion-config
                   key: FRONTEND_URL
+            - name: SPRING_CLOUD_CONFIG_ENABLED
+              value: "false"
             - name: JAVA_OPTS
               value: "-Xmx256m -Xms128m"
           resources:
@@ -152,7 +154,7 @@ spec:
       containers:
         - name: product-service
           image: huyhuy19/product-service:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8082
           env:
@@ -183,6 +185,8 @@ spec:
                 configMapKeyRef:
                   name: fashion-config
                   key: KAFKA_BOOTSTRAP_SERVERS
+            - name: SPRING_CLOUD_CONFIG_ENABLED
+              value: "false"
             - name: JAVA_OPTS
               value: "-Xmx256m -Xms128m"
           resources:
@@ -242,7 +246,7 @@ spec:
       containers:
         - name: cart-service
           image: huyhuy19/cart-service:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8083
           env:
@@ -261,6 +265,8 @@ spec:
                 secretKeyRef:
                   name: fashion-secrets
                   key: JWT_SECRET
+            - name: SPRING_CLOUD_CONFIG_ENABLED
+              value: "false"
             - name: JAVA_OPTS
               value: "-Xmx256m -Xms128m"
           resources:
@@ -320,7 +326,7 @@ spec:
       containers:
         - name: order-service
           image: huyhuy19/order-service:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8084
           env:
@@ -376,6 +382,13 @@ spec:
                 configMapKeyRef:
                   name: fashion-config
                   key: VNPAY_RETURN_URL
+            - name: PROMOTION_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: PROMOTION_SERVICE_URL
+            - name: SPRING_CLOUD_CONFIG_ENABLED
+              value: "false"
             - name: JAVA_OPTS
               value: "-Xmx256m -Xms128m"
           resources:
@@ -459,7 +472,7 @@ spec:
       containers:
         - name: promotion-service
           image: huyhuy19/promotion-service:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8085
           env:
@@ -483,6 +496,8 @@ spec:
                 secretKeyRef:
                   name: fashion-secrets
                   key: JWT_SECRET
+            - name: SPRING_CLOUD_CONFIG_ENABLED
+              value: "false"
             - name: JAVA_OPTS
               value: "-Xmx256m -Xms128m"
           resources:
@@ -542,7 +557,7 @@ spec:
       containers:
         - name: review-service
           image: huyhuy19/review-service:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8086
           env:
@@ -558,6 +573,18 @@ spec:
                 secretKeyRef:
                   name: fashion-secrets
                   key: JWT_SECRET
+            - name: ORDER_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: ORDER_SERVICE_URL
+            - name: PROMOTION_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: PROMOTION_SERVICE_URL
+            - name: SPRING_CLOUD_CONFIG_ENABLED
+              value: "false"
             - name: JAVA_OPTS
               value: "-Xmx256m -Xms128m"
           resources:
@@ -617,7 +644,7 @@ spec:
       containers:
         - name: chatbot-service
           image: huyhuy19/chatbot-service:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8087
           env:
@@ -663,6 +690,13 @@ spec:
                 configMapKeyRef:
                   name: fashion-config
                   key: ORDER_SERVICE_URL
+            - name: CART_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: CART_SERVICE_URL
+            - name: SPRING_CLOUD_CONFIG_ENABLED
+              value: "false"
             - name: JAVA_OPTS
               value: "-Xmx256m -Xms128m"
           resources:

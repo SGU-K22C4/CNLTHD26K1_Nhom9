@@ -54,6 +54,7 @@ data:
   PRODUCT_SERVICE_URL: "http://product-service:8082"
   PROMOTION_SERVICE_URL: "http://promotion-service:8085"
   ORDER_SERVICE_URL: "http://order-service:8084"
+  CART_SERVICE_URL: "http://cart-service:8083"
 
   # ── AI Model (Ollama) ─────────────────────────────────────────────────────
   OLLAMA_MODEL: "qwen2.5:7b"

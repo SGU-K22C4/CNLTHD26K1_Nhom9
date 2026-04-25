@@ -1,9 +1,10 @@
 import api from '@/shared/utils/api'
+import { generateUUID } from '@/shared/utils/uuid'
 
 function getGuestUserId() {
   let id = localStorage.getItem('guestUserId')
   if (!id) {
-    id = crypto.randomUUID()
+    id = generateUUID()
     localStorage.setItem('guestUserId', id)
   }
   return id

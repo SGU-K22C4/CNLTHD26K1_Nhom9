@@ -98,7 +98,7 @@ services:
     build:
       context: ../backend
       dockerfile: services/user-service/Dockerfile
-    container_name: fashion_user_service
+    container_name: fashion-user-service
     restart: unless-stopped
     ports:
       - "8081:8081"
@@ -107,8 +107,17 @@ services:
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
       - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_EXPIRATION=604800000
+      - JWT_SECRET=${JWT_SECRET:-huytran_secret_key_32_chars_long_12345}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
+      - APP_FRONTEND_URL=http://localhost:3000
+      - SPRING_CLOUD_CONFIG_ENABLED=false
+      - MAIL_HOST=${MAIL_HOST:-smtp-relay.brevo.com}
+      - MAIL_PORT=${MAIL_PORT:-2525}
       - MAIL_USERNAME=${MAIL_USERNAME}
       - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - MAIL_FROM=${MAIL_FROM:-no-reply@localhost}
+      - EMAIL_VERIFICATION_REQUIRED=${EMAIL_VERIFICATION_REQUIRED:-true}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
     depends_on:
       mysql:
@@ -118,7 +127,7 @@ services:
     build:
       context: ../backend
       dockerfile: services/product-service/Dockerfile
-    container_name: fashion_product_service
+    container_name: fashion-product-service
     restart: unless-stopped
     ports:
       - "8082:8082"
@@ -127,7 +136,10 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_product_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
-      - JWT_SECRET=${JWT_SECRET}
+      # - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:-huytran_secret_key_32_chars_long_12345}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
+      - SPRING_CLOUD_CONFIG_ENABLED=false
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
     depends_on:
       mysql:
@@ -139,7 +151,7 @@ services:
     build:
       context: ../backend
       dockerfile: services/cart-service/Dockerfile
-    container_name: fashion_cart_service
+    container_name: fashion-cart-service
     restart: unless-stopped
     ports:
       - "8083:8083"
@@ -155,7 +167,7 @@ services:
     build:
       context: ../backend
       dockerfile: services/order-service/Dockerfile
-    container_name: fashion_order_service
+    container_name: fashion-order-service
     restart: unless-stopped
     ports:
       - "8084:8084"
@@ -164,7 +176,10 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_order_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
-      - JWT_SECRET=${JWT_SECRET}
+      # - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:-huytran_secret_key_32_chars_long_12345}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
+      - SPRING_CLOUD_CONFIG_ENABLED=false
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - VNPAY_TMN_CODE=${VNPAY_TMN_CODE:-XWJEG5N8}
       - VNPAY_HASH_SECRET=${VNPAY_HASH_SECRET:-V0UJ9R7MWMJLFJREF60KQR5P9RO1XIYH}
@@ -181,7 +196,7 @@ services:
     build:
       context: ../backend
       dockerfile: services/promotion-service/Dockerfile
-    container_name: fashion_promotion_service
+    container_name: fashion-promotion-service
     restart: unless-stopped
     ports:
       - "8085:8085"
@@ -189,7 +204,10 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_promotion_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-huytran123}
-      - JWT_SECRET=${JWT_SECRET}
+      # - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:-huytran_secret_key_32_chars_long_12345}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
+      - SPRING_CLOUD_CONFIG_ENABLED=false
     depends_on:
       mysql:
         condition: service_healthy
@@ -198,14 +216,17 @@ services:
     build:
       context: ../backend
       dockerfile: services/review-service/Dockerfile
-    container_name: fashion_review_service
+    container_name: fashion-review-service
     restart: unless-stopped
     ports:
       - "8086:8086"
     environment:
       - SERVER_PORT=8086
       - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/fashion_review_db
-      - JWT_SECRET=${JWT_SECRET}
+      # - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:-huytran_secret_key_32_chars_long_12345}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
+      - SPRING_CLOUD_CONFIG_ENABLED=false
     depends_on:
       mongo:
         condition: service_healthy
@@ -214,7 +235,7 @@ services:
     build:
       context: ../backend
       dockerfile: services/chatbot-service/Dockerfile
-    container_name: fashion_chatbot_service
+    container_name: fashion-chatbot-service
     restart: unless-stopped
     ports:
       - "8087:8087"
@@ -224,10 +245,13 @@ services:
       - OLLAMA_API_KEY=${OLLAMA_API_KEY:-42b83dd233354023ae8b9a30553ed0cd.l0FOSj4VLLT9-FZNPUzF0GFP}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434/v1}
-      - JWT_SECRET=${JWT_SECRET}
-      - PRODUCT_SERVICE_URL=http://product-service:8082
+      # - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:-huytran_secret_key_32_chars_long_12345}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
+      - SPRING_CLOUD_CONFIG_ENABLED=false
+      - PRODUCT_SERVICE_URL=http://fashion-product-service:8082
       - PROMOTION_SERVICE_URL=http://promotion-service:8085
-      - ORDER_SERVICE_URL=http://order-service:8084
+      - ORDER_SERVICE_URL=http://fashion-order-service:8084
     depends_on:
       mongo:
         condition: service_healthy
@@ -243,7 +267,7 @@ services:
     image: kong:3.7-ubuntu
     container_name: fashion_kong_gateway
     restart: unless-stopped
-    entrypoint: ["/bin/sh", "/kong/docker-entrypoint-wrapper.sh"]
+    # entrypoint: ["/bin/sh", "/kong/docker-entrypoint-wrapper.sh"]
     environment:
       KONG_DATABASE: "off"
       KONG_PROXY_ACCESS_LOG: /dev/stdout
@@ -255,11 +279,12 @@ services:
       KONG_LUA_PACKAGE_PATH: /kong/custom-plugins/?.lua;/kong/custom-plugins/?/init.lua;;
       # JWT secret — shared with all Spring Boot services
       JWT_SECRET: ${JWT_SECRET}
+      KONG_DECLARATIVE_CONFIG: /kong/template/kong.yml
     ports:
       - "8080:8080"   # Proxy (frontend calls this)
       - "8001:8001"   # Admin API (debug & inspection)
     volumes:
-      - ./kong.yml:/kong/template/kong.yml.template:ro
+      - ./kong.yml:/kong/template/kong.yml:ro
       - ./kong/docker-entrypoint-wrapper.sh:/kong/docker-entrypoint-wrapper.sh:ro
       - ./kong/plugins/jwt-auth:/kong/custom-plugins/kong/plugins/jwt-auth:ro
     healthcheck:

@@ -132,6 +132,9 @@ function MainNavBar(props) {
                 <Typography variant="body2" fontWeight={600}>{user.firstName} {user.lastName}</Typography>
               </Box>
             )}
+            <MenuItem onClick={() => { handleUserMenuClose(); navigate('/profile'); }} sx={{ fontSize: 14 }}>
+              Thông tin tài khoản
+            </MenuItem>
             <MenuItem onClick={() => { handleUserMenuClose(); navigate('/orders'); }} sx={{ fontSize: 14 }}>
               Đơn hàng của tôi
             </MenuItem>

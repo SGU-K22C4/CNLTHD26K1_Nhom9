@@ -79,9 +79,8 @@ export default function OrderHistoryPage() {
       const myReviews = reviewResult.value
       setMineReviews(Array.isArray(myReviews) ? myReviews : [])
     } else {
-      console.error('[OrderHistoryPage] Failed to load user reviews:', reviewResult.reason)
+      console.warn('[OrderHistoryPage] Review service unavailable, skipping review status')
       setMineReviews([])
-      setReviewWarning('Không tải được trạng thái đánh giá. Bạn vẫn xem được đơn hàng, nhưng trạng thái "Đã đánh giá" có thể chưa chính xác.')
     }
 
     setLoading(false)

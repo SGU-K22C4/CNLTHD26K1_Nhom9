@@ -49,6 +49,43 @@ public class ChatSession {
         private String content;
         private IntentMeta intent;
         private Instant createdAt;
+
+        /** Product suggestions attached to BOT messages (persisted for session restore) */
+        @Builder.Default
+        private List<ProductSuggestionSnapshot> suggestions = new ArrayList<>();
+
+        /** Promotion suggestions attached to BOT messages */
+        @Builder.Default
+        private List<PromotionSuggestionSnapshot> promotions = new ArrayList<>();
+    }
+
+    /** Lightweight snapshot of a product suggestion, stored in MongoDB */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ProductSuggestionSnapshot {
+        private String productId;
+        private String name;
+        private String category;
+        private String imageUrl;
+        private String link;
+        private String price;
+        private List<String> availableSizes;
+        private List<String> availableColors;
+    }
+
+    /** Lightweight snapshot of a promotion suggestion */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PromotionSuggestionSnapshot {
+        private String code;
+        private String discountType;
+        private String discountValue;
+        private String minOrderAmount;
+        private String endDate;
     }
 
     @Data

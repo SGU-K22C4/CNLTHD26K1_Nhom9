@@ -1,32 +1,40 @@
 import api from '@/shared/utils/api'
 import { buildUserHeaders } from '@/shared/utils/userHeaders'
+import { generateUUID } from '@/shared/utils/uuid'
 
-const CHATBOT_SESSION_KEY = 'chatbot_session_id'
+const CHATBOT_SESSION_PREFIX = 'chatbot_session_'
 const CHATBOT_TIMEOUT_MS = 25000
 
-function getStoredSessionId() {
-  return localStorage.getItem(CHATBOT_SESSION_KEY)
+function getSessionKey(userId) {
+  return userId ? `${CHATBOT_SESSION_PREFIX}${userId}` : `${CHATBOT_SESSION_PREFIX}guest`
 }
 
-function saveSessionId(sessionId) {
+function getStoredSessionId(userId) {
+  return localStorage.getItem(getSessionKey(userId))
+}
+
+function saveSessionId(sessionId, userId) {
   if (sessionId) {
-    localStorage.setItem(CHATBOT_SESSION_KEY, sessionId)
+    localStorage.setItem(getSessionKey(userId), sessionId)
   }
 }
 
-function createSessionId() {
-  const sessionId = crypto.randomUUID()
-  saveSessionId(sessionId)
+function createSessionId(userId) {
+  const sessionId = generateUUID()
+  saveSessionId(sessionId, userId)
   return sessionId
 }
 
 export const chatbotService = {
-  getOrCreateSessionId() {
-    return getStoredSessionId() || createSessionId()
+  _currentUserId: null,
+
+  getOrCreateSessionId(userId = null) {
+    this._currentUserId = userId
+    return getStoredSessionId(userId) || createSessionId(userId)
   },
 
   async send({ message, preferences }) {
-    const sessionId = this.getOrCreateSessionId()
+    const sessionId = this.getOrCreateSessionId(this._currentUserId)
     const payload = {
       message,
       sessionId,
@@ -39,14 +47,14 @@ export const chatbotService = {
     })
 
     if (response?.sessionId) {
-      saveSessionId(response.sessionId)
+      saveSessionId(response.sessionId, this._currentUserId)
     }
 
     return response
   },
 
   async getSession(sessionId = null) {
-    const activeSessionId = sessionId || getStoredSessionId()
+    const activeSessionId = sessionId || getStoredSessionId(this._currentUserId)
     if (!activeSessionId) return null
 
     return api.get(`/api/v1/chatbot/sessions/${activeSessionId}`, {
@@ -56,6 +64,6 @@ export const chatbotService = {
   },
 
   resetSession() {
-    localStorage.removeItem(CHATBOT_SESSION_KEY)
+    localStorage.removeItem(getSessionKey(this._currentUserId))
   },
 }

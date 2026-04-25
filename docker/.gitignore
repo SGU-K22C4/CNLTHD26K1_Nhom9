@@ -1,0 +1,12 @@
+# Ignore local Docker environment files and runtime data
+.env
+.env.*
+!.env.example
+
+# Ignore local database volume data created by Docker Compose
+mysql/data/
+redis/data/
+
+# Ignore logs and temporary files
+*.log
+*.tmp

@@ -31,8 +31,8 @@ spec:
     spec:
       containers:
         - name: user-service
-          image: fashion/user-service:latest
-          imagePullPolicy: IfNotPresent
+          image: huyhuy19/user-service:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8081
           env:
@@ -66,6 +66,26 @@ spec:
                 secretKeyRef:
                   name: fashion-secrets
                   key: MAIL_PASSWORD
+            - name: MAIL_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: MAIL_HOST
+            - name: MAIL_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: MAIL_PORT
+            - name: MAIL_FROM
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: MAIL_FROM
+            - name: EMAIL_VERIFICATION_REQUIRED
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: EMAIL_VERIFICATION_REQUIRED
             - name: FRONTEND_URL
               valueFrom:
                 configMapKeyRef:
@@ -81,15 +101,13 @@ spec:
               memory: "400Mi"
               cpu: "500m"
           livenessProbe:
-            httpGet:
-              path: /actuator/health
+            tcpSocket:
               port: 8081
-            initialDelaySeconds: 60
+            initialDelaySeconds: 120
             periodSeconds: 15
             timeoutSeconds: 5
           readinessProbe:
-            httpGet:
-              path: /actuator/health
+            tcpSocket:
               port: 8081
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -133,7 +151,7 @@ spec:
     spec:
       containers:
         - name: product-service
-          image: fashion/product-service:latest
+          image: huyhuy19/product-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8082
@@ -175,14 +193,12 @@ spec:
               memory: "400Mi"
               cpu: "500m"
           livenessProbe:
-            httpGet:
-              path: /actuator/health
+            tcpSocket:
               port: 8082
-            initialDelaySeconds: 60
+            initialDelaySeconds: 120
             periodSeconds: 15
           readinessProbe:
-            httpGet:
-              path: /actuator/health
+            tcpSocket:
               port: 8082
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -225,7 +241,7 @@ spec:
     spec:
       containers:
         - name: cart-service
-          image: fashion/cart-service:latest
+          image: huyhuy19/cart-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8083
@@ -255,14 +271,12 @@ spec:
               memory: "400Mi"
               cpu: "500m"
           livenessProbe:
-            httpGet:
-              path: /actuator/health
+            tcpSocket:
               port: 8083
-            initialDelaySeconds: 60
+            initialDelaySeconds: 120
             periodSeconds: 15
           readinessProbe:
-            httpGet:
-              path: /actuator/health
+            tcpSocket:
               port: 8083
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -305,7 +319,7 @@ spec:
     spec:
       containers:
         - name: order-service
-          image: fashion/order-service:latest
+          image: huyhuy19/order-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8084
@@ -372,14 +386,12 @@ spec:
               memory: "400Mi"
               cpu: "500m"
           livenessProbe:
-            httpGet:
-              path: /actuator/health
+            tcpSocket:
               port: 8084
-            initialDelaySeconds: 60
+            initialDelaySeconds: 120
             periodSeconds: 15
           readinessProbe:
-            httpGet:
-              path: /actuator/health
+            tcpSocket:
               port: 8084
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -446,7 +458,7 @@ spec:
     spec:
       containers:
         - name: promotion-service
-          image: fashion/promotion-service:latest
+          image: huyhuy19/promotion-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8085
@@ -481,14 +493,12 @@ spec:
               memory: "400Mi"
               cpu: "500m"
           livenessProbe:
-            httpGet:
-              path: /actuator/health
+            tcpSocket:
               port: 8085
-            initialDelaySeconds: 60
+            initialDelaySeconds: 120
             periodSeconds: 15
           readinessProbe:
-            httpGet:
-              path: /actuator/health
+            tcpSocket:
               port: 8085
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -531,7 +541,7 @@ spec:
     spec:
       containers:
         - name: review-service
-          image: fashion/review-service:latest
+          image: huyhuy19/review-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8086
@@ -558,14 +568,12 @@ spec:
               memory: "400Mi"
               cpu: "500m"
           livenessProbe:
-            httpGet:
-              path: /actuator/health
+            tcpSocket:
               port: 8086
-            initialDelaySeconds: 60
+            initialDelaySeconds: 120
             periodSeconds: 15
           readinessProbe:
-            httpGet:
-              path: /actuator/health
+            tcpSocket:
               port: 8086
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -608,7 +616,7 @@ spec:
     spec:
       containers:
         - name: chatbot-service
-          image: fashion/chatbot-service:latest
+          image: huyhuy19/chatbot-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8087
@@ -665,29 +673,75 @@ spec:
               memory: "400Mi"
               cpu: "500m"
           livenessProbe:
-            httpGet:
-              path: /actuator/health
+            tcpSocket:
               port: 8087
-            initialDelaySeconds: 60
+            initialDelaySeconds: 120
+            periodSeconds: 15
+          readinessProbe:
+            tcpSocket:
+              port: 8087
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+
+---
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 8. Frontend (React + NGINX) — port 80
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: fashion
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: huyhuy19/fashion-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "50m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+          livenessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 10
             periodSeconds: 15
           readinessProbe:
             httpGet:
-              path: /actuator/health
-              port: 8087
-            initialDelaySeconds: 30
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
             periodSeconds: 10
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: chatbot-service
+  name: frontend
   namespace: fashion
   labels:
-    app: chatbot-service
+    app: frontend
 spec:
+  type: LoadBalancer
   selector:
-    app: chatbot-service
+    app: frontend
   ports:
-    - port: 8087
-      targetPort: 8087
+    - port: 80
+      targetPort: 80

@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { chatbotService } from '../services/chatbotService'
+import { useAuth } from '@/modules/auth/hooks/useAuth'
+import { generateUUID } from '@/shared/utils/uuid'
 
 const DEFAULT_GREETING = {
   id: 'welcome-message',
@@ -17,7 +19,7 @@ const DEFAULT_PREFERENCES = {
 
 function normalizeMessage(message) {
   return {
-    id: message?.messageId || crypto.randomUUID(),
+    id: message?.messageId || generateUUID(),
     sender: message?.sender || 'BOT',
     text: message?.content || message?.text || '',
     intent: message?.intent || null,
@@ -29,12 +31,29 @@ function normalizeMessage(message) {
 }
 
 export function useChatbot({ autoLoadHistory = true } = {}) {
+  const { user } = useAuth()
+  const userId = user?.id || user?.email || null
+  const prevUserIdRef = useRef(userId)
+
   const [messages, setMessages] = useState([DEFAULT_GREETING])
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES)
-  const [sessionId, setSessionId] = useState(chatbotService.getOrCreateSessionId())
+  const [sessionId, setSessionId] = useState(() => chatbotService.getOrCreateSessionId(userId))
   const [isSending, setIsSending] = useState(false)
   const [isHydrating, setIsHydrating] = useState(false)
   const [error, setError] = useState('')
+
+  // === Auth state change detection ===
+  // When user logs in or out, reset chatbot session to prevent cross-contamination
+  useEffect(() => {
+    if (prevUserIdRef.current !== userId) {
+      prevUserIdRef.current = userId
+      chatbotService.resetSession()
+      const newSessionId = chatbotService.getOrCreateSessionId(userId)
+      setSessionId(newSessionId)
+      setMessages([DEFAULT_GREETING])
+      setError('')
+    }
+  }, [userId])
 
   const hydrateSession = useCallback(async () => {
     if (!autoLoadHistory) return
@@ -154,11 +173,11 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
 
   const startNewSession = useCallback(() => {
     chatbotService.resetSession()
-    const nextSession = chatbotService.getOrCreateSessionId()
+    const nextSession = chatbotService.getOrCreateSessionId(userId)
     setSessionId(nextSession)
     setMessages([DEFAULT_GREETING])
     setError('')
-  }, [])
+  }, [userId])
 
   const canSend = useMemo(() => !isSending, [isSending])
 

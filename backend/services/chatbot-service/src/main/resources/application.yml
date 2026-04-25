@@ -12,6 +12,7 @@ chatbot:
   product-service-url: ${PRODUCT_SERVICE_URL:http://localhost:8080}
   promotion-service-url: ${PROMOTION_SERVICE_URL:http://localhost:8080}
   order-service-url: ${ORDER_SERVICE_URL:http://localhost:8080}
+  cart-service-url: ${CART_SERVICE_URL:http://localhost:8080}
 
   # Agent mode: true = LangChain4j agent, false = heuristic fallback
   use-agent: ${CHATBOT_USE_AGENT:true}

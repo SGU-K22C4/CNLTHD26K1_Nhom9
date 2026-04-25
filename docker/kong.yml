@@ -3,7 +3,7 @@
 # Replaces: backend/api-gateway (Spring Cloud Gateway)
 #
 # Route mapping matches the original application.yml 1-to-1.
-# JWT verification is handled by a custom "jwt-auth" Lua plugin that
+# JWT verification is handled by a custom "jwt-auth" Lua plugin that``
 # replicates the Spring JwtAuthFilter behavior (HS256 validation + 
 # X-User-Id / X-User-Email header injection).
 #
@@ -14,41 +14,41 @@
 _format_version: "3.0"
 
 # ── Global Plugins ─────────────────────────────────────────────────────────────
-plugins:
+# plugins:
 
-  # CORS — equivalent of spring.cloud.gateway.globalcors
-  - name: cors
-    config:
-      origins:
-        - "http://localhost:5173"
-        - "http://localhost:3000"
-      methods:
-        - "GET"
-        - "POST"
-        - "PUT"
-        - "PATCH"
-        - "DELETE"
-        - "OPTIONS"
-      headers:
-        - "Authorization"
-        - "Content-Type"
-        - "Accept"
-        - "Origin"
-        - "X-Requested-With"
-        - "X-User-Id"
-        - "X-User-Email"
-      exposed_headers:
-        - "X-Total-Count"
-      credentials: true
-      max_age: 3600
+#   # CORS — equivalent of spring.cloud.gateway.globalcors
+#   - name: cors
+#     config:
+#       origins:
+#         - "http://localhost:5173"
+#         - "http://localhost:3000"
+#       methods:
+#         - "GET"
+#         - "POST"
+#         - "PUT"
+#         - "PATCH"
+#         - "DELETE"
+#         - "OPTIONS"
+#       headers:
+#         - "Authorization"
+#         - "Content-Type"
+#         - "Accept"
+#         - "Origin"
+#         - "X-Requested-With"
+#         - "X-User-Id"
+#         - "X-User-Email"
+#       exposed_headers:
+#         - "X-Total-Count"
+#       credentials: true
+#       max_age: 3600
 
-  # Rate Limiting — basic spam protection (100 requests/minute per IP)
-  - name: rate-limiting
-    config:
-      minute: 100
-      policy: local
-      fault_tolerant: true
-      hide_client_headers: false
+#   # Rate Limiting — basic spam protection (100 requests/minute per IP)
+#   - name: rate-limiting
+#     config:
+#       minute: 100
+#       policy: local
+#       fault_tolerant: true
+#       hide_client_headers: false
 
 # ── Services & Routes ──────────────────────────────────────────────────────────
 services:
@@ -59,7 +59,7 @@ services:
   # │    User endpoints: protected (JWT required → X-User-Id injected)       │
   # └──────────────────────────────────────────────────────────────────────────┘
   - name: user-service
-    url: http://host.docker.internal:8081
+    url: http://fashion-user-service:8081
     routes:
       # Auth routes — public, no JWT verification
       - name: auth-route
@@ -76,14 +76,14 @@ services:
           - name: jwt-auth
             config:
               # ⚠️ Must match JWT_SECRET in docker/.env
-              jwt_secret: "${JWT_SECRET}"
+              jwt_secret: "huytran_secret_key_32_chars_long_12345"
 
   # ┌──────────────────────────────────────────────────────────────────────────┐
   # │ 2. Product Service (port 8082)                                         │
   # │    Public access (no JWT)                                              │
   # └──────────────────────────────────────────────────────────────────────────┘
   - name: product-service
-    url: http://host.docker.internal:8082
+    url: http://fashion-product-service:8082
     routes:
       - name: product-route
         paths:
@@ -97,7 +97,7 @@ services:
   # │    No JWT — supports guest users via X-User-Id header                  │
   # └──────────────────────────────────────────────────────────────────────────┘
   - name: cart-service
-    url: http://host.docker.internal:8083
+    url: http://fashion-cart-service:8083
     routes:
       - name: cart-route
         paths:
@@ -110,7 +110,7 @@ services:
   # │    No JWT at gateway — guest checkout supported                        │
   # └──────────────────────────────────────────────────────────────────────────┘
   - name: order-service
-    url: http://host.docker.internal:8084
+    url: http://fashion-order-service:8084
     routes:
       - name: order-route
         paths:
@@ -126,7 +126,7 @@ services:
   # │ 5. Promotion Service (port 8085)                                       │
   # └──────────────────────────────────────────────────────────────────────────┘
   - name: promotion-service
-    url: http://host.docker.internal:8085
+    url: http://fashion-promotion-service:8085
     routes:
       - name: promotion-route
         paths:
@@ -137,7 +137,7 @@ services:
   # │ 6. Review Service (port 8086)                                          │
   # └──────────────────────────────────────────────────────────────────────────┘
   - name: review-service
-    url: http://host.docker.internal:8086
+    url: http://fashion-review-service:8086
     routes:
       - name: review-route
         paths:
@@ -148,7 +148,7 @@ services:
   # │ 7. Chatbot Service (port 8087)                                         │
   # └──────────────────────────────────────────────────────────────────────────┘
   - name: chatbot-service
-    url: http://host.docker.internal:8087
+    url: http://fashion-chatbot-service:8087
     routes:
       - name: chatbot-route
         paths:

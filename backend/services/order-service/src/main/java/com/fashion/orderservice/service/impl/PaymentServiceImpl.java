@@ -23,9 +23,13 @@ public class PaymentServiceImpl implements PaymentService {
     private final SagaEventPublisher sagaEventPublisher;
 
     @Override
-    public String createPaymentUrl(Long orderId, String ipAddress) {
+    public String createPaymentUrl(Long orderId, String userId, String ipAddress) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+
+        if (userId == null || userId.isBlank() || !userId.equals(order.getUserId())) {
+            throw new IllegalArgumentException("You are not allowed to access this order");
+        }
 
         if (order.getPaymentMethod() != Order.PaymentMethod.VNPAY) {
             throw new IllegalArgumentException("Order payment method is not VNPAY");

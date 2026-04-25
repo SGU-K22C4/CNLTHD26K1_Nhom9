@@ -15,9 +15,9 @@ public interface OrderService {
 
     Optional<OrderResponse> getOrderForUser(Long id, String userId);
 
-    Optional<OrderResponse> getOrderByNumber(String orderNumber);
+    Optional<OrderResponse> getOrderByNumber(String orderNumber, String userId);
 
-    Optional<OrderResponse> getOrderDetail(Long id);
+    Optional<OrderResponse> getOrderDetail(Long id, String userId);
 
     OrderResponse cancelOrder(Long id, String userId);
 }

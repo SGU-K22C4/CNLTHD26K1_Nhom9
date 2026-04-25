@@ -106,16 +106,16 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<OrderResponse> getOrderByNumber(String orderNumber) {
-        return orderRepository.findByOrderNumber(orderNumber)
+    public Optional<OrderResponse> getOrderByNumber(String orderNumber, String userId) {
+        return orderRepository.findByOrderNumberAndUserId(orderNumber, userId)
                 .map(this::initializeItems)
                 .map(orderMapper::toResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<OrderResponse> getOrderDetail(Long id) {
-        return orderRepository.findById(id)
+    public Optional<OrderResponse> getOrderDetail(Long id, String userId) {
+        return orderRepository.findByIdAndUserId(id, userId)
                 .map(this::initializeItems)
                 .map(orderMapper::toResponse);
     }

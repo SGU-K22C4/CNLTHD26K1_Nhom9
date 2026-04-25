@@ -45,35 +45,35 @@ public class LoyaltyController {
 
     @PostMapping("/redeem/preview")
     public ResponseEntity<RedeemPreviewResponse> previewRedeem(
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader("X-User-Id") String userId,
             @Valid @RequestBody RedeemPreviewRequest request) {
         return ResponseEntity.ok(loyaltyService.previewRedeem(request, userId));
     }
 
     @PostMapping("/redeem")
     public ResponseEntity<LoyaltyMutationResponse> redeem(
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader("X-User-Id") String userId,
             @Valid @RequestBody RedeemRequest request) {
         return ResponseEntity.ok(loyaltyService.redeem(request, userId));
     }
 
     @PostMapping("/refund")
     public ResponseEntity<LoyaltyMutationResponse> refund(
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader("X-User-Id") String userId,
             @Valid @RequestBody RefundRequest request) {
         return ResponseEntity.ok(loyaltyService.refund(request, userId));
     }
 
     @PostMapping("/earn/order")
     public ResponseEntity<LoyaltyMutationResponse> earnFromOrder(
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader("X-User-Id") String userId,
             @Valid @RequestBody EarnOrderPointsRequest request) {
         return ResponseEntity.ok(loyaltyService.earnFromOrder(request, userId));
     }
 
     @PostMapping("/earn/review")
     public ResponseEntity<LoyaltyMutationResponse> earnFromReview(
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader("X-User-Id") String userId,
             @Valid @RequestBody EarnReviewPointsRequest request) {
         return ResponseEntity.ok(loyaltyService.earnFromReview(request, userId));
     }

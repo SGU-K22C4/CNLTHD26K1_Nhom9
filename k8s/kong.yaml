@@ -48,13 +48,26 @@ data:
           hide_client_headers: false
 
     services:
-      # 1. User Service
       - name: user-service
         url: http://user-service:8081
         routes:
-          - name: auth-route
-            paths: ["/api/v1/auth"]
+          - name: auth-public-route
+            paths:
+              - /api/v1/auth/register
+              - /api/v1/auth/login
+              - /api/v1/auth/refresh
+              - /api/v1/auth/forgot-password
+              - /api/v1/auth/reset-password
+              - /api/v1/auth/verify-email
+              - /api/v1/auth/resend-verification
             strip_path: false
+          - name: auth-logout-route
+            paths: ["/api/v1/auth/logout"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
           - name: user-route
             paths: ["/api/v1/users"]
             strip_path: false
@@ -63,56 +76,102 @@ data:
                 config:
                   jwt_secret: "${JWT_SECRET}"
 
-      # 2. Product Service
       - name: product-service
         url: http://product-service:8082
         routes:
-          - name: product-route
-            paths: ["/api/v1/products", "/api/v1/categories", "/api/v1/wishlists"]
+          - name: product-public-route
+            paths: ["/api/v1/products", "/api/v1/categories"]
+            methods: ["GET"]
             strip_path: false
+          - name: product-write-route
+            paths: ["/api/v1/products"]
+            methods: ["POST", "PUT", "PATCH", "DELETE"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
+          - name: wishlist-route
+            paths: ["/api/v1/wishlists"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
 
-      # 3. Cart Service
       - name: cart-service
         url: http://cart-service:8083
         routes:
           - name: cart-route
             paths: ["/api/v1/cart"]
             strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
 
-      # 4. Order Service
       - name: order-service
         url: http://order-service:8084
         routes:
           - name: order-route
             paths: ["/api/v1/orders"]
             strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
+          - name: payment-return-public-route
+            paths: ["/api/v1/payments/vnpay/payment-return"]
+            strip_path: false
           - name: payment-route
             paths: ["/api/v1/payments"]
             strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
 
-      # 5. Promotion Service
       - name: promotion-service
         url: http://promotion-service:8085
         routes:
-          - name: promotion-route
-            paths: ["/api/v1/promotions"]
+          - name: promotion-public-route
+            paths: ["/api/v1/promotions/active", "/api/v1/promotions/validate"]
             strip_path: false
+          - name: loyalty-route
+            paths: ["/api/v1/promotions/loyalty"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
 
-      # 6. Review Service
       - name: review-service
         url: http://review-service:8086
         routes:
+          - name: review-public-route
+            paths: ["/api/v1/reviews/product"]
+            strip_path: false
           - name: review-route
             paths: ["/api/v1/reviews"]
             strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
 
-      # 7. Chatbot Service
       - name: chatbot-service
         url: http://chatbot-service:8087
         routes:
-          - name: chatbot-route
-            paths: ["/api/v1/chatbot"]
+          - name: chatbot-chat-public-route
+            paths: ["/api/v1/chatbot/chat"]
             strip_path: false
+          - name: chatbot-session-route
+            paths: ["/api/v1/chatbot/sessions"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
 
 
 ---
@@ -154,9 +213,9 @@ data:
     -- Custom JWT Auth Plugin for Kong Gateway
     -- Replicates the Spring Cloud Gateway JwtAuthFilter behavior:
     --   1. Extracts Bearer token from Authorization header
-    --   2. Validates HS256 signature using shared secret
+    --   2. Validates HS256/HS384 signature using shared secret
     --   3. Checks expiration claim
-    --   4. Injects X-User-Id and X-User-Email headers (from "sub" claim)
+    --   4. Injects X-User-Id / X-User-Role / X-Consumer-Username headers
     local cjson = require "cjson.safe"
     local openssl_hmac = require "resty.openssl.hmac"
     local ngx_encode_base64 = ngx.encode_base64
@@ -201,63 +260,92 @@ data:
       if not auth_header:find("^Bearer ") then
         return kong.response.exit(401, { message = "Invalid Authorization format. Expected: Bearer <token>" })
       end
+
       local token = auth_header:sub(8)
       local parts, err = split_token(token)
       if not parts then
         return kong.response.exit(401, { message = "Invalid token: " .. err })
       end
-      local header_b64  = parts[1]
+
+      local header_b64 = parts[1]
       local payload_b64 = parts[2]
       local signature_b64 = parts[3]
+
       local header_json = base64url_decode(header_b64)
       if not header_json then
         return kong.response.exit(401, { message = "Failed to decode token header" })
       end
+
       local header = cjson.decode(header_json)
       if not header then
         return kong.response.exit(401, { message = "Failed to parse token header" })
       end
-      if header.alg ~= "HS256" then
-        return kong.response.exit(401, { message = "Unsupported algorithm: " .. (header.alg or "unknown") })
+
+      local alg_map = {
+        HS256 = "SHA256",
+        HS384 = "SHA384",
+      }
+      local sha_alg = alg_map[header.alg]
+      if not sha_alg then
+        return kong.response.exit(401, { message = "Unsupported algorithm: " .. (header.alg or "unknown") .. ". Supported: HS256, HS384." })
       end
+
       local signing_input = header_b64 .. "." .. payload_b64
       local secret_decoded = ngx_decode_base64(conf.jwt_secret)
       if not secret_decoded then
         kong.log.err("Failed to Base64-decode jwt_secret.")
         return kong.response.exit(500, { message = "Internal server error" })
       end
-      local computed_hmac, hmac_err = openssl_hmac.new(secret_decoded, "SHA256")
+
+      local computed_hmac, hmac_err = openssl_hmac.new(secret_decoded, sha_alg)
       if not computed_hmac then
         kong.log.err("Failed to create HMAC: ", hmac_err)
         return kong.response.exit(500, { message = "Internal server error" })
       end
+
       computed_hmac:update(signing_input)
       local digest = computed_hmac:final()
       local expected_signature = base64url_encode(digest)
+
       if expected_signature ~= signature_b64 then
         return kong.response.exit(401, { message = "Invalid token signature" })
       end
+
       local payload_json = base64url_decode(payload_b64)
       if not payload_json then
         return kong.response.exit(401, { message = "Failed to decode token payload" })
       end
+
       local payload = cjson.decode(payload_json)
       if not payload then
         return kong.response.exit(401, { message = "Failed to parse token payload" })
       end
+
       if payload.exp then
         local now = ngx.time()
         if now > payload.exp then
           return kong.response.exit(401, { message = "Token has expired" })
         end
       end
+
       local subject = payload.sub
       if not subject or subject == "" then
         return kong.response.exit(401, { message = "Token missing 'sub' claim" })
       end
-      kong.service.request.set_header("X-User-Id", subject)
+
       kong.service.request.set_header("X-User-Email", subject)
-      kong.log.debug("JWT validated successfully for user: ", subject)
+      local user_id = payload.userId
+      if user_id then
+        kong.service.request.set_header("X-User-Id", tostring(user_id))
+      else
+        kong.service.request.set_header("X-User-Id", subject)
+      end
+
+      local role = payload.role
+      if role then
+        kong.service.request.set_header("X-User-Role", role)
+      end
+      kong.service.request.set_header("X-Consumer-Username", subject)
     end
 
     return plugin
@@ -323,7 +411,7 @@ spec:
             - name: KONG_PROXY_LISTEN
               value: "0.0.0.0:8080"
             - name: KONG_ADMIN_LISTEN
-              value: "0.0.0.0:8001"
+              value: "127.0.0.1:8001"
             - name: KONG_PLUGINS
               value: "bundled,jwt-auth"
             - name: KONG_LUA_PACKAGE_PATH
@@ -395,6 +483,3 @@ spec:
     - name: proxy
       port: 8080
       targetPort: 8080
-    - name: admin
-      port: 8001
-      targetPort: 8001

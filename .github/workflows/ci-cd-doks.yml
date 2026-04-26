@@ -84,42 +84,42 @@ jobs:
             repository: fashion-auth
             tag_prefix: user
             context: backend
-            dockerfile: services/user-service/Dockerfile
+            dockerfile: backend/services/user-service/Dockerfile
           - service_name: product-service
             repository: fashion-catalog
             tag_prefix: product
             context: backend
-            dockerfile: services/product-service/Dockerfile
+            dockerfile: backend/services/product-service/Dockerfile
           - service_name: promotion-service
             repository: fashion-catalog
             tag_prefix: promotion
             context: backend
-            dockerfile: services/promotion-service/Dockerfile
+            dockerfile: backend/services/promotion-service/Dockerfile
           - service_name: cart-service
             repository: fashion-ordering
             tag_prefix: cart
             context: backend
-            dockerfile: services/cart-service/Dockerfile
+            dockerfile: backend/services/cart-service/Dockerfile
           - service_name: order-service
             repository: fashion-ordering
             tag_prefix: order
             context: backend
-            dockerfile: services/order-service/Dockerfile
+            dockerfile: backend/services/order-service/Dockerfile
           - service_name: review-service
             repository: fashion-engagement
             tag_prefix: review
             context: backend
-            dockerfile: services/review-service/Dockerfile
+            dockerfile: backend/services/review-service/Dockerfile
           - service_name: chatbot-service
             repository: fashion-engagement
             tag_prefix: chatbot
             context: backend
-            dockerfile: services/chatbot-service/Dockerfile
+            dockerfile: backend/services/chatbot-service/Dockerfile
           - service_name: frontend
             repository: fashion-frontend
             tag_prefix: frontend
             context: ecommerce-frontend
-            dockerfile: Dockerfile
+            dockerfile: ecommerce-frontend/Dockerfile
 
     steps:
       - name: Checkout source

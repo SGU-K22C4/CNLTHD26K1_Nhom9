@@ -51,13 +51,10 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: maven
 
-      - name: Normalize Maven wrapper for Linux runner
-        run: |
-          sed -i 's/\r$//' mvnw
-          chmod +x mvnw
-
       - name: Build backend modules
-        run: ./mvnw -f backend/pom.xml -B -DskipTests clean package
+        run: |
+          mvn -v
+          mvn -f backend/pom.xml -B -DskipTests clean package
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

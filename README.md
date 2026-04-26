@@ -114,6 +114,64 @@ Open your browser: **[http://localhost:5173](http://localhost:5173)**
 
 ---
 
+## CI/CD (GitHub Actions + DOCR + DOKS)
+
+Workflow file: `.github/workflows/ci-cd-doks.yml`
+
+### Trigger rules
+
+- `pull_request` to `main`/`develop`: run CI only (backend build + frontend build)
+- `push` to `main`/`develop`/`setup/pipelinecicd`: run CI + Docker image build/push
+- Auto deploy to DOKS only when:
+  - push to `main`, or
+  - manual `workflow_dispatch` with `deploy=true`
+
+### Repository Variables (Settings > Secrets and variables > Actions > Variables)
+
+| Name                 | Example value          | Purpose                             |
+| -------------------- | ---------------------- | ----------------------------------- |
+| `DOCR_REGISTRY_NAME` | `fashion-registry`     | DigitalOcean Container Registry     |
+| `DOKS_CLUSTER_NAME`  | `fashion-cluster-prod` | Target DigitalOcean Kubernetes name |
+
+### Repository Secrets (Settings > Secrets and variables > Actions > Secrets)
+
+| Name                        | Required | Purpose                                     |
+| --------------------------- | -------- | ------------------------------------------- |
+| `DIGITALOCEAN_ACCESS_TOKEN` | Yes      | `doctl` auth, push image, deploy cluster    |
+| `MYSQL_ROOT_PASSWORD`       | Yes      | Runtime secret for MySQL services           |
+| `JWT_SECRET`                | Yes      | Shared JWT secret (Kong + backend services) |
+| `MAIL_USERNAME`             | Optional | SMTP username                               |
+| `MAIL_PASSWORD`             | Optional | SMTP password/key                           |
+| `VNPAY_TMN_CODE`            | Optional | VNPay terminal code                         |
+| `VNPAY_HASH_SECRET`         | Optional | VNPay hash secret                           |
+| `OLLAMA_API_KEY`            | Optional | Chatbot API key                             |
+
+### Deployment behavior
+
+- Images are pushed to grouped repositories (Basic plan friendly, max 5 repos):
+  - `fashion-frontend:frontend-<short-sha>`
+  - `fashion-auth:user-<short-sha>`
+  - `fashion-catalog:product-<short-sha>` and `fashion-catalog:promotion-<short-sha>`
+  - `fashion-ordering:order-<short-sha>` and `fashion-ordering:cart-<short-sha>`
+  - `fashion-engagement:review-<short-sha>` and `fashion-engagement:chatbot-<short-sha>`
+- Full image format: `registry.digitalocean.com/<DOCR_REGISTRY_NAME>/<repository>:<service-prefix>-<short-sha>`
+- Deploy step will:
+  - apply `k8s/namespace.yaml`, `k8s/configmaps.yaml`, `k8s/databases.yaml`, `k8s/microservices.yaml`, `k8s/kong.yaml`
+  - create/update `fashion-secrets` from GitHub Secrets
+  - update all Deployments to immutable service tags via `kubectl set image`
+  - wait rollout completion for backend services and frontend
+
+### Manual deploy
+
+Go to **Actions > CI-CD DOKS > Run workflow**:
+
+- `deploy=true`: push image(s) + deploy to DOKS
+- optional `image_tag`: redeploy a specific existing tag
+
+> Note: `k8s/secrets.yaml` is now only for local/demo reference. CI/CD deploy uses GitHub Secrets as source of truth.
+
+---
+
 ## 🔒 Kong Gateway
 
 This project uses [Kong Gateway](https://konghq.com/) in **DB-less mode** as the API Gateway, replacing the previous Spring Cloud Gateway.

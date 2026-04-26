@@ -7,6 +7,9 @@
 # ⚠️ IMPORTANT: Before deploying, Docker images must be built and pushed:
 #    docker build -t fashion/user-service:latest -f services/user-service/Dockerfile .
 #    docker push fashion/user-service:latest  (or use a private registry)
+#    In CI/CD, these image lines are treated as bootstrap defaults only.
+#    GitHub Actions will update each Deployment to an immutable SHA tag via
+#    `kubectl set image` right after applying this manifest.
 # ============================================================================
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

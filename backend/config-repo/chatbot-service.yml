@@ -4,10 +4,10 @@ server:
 spring:
   data:
     mongodb:
-      uri: ${SPRING_DATA_MONGODB_URI:mongodb+srv://tienle:pass123@cluster0.y6jck.mongodb.net/fashion_chatbot_db}
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/fashion_chatbot_db}
 
 openrouter:
-  api-key: ${OPENROUTER_API_KEY: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}
+  api-key: ${OPENROUTER_API_KEY:}
   model: ${OPENROUTER_MODEL:openrouter/free}
   fallback-model: ${OPENROUTER_FALLBACK_MODEL:openrouter/free}
   base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}

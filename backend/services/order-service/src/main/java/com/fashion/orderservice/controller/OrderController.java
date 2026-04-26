@@ -25,7 +25,7 @@ public class OrderController {
      */
     @PostMapping
     public ResponseEntity<OrderResponse> createOrder(
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader("X-User-Id") String userId,
             @Valid @RequestBody OrderRequest request) {
         return ResponseEntity.ok(orderService.createOrder(userId, request));
     }
@@ -61,8 +61,10 @@ public class OrderController {
      * Get full order detail by order number (used after payment success).
      */
     @GetMapping("/by-number/{orderNumber}")
-    public ResponseEntity<OrderResponse> getOrderByNumber(@PathVariable String orderNumber) {
-        return orderService.getOrderByNumber(orderNumber)
+    public ResponseEntity<OrderResponse> getOrderByNumber(
+            @PathVariable String orderNumber,
+            @RequestHeader("X-User-Id") String userId) {
+        return orderService.getOrderByNumber(orderNumber, userId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -72,8 +74,10 @@ public class OrderController {
      * Get full order detail by ID (used by order detail page).
      */
     @GetMapping("/detail/{id}")
-    public ResponseEntity<OrderResponse> getOrderDetail(@PathVariable Long id) {
-        return orderService.getOrderDetail(id)
+    public ResponseEntity<OrderResponse> getOrderDetail(
+            @PathVariable Long id,
+            @RequestHeader("X-User-Id") String userId) {
+        return orderService.getOrderDetail(id, userId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }

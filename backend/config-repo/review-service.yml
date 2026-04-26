@@ -4,7 +4,7 @@ server:
 spring:
   data:
     mongodb:
-      uri: ${SPRING_DATA_MONGODB_URI:mongodb+srv://tienle:pass123@cluster0.y6jck.mongodb.net/fashion_review_db}
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/fashion_review_db}
 
 review:
   integration:

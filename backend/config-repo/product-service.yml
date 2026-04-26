@@ -5,7 +5,7 @@ spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3307/fashion_product_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:huytran123}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -23,3 +23,10 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+
+app:
+  kafka:
+    saga:
+      retry-attempts: ${SAGA_RETRY_ATTEMPTS:4}
+      retry-delay-ms: ${SAGA_RETRY_DELAY_MS:1000}
+      retry-multiplier: ${SAGA_RETRY_MULTIPLIER:2.0}

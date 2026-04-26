@@ -10,6 +10,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -61,19 +62,34 @@ public class ProductController {
     }
 
     @PostMapping
-    public ResponseEntity<ProductResponse> create(@Valid @RequestBody ProductRequest request) {
+    public ResponseEntity<ProductResponse> create(
+            @RequestHeader("X-User-Role") String userRole,
+            @Valid @RequestBody ProductRequest request) {
+        assertAdminRole(userRole);
         return ResponseEntity.status(HttpStatus.CREATED).body(productService.create(request));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ProductResponse> update(@PathVariable String id,
-                                                   @Valid @RequestBody ProductRequest request) {
+    public ResponseEntity<ProductResponse> update(
+            @PathVariable String id,
+            @RequestHeader("X-User-Role") String userRole,
+            @Valid @RequestBody ProductRequest request) {
+        assertAdminRole(userRole);
         return ResponseEntity.ok(productService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, String>> delete(@PathVariable String id) {
+    public ResponseEntity<Map<String, String>> delete(
+            @PathVariable String id,
+            @RequestHeader("X-User-Role") String userRole) {
+        assertAdminRole(userRole);
         productService.delete(id);
         return ResponseEntity.ok(Map.of("message", "Product deleted successfully"));
+    }
+
+    private void assertAdminRole(String userRole) {
+        if (userRole == null || !("ADMIN".equalsIgnoreCase(userRole.trim()))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin role is required");
+        }
     }
 }

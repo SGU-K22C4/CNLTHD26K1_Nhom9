@@ -396,11 +396,17 @@ public class LoyaltyService {
     }
 
     private String resolveUserId(String primaryUserId, String fallbackUserId) {
-        String resolved = primaryUserId;
-        if (resolved == null || resolved.isBlank()) {
-            resolved = fallbackUserId;
+        String requestUserId = primaryUserId == null ? null : primaryUserId.trim();
+        String headerUserId = fallbackUserId == null ? null : fallbackUserId.trim();
+
+        if (headerUserId != null && !headerUserId.isBlank()) {
+            if (requestUserId != null && !requestUserId.isBlank() && !headerUserId.equals(requestUserId)) {
+                throw new IllegalArgumentException("userId in header does not match request body");
+            }
+            return requireUserId(headerUserId);
         }
-        return requireUserId(resolved);
+
+        return requireUserId(requestUserId);
     }
 
     private String requireUserId(String userId) {

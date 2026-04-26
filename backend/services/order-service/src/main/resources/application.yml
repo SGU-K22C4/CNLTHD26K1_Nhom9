@@ -13,3 +13,10 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+app:
+  kafka:
+    saga:
+      retry-attempts: ${SAGA_RETRY_ATTEMPTS:4}
+      retry-delay-ms: ${SAGA_RETRY_DELAY_MS:1000}
+      retry-multiplier: ${SAGA_RETRY_MULTIPLIER:2.0}

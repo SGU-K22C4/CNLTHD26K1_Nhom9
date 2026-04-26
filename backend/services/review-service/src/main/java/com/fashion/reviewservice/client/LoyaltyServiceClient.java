@@ -4,6 +4,7 @@ import com.fashion.reviewservice.client.dto.EarnReviewPointsRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -28,12 +29,14 @@ public class LoyaltyServiceClient {
                 .build();
 
         String url = promotionServiceUrl + "/api/v1/promotions/loyalty/earn/review";
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-User-Id", userId);
 
         try {
             ResponseEntity<Object> ignored = restTemplate.exchange(
                     url,
                     HttpMethod.POST,
-                    new HttpEntity<>(request),
+                    new HttpEntity<>(request, headers),
                     Object.class
             );
         } catch (HttpClientErrorException ex) {

@@ -23,10 +23,11 @@ public class PaymentController {
     @GetMapping("/create-payment")
     public ResponseEntity<Map<String, String>> createPayment(
             @RequestParam Long orderId,
+            @RequestHeader("X-User-Id") String userId,
             HttpServletRequest request) {
 
         String ipAddress = VNPayConfig.getIpAddress(request);
-        String paymentUrl = paymentService.createPaymentUrl(orderId, ipAddress);
+        String paymentUrl = paymentService.createPaymentUrl(orderId, userId, ipAddress);
 
         return ResponseEntity.ok(Map.of("paymentUrl", paymentUrl));
     }

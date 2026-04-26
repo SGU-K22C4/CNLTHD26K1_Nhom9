@@ -8,12 +8,13 @@ public interface PaymentService {
      * Create a VNPay payment URL for the given order.
      *
      * @param orderId   the order's database ID
+     * @param userId    the authenticated user ID
      * @param ipAddress the client's IP address
      * @return the VNPay redirect URL
      * @throws IllegalArgumentException if order not found or payment method is not
      *                                  VNPAY
      */
-    String createPaymentUrl(Long orderId, String ipAddress);
+    String createPaymentUrl(Long orderId, String userId, String ipAddress);
 
     /**
      * Process VNPay payment callback: validate signature, publish payment result

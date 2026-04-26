@@ -43,11 +43,18 @@ data:
 
   # ── App URLs ──────────────────────────────────────────────────────────────
   FRONTEND_URL: "https://modimal.tranhuy.dev"
+  EMAIL_VERIFICATION_REQUIRED: "true"
+
+  # ── Mail (Brevo SMTP relay for User Service) ─────────────────────────────
+  MAIL_HOST: "smtp-relay.brevo.com"
+  MAIL_PORT: "2525"
+  MAIL_FROM: "no-reply@modimal.tranhuy.dev"
 
   # ── Chatbot Cross-Service URLs ────────────────────────────────────────────
   PRODUCT_SERVICE_URL: "http://product-service:8082"
   PROMOTION_SERVICE_URL: "http://promotion-service:8085"
   ORDER_SERVICE_URL: "http://order-service:8084"
+  CART_SERVICE_URL: "http://cart-service:8083"
 
   # ── AI Model (Ollama) ─────────────────────────────────────────────────────
   OLLAMA_MODEL: "qwen2.5:7b"

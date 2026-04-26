@@ -1,156 +1,149 @@
-# ============================================================================
-# Kong Gateway Declarative Configuration (DB-less mode)
-# Replaces: backend/api-gateway (Spring Cloud Gateway)
-#
-# Route mapping matches the original application.yml 1-to-1.
-# JWT verification is handled by a custom "jwt-auth" Lua plugin that
-# replicates the Spring JwtAuthFilter behavior (HS256 validation + 
-# X-User-Id / X-User-Email header injection).
-#
-# ⚠️  IMPORTANT: The jwt_secret value below MUST match the JWT_SECRET
-#     in docker/.env — they share the same Base64-encoded HMAC key.
-# ============================================================================
-
 _format_version: "3.0"
 
-# ── Global Plugins ─────────────────────────────────────────────────────────────
-plugins:
-
-  # CORS — equivalent of spring.cloud.gateway.globalcors
-  - name: cors
-    config:
-      origins:
-        - "http://localhost:5173"
-        - "http://localhost:3000"
-      methods:
-        - "GET"
-        - "POST"
-        - "PUT"
-        - "PATCH"
-        - "DELETE"
-        - "OPTIONS"
-      headers:
-        - "Authorization"
-        - "Content-Type"
-        - "Accept"
-        - "Origin"
-        - "X-Requested-With"
-        - "X-User-Id"
-        - "X-User-Email"
-      exposed_headers:
-        - "X-Total-Count"
-      credentials: true
-      max_age: 3600
-
-  # Rate Limiting — basic spam protection (100 requests/minute per IP)
-  - name: rate-limiting
-    config:
-      minute: 100
-      policy: local
-      fault_tolerant: true
-      hide_client_headers: false
-
-# ── Services & Routes ──────────────────────────────────────────────────────────
 services:
-
-  # ┌──────────────────────────────────────────────────────────────────────────┐
-  # │ 1. User Service (port 8081)                                            │
-  # │    Auth endpoints: public (no JWT)                                     │
-  # │    User endpoints: protected (JWT required → X-User-Id injected)       │
-  # └──────────────────────────────────────────────────────────────────────────┘
   - name: user-service
-    url: http://host.docker.internal:8081
+    url: http://user-service:8081
     routes:
-      # Auth routes — public, no JWT verification
-      - name: auth-route
+      - name: auth-public-route
         paths:
-          - "/api/v1/auth"
+          - /api/v1/auth/register
+          - /api/v1/auth/login
+          - /api/v1/auth/refresh
+          - /api/v1/auth/forgot-password
+          - /api/v1/auth/reset-password
+          - /api/v1/auth/verify-email
+          - /api/v1/auth/resend-verification
         strip_path: false
-
-      # User routes — protected, JWT required (mirrors Spring JwtAuthFilter)
-      - name: user-route
+      - name: auth-logout-route
         paths:
-          - "/api/v1/users"
+          - /api/v1/auth/logout
         strip_path: false
         plugins:
           - name: jwt-auth
             config:
-              # ⚠️ Must match JWT_SECRET in docker/.env
+              jwt_secret: "${JWT_SECRET}"
+      - name: user-route
+        paths:
+          - /api/v1/users
+        strip_path: false
+        plugins:
+          - name: jwt-auth
+            config:
               jwt_secret: "${JWT_SECRET}"
 
-  # ┌──────────────────────────────────────────────────────────────────────────┐
-  # │ 2. Product Service (port 8082)                                         │
-  # │    Public access (no JWT)                                              │
-  # └──────────────────────────────────────────────────────────────────────────┘
   - name: product-service
-    url: http://host.docker.internal:8082
+    url: http://product-service:8082
     routes:
-      - name: product-route
+      - name: product-public-route
         paths:
-          - "/api/v1/products"
-          - "/api/v1/categories"
-          - "/api/v1/wishlists"
+          - /api/v1/products
+          - /api/v1/categories
+        methods:
+          - GET
         strip_path: false
+      - name: product-write-route
+        paths:
+          - /api/v1/products
+        methods:
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+        strip_path: false
+        plugins:
+          - name: jwt-auth
+            config:
+              jwt_secret: "${JWT_SECRET}"
+      - name: wishlist-route
+        paths:
+          - /api/v1/wishlists
+        strip_path: false
+        plugins:
+          - name: jwt-auth
+            config:
+              jwt_secret: "${JWT_SECRET}"
 
-  # ┌──────────────────────────────────────────────────────────────────────────┐
-  # │ 3. Cart Service (port 8083)                                            │
-  # │    No JWT — supports guest users via X-User-Id header                  │
-  # └──────────────────────────────────────────────────────────────────────────┘
   - name: cart-service
-    url: http://host.docker.internal:8083
+    url: http://cart-service:8083
     routes:
       - name: cart-route
         paths:
-          - "/api/v1/cart"
+          - /api/v1/cart
         strip_path: false
+        plugins:
+          - name: jwt-auth
+            config:
+              jwt_secret: "${JWT_SECRET}"
 
-  # ┌──────────────────────────────────────────────────────────────────────────┐
-  # │ 4. Order Service (port 8084)                                           │
-  # │    Handles orders and VNPay payments                                   │
-  # │    No JWT at gateway — guest checkout supported                        │
-  # └──────────────────────────────────────────────────────────────────────────┘
   - name: order-service
-    url: http://host.docker.internal:8084
+    url: http://order-service:8084
     routes:
       - name: order-route
         paths:
-          - "/api/v1/orders"
+          - /api/v1/orders
         strip_path: false
-
+        plugins:
+          - name: jwt-auth
+            config:
+              jwt_secret: "${JWT_SECRET}"
+      - name: payment-return-public-route
+        paths:
+          - /api/v1/payments/vnpay/payment-return
+        strip_path: false
       - name: payment-route
         paths:
-          - "/api/v1/payments"
+          - /api/v1/payments
         strip_path: false
+        plugins:
+          - name: jwt-auth
+            config:
+              jwt_secret: "${JWT_SECRET}"
 
-  # ┌──────────────────────────────────────────────────────────────────────────┐
-  # │ 5. Promotion Service (port 8085)                                       │
-  # └──────────────────────────────────────────────────────────────────────────┘
   - name: promotion-service
-    url: http://host.docker.internal:8085
+    url: http://promotion-service:8085
     routes:
-      - name: promotion-route
+      - name: promotion-public-route
         paths:
-          - "/api/v1/promotions"
+          - /api/v1/promotions/active
+          - /api/v1/promotions/validate
         strip_path: false
+      - name: loyalty-route
+        paths:
+          - /api/v1/promotions/loyalty
+        strip_path: false
+        plugins:
+          - name: jwt-auth
+            config:
+              jwt_secret: "${JWT_SECRET}"
 
-  # ┌──────────────────────────────────────────────────────────────────────────┐
-  # │ 6. Review Service (port 8086)                                          │
-  # └──────────────────────────────────────────────────────────────────────────┘
   - name: review-service
-    url: http://host.docker.internal:8086
+    url: http://review-service:8086
     routes:
+      - name: review-public-route
+        paths:
+          - /api/v1/reviews/product
+        strip_path: false
       - name: review-route
         paths:
-          - "/api/v1/reviews"
+          - /api/v1/reviews
         strip_path: false
+        plugins:
+          - name: jwt-auth
+            config:
+              jwt_secret: "${JWT_SECRET}"
 
-  # ┌──────────────────────────────────────────────────────────────────────────┐
-  # │ 7. Chatbot Service (port 8087)                                         │
-  # └──────────────────────────────────────────────────────────────────────────┘
   - name: chatbot-service
-    url: http://host.docker.internal:8087
+    url: http://chatbot-service:8087
     routes:
-      - name: chatbot-route
+      - name: chatbot-chat-public-route
         paths:
-          - "/api/v1/chatbot"
+          - /api/v1/chatbot/chat
         strip_path: false
+      - name: chatbot-session-route
+        paths:
+          - /api/v1/chatbot/sessions
+        strip_path: false
+        plugins:
+          - name: jwt-auth
+            config:
+              jwt_secret: "${JWT_SECRET}"

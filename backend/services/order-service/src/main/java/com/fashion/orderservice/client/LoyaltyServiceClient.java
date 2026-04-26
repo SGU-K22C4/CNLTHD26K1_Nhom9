@@ -7,6 +7,7 @@ import com.fashion.orderservice.client.dto.LoyaltyRefundRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -35,7 +36,7 @@ public class LoyaltyServiceClient {
                 .build();
 
         String url = promotionServiceUrl + "/api/v1/promotions/loyalty/redeem";
-        return post(url, request, "Unable to redeem points at this time");
+        return post(url, request, userId, "Unable to redeem points at this time");
     }
 
     public LoyaltyMutationResponse refundPoints(String userId, String orderId) {
@@ -46,7 +47,7 @@ public class LoyaltyServiceClient {
                 .build();
 
         String url = promotionServiceUrl + "/api/v1/promotions/loyalty/refund";
-        return post(url, request, "Unable to refund points at this time");
+        return post(url, request, userId, "Unable to refund points at this time");
     }
 
     public void earnPointsFromOrder(String userId, String orderId, BigDecimal netAmount) {
@@ -58,15 +59,18 @@ public class LoyaltyServiceClient {
                 .build();
 
         String url = promotionServiceUrl + "/api/v1/promotions/loyalty/earn/order";
-        post(url, request, "Unable to grant order loyalty points at this time");
+        post(url, request, userId, "Unable to grant order loyalty points at this time");
     }
 
-    private LoyaltyMutationResponse post(String url, Object body, String fallbackErrorMessage) {
+    private LoyaltyMutationResponse post(String url, Object body, String userId, String fallbackErrorMessage) {
         try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-User-Id", userId);
+
             ResponseEntity<LoyaltyMutationResponse> response = restTemplate.exchange(
                     url,
                     HttpMethod.POST,
-                    new HttpEntity<>(body),
+                    new HttpEntity<>(body, headers),
                     LoyaltyMutationResponse.class
             );
             return response.getBody();

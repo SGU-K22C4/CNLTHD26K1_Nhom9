@@ -81,10 +81,8 @@ export default function ProfilePage() {
 
     try {
       const updatedProfile = await userService.updateProfile({
-        firstName: editForm.firstName,
-        lastName: editForm.lastName,
-        phoneNumber: editForm.phoneNumber,
-        avatarUrl: profile?.avatarUrl,
+        fullName: `${editForm.lastName} ${editForm.firstName}`.trim(),
+        phone: editForm.phoneNumber,
       })
 
       setProfile(updatedProfile)

@@ -51,6 +51,9 @@ export default function CheckoutPage() {
   const [loyaltyMessage, setLoyaltyMessage] = useState('')
   const [loyaltyError, setLoyaltyError] = useState('')
   const [applyingPoints, setApplyingPoints] = useState(false)
+  
+  const [savedAddresses, setSavedAddresses] = useState([])
+  const [selectedAddressId, setSelectedAddressId] = useState('')
   const [useRegisteredAddress, setUseRegisteredAddress] = useState(true)
 
   /* ── Address Dropdowns State ── */
@@ -60,7 +63,10 @@ export default function CheckoutPage() {
 
   /* ── Auto-fill from user profile ── */
   useEffect(() => {
-    if (!user) return
+    if (!user) {
+      setUseRegisteredAddress(false)
+      return
+    }
     // Fill from AuthContext immediately
     setForm(prev => ({
       ...prev,
@@ -68,10 +74,12 @@ export default function CheckoutPage() {
       firstName: prev.firstName || user.firstName || '',
       lastName: prev.lastName || user.lastName || '',
     }))
-    // Then fetch full profile for phone
-    userService.getProfile()
-      .then(profile => {
-        if (!profile) return
+    
+    Promise.all([
+      userService.getProfile().catch(() => null),
+      userService.getAddresses().catch(() => [])
+    ]).then(([profile, addresses]) => {
+      if (profile) {
         setForm(prev => ({
           ...prev,
           email: prev.email || profile.email || '',
@@ -79,8 +87,16 @@ export default function CheckoutPage() {
           lastName: prev.lastName || profile.lastName || '',
           phone: prev.phone || profile.phoneNumber || '',
         }))
-      })
-      .catch(err => console.warn('Could not load user profile for auto-fill:', err))
+      }
+      if (addresses && addresses.length > 0) {
+        setSavedAddresses(addresses)
+        const defaultAddr = addresses.find(a => a.isDefault) || addresses[0]
+        setSelectedAddressId(defaultAddr.id)
+        setUseRegisteredAddress(true)
+      } else {
+        setUseRegisteredAddress(false)
+      }
+    }).catch(err => console.warn('Could not load user data for auto-fill:', err))
   }, [user])
 
   useEffect(() => {
@@ -156,16 +172,20 @@ export default function CheckoutPage() {
     if (!form.email.trim()) newErrors.email = 'Vui lòng nhập email'
     else if (!/^\S+@\S+\.\S+$/.test(form.email)) newErrors.email = 'Email không hợp lệ'
 
-    if (!form.firstName.trim()) newErrors.firstName = 'Vui lòng nhập họ'
-    if (!form.lastName.trim()) newErrors.lastName = 'Vui lòng nhập tên'
-    
-    if (!form.phone.trim()) newErrors.phone = 'Vui lòng nhập số điện thoại'
-    else if (!/(84|0[3|5|7|8|9])+([0-9]{8})\b/.test(form.phone)) newErrors.phone = 'Số điện thoại không hợp lệ'
-    
-    if (!form.address.trim()) newErrors.address = 'Vui lòng nhập địa chỉ'
-    if (!form.cityId) newErrors.city = 'Vui lòng chọn Tỉnh / Thành phố'
-    if (!form.districtId) newErrors.district = 'Vui lòng chọn Quận / Huyện'
-    if (!form.wardId) newErrors.ward = 'Vui lòng chọn Phường / Xã'
+    if (useRegisteredAddress && savedAddresses.length > 0) {
+      if (!selectedAddressId) newErrors.selectedAddress = 'Vui lòng chọn địa chỉ giao hàng'
+    } else {
+      if (!form.firstName.trim()) newErrors.firstName = 'Vui lòng nhập họ'
+      if (!form.lastName.trim()) newErrors.lastName = 'Vui lòng nhập tên'
+      
+      if (!form.phone.trim()) newErrors.phone = 'Vui lòng nhập số điện thoại'
+      else if (!/(84|0[3|5|7|8|9])+([0-9]{8})\b/.test(form.phone)) newErrors.phone = 'Số điện thoại không hợp lệ'
+      
+      if (!form.address.trim()) newErrors.address = 'Vui lòng nhập địa chỉ'
+      if (!form.cityId) newErrors.city = 'Vui lòng chọn Tỉnh / Thành phố'
+      if (!form.districtId) newErrors.district = 'Vui lòng chọn Quận / Huyện'
+      if (!form.wardId) newErrors.ward = 'Vui lòng chọn Phường / Xã'
+    }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -265,26 +285,40 @@ export default function CheckoutPage() {
   const ErrorMsg = ({ field }) => errors[field] ? <span className="text-red-500 text-xs mt-1 block">{errors[field]}</span> : null
 
   /* ── Build payload matching DB Order entity ── */
-  const buildOrderPayload = () => ({
-    recipientName: `${form.firstName} ${form.lastName}`.trim(),
-    recipientPhone: form.phone,
-    shippingAddress: [form.address, form.apartment, form.ward, form.district, form.city]
-      .filter(Boolean).join(', '),
-    paymentMethod: form.paymentMethod,
-    note: form.note || null,
-    email: form.email || null,
-    usedPoints: appliedPoints,
-    items: items.map(item => ({
-      productId: item.productId || item.id,
-      productName: item.name,
-      productSlug: item.slug || item.productSlug || '',
-      imageUrl: item.imageUrl || item.image || '',
-      color: item.color,
-      size: item.size,
-      quantity: item.quantity,
-      unitPrice: item.price
-    }))
-  })
+  const buildOrderPayload = () => {
+    let recipientName = `${form.firstName} ${form.lastName}`.trim()
+    let recipientPhone = form.phone
+    let shippingAddress = [form.address, form.apartment, form.ward, form.district, form.city].filter(Boolean).join(', ')
+
+    if (useRegisteredAddress && savedAddresses.length > 0 && selectedAddressId) {
+      const selectedAddr = savedAddresses.find(a => a.id === selectedAddressId)
+      if (selectedAddr) {
+        recipientName = selectedAddr.fullName
+        recipientPhone = selectedAddr.phoneNumber
+        shippingAddress = [selectedAddr.street, selectedAddr.ward, selectedAddr.city].filter(Boolean).join(', ')
+      }
+    }
+
+    return {
+      recipientName,
+      recipientPhone,
+      shippingAddress,
+      paymentMethod: form.paymentMethod,
+      note: form.note || null,
+      email: form.email || null,
+      usedPoints: appliedPoints,
+      items: items.map(item => ({
+        productId: item.productId || item.id,
+        productName: item.name,
+        productSlug: item.slug || item.productSlug || '',
+        imageUrl: item.imageUrl || item.image || '',
+        color: item.color,
+        size: item.size,
+        quantity: item.quantity,
+        unitPrice: item.price
+      }))
+    }
+  }
 
   /* â”€â”€ Shared: cart item row â”€â”€ */
   const CartItemRow = ({ item }) => (
@@ -384,7 +418,7 @@ export default function CheckoutPage() {
       {/* Shipping Address */}
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-base font-semibold text-[#202020]">Địa chỉ giao hàng</h2>
-        {user && (
+        {user && savedAddresses.length > 0 && (
           <button
             type="button"
             onClick={() => setUseRegisteredAddress(!useRegisteredAddress)}
@@ -395,11 +429,26 @@ export default function CheckoutPage() {
           </button>
         )}
       </div>
-      <div className="flex flex-col gap-3">
-        <div>
-          <input type="text" placeholder="Họ" value={form.firstName} onChange={set('firstName')} className={getInputClass('firstName')} />
-          <ErrorMsg field="firstName" />
+
+      {useRegisteredAddress && savedAddresses.length > 0 ? (
+        <div className="flex flex-col gap-3">
+          {savedAddresses.map(addr => (
+            <label key={addr.id} className={`flex items-start gap-3 p-4 border cursor-pointer transition-colors ${selectedAddressId === addr.id ? 'border-[#5A6D57] bg-[#F3F8F2]' : 'border-[#dfdfdf] hover:border-[#5A6D57]'}`}>
+              <input type="radio" name="selectedAddressMobile" value={addr.id} checked={selectedAddressId === addr.id} onChange={() => setSelectedAddressId(addr.id)} className="mt-1 accent-[#5A6D57]" />
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-[#202020]">{addr.fullName} | {addr.phoneNumber}</span>
+                <span className="text-sm text-[#404040] mt-1">{addr.street}, {addr.ward}, {addr.city}</span>
+              </div>
+            </label>
+          ))}
+          <ErrorMsg field="selectedAddress" />
         </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div>
+            <input type="text" placeholder="Họ" value={form.firstName} onChange={set('firstName')} className={getInputClass('firstName')} />
+            <ErrorMsg field="firstName" />
+          </div>
         <div>
           <input type="text" placeholder="Tên" value={form.lastName} onChange={set('lastName')} className={getInputClass('lastName')} />
           <ErrorMsg field="lastName" />
@@ -455,6 +504,7 @@ export default function CheckoutPage() {
 
         <input type="text" placeholder="Công ty (không bắt buộc)" value={form.company} onChange={set('company')} className={getInputClass('company')} />
       </div>
+    )}
 
       {/* Payment Method */}
       <h2 className="text-base font-semibold text-[#202020] mt-6 mb-3">Phương thức thanh toán</h2>
@@ -665,7 +715,7 @@ export default function CheckoutPage() {
           {/* Shipping Address */}
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-[#202020]">Địa chỉ giao hàng</h2>
-            {user && (
+            {user && savedAddresses.length > 0 && (
               <button
                 type="button"
                 onClick={() => setUseRegisteredAddress(!useRegisteredAddress)}
@@ -676,12 +726,27 @@ export default function CheckoutPage() {
               </button>
             )}
           </div>
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <input type="text" placeholder="Họ" value={form.firstName} onChange={set('firstName')} className={getInputClass('firstName')} />
-                <ErrorMsg field="firstName" />
-              </div>
+          
+          {useRegisteredAddress && savedAddresses.length > 0 ? (
+            <div className="flex flex-col gap-3">
+              {savedAddresses.map(addr => (
+                <label key={addr.id} className={`flex items-start gap-3 p-4 border cursor-pointer transition-colors ${selectedAddressId === addr.id ? 'border-[#5A6D57] bg-[#F3F8F2]' : 'border-[#dfdfdf] hover:border-[#5A6D57]'}`}>
+                  <input type="radio" name="selectedAddressDesktop" value={addr.id} checked={selectedAddressId === addr.id} onChange={() => setSelectedAddressId(addr.id)} className="mt-1 accent-[#5A6D57]" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-[#202020]">{addr.fullName} | {addr.phoneNumber}</span>
+                    <span className="text-sm text-[#404040] mt-1">{addr.street}, {addr.ward}, {addr.city}</span>
+                  </div>
+                </label>
+              ))}
+              <ErrorMsg field="selectedAddress" />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <input type="text" placeholder="Họ" value={form.firstName} onChange={set('firstName')} className={getInputClass('firstName')} />
+                  <ErrorMsg field="firstName" />
+                </div>
               <div>
                 <input type="text" placeholder="Tên" value={form.lastName} onChange={set('lastName')} className={getInputClass('lastName')} />
                 <ErrorMsg field="lastName" />
@@ -738,7 +803,8 @@ export default function CheckoutPage() {
             </div>
 
             <input type="text" placeholder="Công ty (không bắt buộc)" value={form.company} onChange={set('company')} className={getInputClass('company')} />
-          </div>
+            </div>
+          )}
 
           <h2 className="text-lg font-semibold text-[#202020] mt-8 mb-4">Sử dụng điểm tích lũy</h2>
           <div className="border border-[#dfdfdf] p-3">

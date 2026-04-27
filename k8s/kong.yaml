@@ -217,7 +217,14 @@ data:
       if not header then
         return kong.response.exit(401, { message = "Failed to parse token header" })
       end
-      if header.alg ~= "HS256" then
+      local hmac_alg
+      if header.alg == "HS256" then
+        hmac_alg = "SHA256"
+      elseif header.alg == "HS384" then
+        hmac_alg = "SHA384"
+      elseif header.alg == "HS512" then
+        hmac_alg = "SHA512"
+      else
         return kong.response.exit(401, { message = "Unsupported algorithm: " .. (header.alg or "unknown") })
       end
       local signing_input = header_b64 .. "." .. payload_b64
@@ -226,7 +233,7 @@ data:
         kong.log.err("Failed to Base64-decode jwt_secret.")
         return kong.response.exit(500, { message = "Internal server error" })
       end
-      local computed_hmac, hmac_err = openssl_hmac.new(secret_decoded, "SHA256")
+      local computed_hmac, hmac_err = openssl_hmac.new(secret_decoded, hmac_alg)
       if not computed_hmac then
         kong.log.err("Failed to create HMAC: ", hmac_err)
         return kong.response.exit(500, { message = "Internal server error" })
@@ -255,8 +262,27 @@ data:
       if not subject or subject == "" then
         return kong.response.exit(401, { message = "Token missing 'sub' claim" })
       end
-      kong.service.request.set_header("X-User-Id", subject)
+
+      -- Inject X-User-Email (always the email from 'sub' claim)
       kong.service.request.set_header("X-User-Email", subject)
+
+      -- Inject X-User-Id (userId from custom claim, fallback to sub/email)
+      local user_id = payload.userId
+      if user_id then
+        kong.service.request.set_header("X-User-Id", tostring(user_id))
+      else
+        kong.service.request.set_header("X-User-Id", subject)
+      end
+
+      -- Inject X-User-Role (from custom 'role' claim: ADMIN, CUSTOMER, etc.)
+      local role = payload.role
+      if role then
+        kong.service.request.set_header("X-User-Role", role)
+      end
+
+      -- Inject X-Consumer-Username (used by KongHeaderAuthFilter as principal)
+      kong.service.request.set_header("X-Consumer-Username", subject)
+
       kong.log.debug("JWT validated successfully for user: ", subject)
     end
 

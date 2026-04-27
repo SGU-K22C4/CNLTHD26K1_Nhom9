@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { paymentService } from '../services/paymentService'
+import { API_CONFIG } from '../../../config/api.config'
 
 export default function VNPayReturnPage() {
   const [searchParams] = useSearchParams()
@@ -21,9 +22,8 @@ export default function VNPayReturnPage() {
           // Clear cart after successful VNPay payment
           const guestId = localStorage.getItem('guestId')
           if (guestId) {
-            const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
             try {
-              await fetch(`${API_URL}/api/v1/cart`, {
+              await fetch(`${API_CONFIG.BASE_URL}/api/v1/cart`, {
                 method: 'DELETE',
                 headers: { 'X-User-Id': guestId },
               })

@@ -34,7 +34,7 @@ export default function AppRoutes() {
       <Route path="/products/:id" element={<WithLayout><ProductDetailPage /></WithLayout>} />
       <Route path="/verify-email" element={<WithLayout><VerifyEmailPage /></WithLayout>} />
       <Route path="/contact" element={<WithLayout><ContactPage /></WithLayout>} />
-      <Route path="/chatbot" element={<PrivateRoute><ChatbotPage /></PrivateRoute>} />
+      <Route path="/chatbot" element={<PrivateRoute><WithLayout><ChatbotPage /></WithLayout></PrivateRoute>} />
       <Route path="/index.html" element={<WithLayout><HomePage /></WithLayout>} />
 
       {/* Guest-only routes */}

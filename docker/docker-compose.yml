@@ -93,6 +93,15 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    container_name: fashion_jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
   # ── Services ───────────────────────────────────────────────────────────────
   user-service:
     build:
@@ -135,11 +144,15 @@ services:
       - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
       - SPRING_CLOUD_CONFIG_ENABLED=false
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - MANAGEMENT_ZIPKIN_TRACING_ENDPOINT=http://jaeger:9411/api/v2/spans
+      - MANAGEMENT_TRACING_SAMPLING_PROBABILITY=1.0
     depends_on:
       mysql:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      jaeger:
+        condition: service_started
 
   cart-service:
     build:
@@ -170,6 +183,8 @@ services:
       - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
       - SPRING_CLOUD_CONFIG_ENABLED=false
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - MANAGEMENT_ZIPKIN_TRACING_ENDPOINT=http://jaeger:9411/api/v2/spans
+      - MANAGEMENT_TRACING_SAMPLING_PROBABILITY=1.0
       - VNPAY_TMN_CODE=${VNPAY_TMN_CODE:-XWJEG5N8}
       - VNPAY_HASH_SECRET=${VNPAY_HASH_SECRET:?VNPAY_HASH_SECRET is required}
       - VNPAY_PAYMENT_URL=${VNPAY_PAYMENT_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
@@ -181,6 +196,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      jaeger:
+        condition: service_started
 
   promotion-service:
     build:

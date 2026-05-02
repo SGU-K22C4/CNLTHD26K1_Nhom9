@@ -13,19 +13,46 @@ function getStoredUser() {
     }
 }
 
+function normalizeAuthPayload(rawData) {
+    const payload = rawData?.data && typeof rawData.data === 'object' ? rawData.data : rawData;
+
+    const accessToken = payload?.accessToken || payload?.token || null;
+    const refreshToken = payload?.refreshToken || null;
+
+    return {
+        accessToken,
+        refreshToken,
+        email: payload?.email || payload?.user?.email || null,
+        firstName: payload?.firstName || payload?.user?.firstName || '',
+        lastName: payload?.lastName || payload?.user?.lastName || '',
+        role: payload?.role || payload?.user?.role || null,
+        id: payload?.id || payload?.userId || payload?.user?.id || null,
+    };
+}
+
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(() => getStoredUser());
 
-    const login = useCallback((data, navigateTo) => {
+    const login = useCallback((rawData, navigateTo) => {
+        const data = normalizeAuthPayload(rawData);
+        if (!data.accessToken) {
+            throw new Error('Login response missing access token');
+        }
+
         const userInfo = {
             email: data.email,
             firstName: data.firstName,
             lastName: data.lastName,
-            role: data.role
+            role: data.role,
+            id: data.id,
         };
         setUser(userInfo);
         localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('refreshToken', data.refreshToken);
+        if (data.refreshToken) {
+            localStorage.setItem('refreshToken', data.refreshToken);
+        } else {
+            localStorage.removeItem('refreshToken');
+        }
         localStorage.setItem('userInfo', JSON.stringify(userInfo));
         // Cho phép caller tự redirect (ví dụ: về trang trước khi bị đá ra)
         if (navigateTo) navigateTo();

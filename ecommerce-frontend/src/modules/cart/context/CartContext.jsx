@@ -31,27 +31,27 @@ export function CartProvider({ children }) {
     products.forEach((product) => {
       const fallbackImage = product.image || product.images?.[0] || ''
 
-      ;(product.variants || []).forEach((variant) => {
-        const variantImage = variant?.images?.find((img) => img.primary)?.imageUrl
-          || variant?.images?.[0]?.imageUrl
-          || fallbackImage
+        ; (product.variants || []).forEach((variant) => {
+          const variantImage = variant?.images?.find((img) => img.primary)?.imageUrl
+            || variant?.images?.[0]?.imageUrl
+            || fallbackImage
 
-        ;(variant.sizes || []).forEach((sizeObj) => {
-          if (!sizeObj?.id) return
-          index.set(sizeObj.id, {
-            id: sizeObj.id,
-            variantSizeId: sizeObj.id,
-            productId: product.id,
-            name: product.name || 'Unknown product',
-            color: variant.colorName || '',
-            size: sizeObj.sizeName || '',
-            price: Number(variant.price) || 0,
-            image: variantImage,
-            imageUrl: variantImage,
-            slug: product.slug || '',
-          })
+            ; (variant.sizes || []).forEach((sizeObj) => {
+              if (!sizeObj?.id) return
+              index.set(sizeObj.id, {
+                id: sizeObj.id,
+                variantSizeId: sizeObj.id,
+                productId: product.id,
+                name: product.name || 'Unknown product',
+                color: variant.colorName || '',
+                size: sizeObj.sizeName || '',
+                price: Number(variant.price) || 0,
+                image: variantImage,
+                imageUrl: variantImage,
+                slug: product.slug || '',
+              })
+            })
         })
-      })
     })
 
     productVariantIndexRef.current = index
@@ -95,6 +95,10 @@ export function CartProvider({ children }) {
     let mounted = true
 
     const loadInitialCart = async () => {
+      if (!user) {
+        if (mounted) setItems([])
+        return
+      }
       try {
         const raw = await cartService.getCart()
         const hydrated = await hydrateCartItems(raw)
@@ -110,7 +114,7 @@ export function CartProvider({ children }) {
     return () => {
       mounted = false
     }
-  }, [hydrateCartItems])
+  }, [hydrateCartItems, user])
 
   // === Clear cart on logout, re-sync on login ===
   useEffect(() => {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import Modal from '@/shared/components/ui/Modal';
 import Input from '@/shared/components/ui/Input';
+import AddressFields from '@/shared/components/ui/AddressFields';
 import { useProvinces } from '@/shared/hooks/useProvinces';
 
 export default function AddressModal({ isOpen, onClose, onSave, initialData }) {
@@ -133,37 +134,22 @@ export default function AddressModal({ isOpen, onClose, onSave, initialData }) {
             })}
           />
 
-          <Input
-            type="text"
-            placeholder="Địa chỉ cụ thể (Số nhà, tên đường...)"
-            error={errors.street?.message}
-            {...register('street', { required: 'Vui lòng nhập địa chỉ cụ thể' })}
+          <AddressFields
+            streetInputProps={register('street', { required: 'Vui lòng nhập địa chỉ cụ thể' })}
+            streetError={errors.street?.message}
+            citySelectProps={register('cityCode', { required: 'Vui lòng chọn Tỉnh/Thành' })}
+            cityError={errors.cityCode?.message}
+            wardSelectProps={{
+              ...register('wardCode', { required: 'Vui lòng chọn Quận/Huyện/Phường' }),
+              disabled: !wards.length,
+            }}
+            wardError={errors.wardCode?.message}
+            provinces={provinces}
+            wards={wards}
+            selectClassName="w-full px-4 border h-[46px] bg-[#F9F9F9] rounded focus:bg-white focus:border-[#5A6D57] transition-colors text-sm text-gray-700"
+            selectErrorClassName="border-red-500"
+            selectDefaultClassName="border-[#E5E7EB]"
           />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="flex flex-col">
-              <select
-                className={`w-full px-4 border ${errors.cityCode ? 'border-red-500' : 'border-[#E5E7EB]'} h-[46px] bg-[#F9F9F9] rounded focus:bg-white focus:border-[#5A6D57] transition-colors text-sm text-gray-700`}
-                {...register('cityCode', { required: 'Vui lòng chọn Tỉnh/Thành' })}
-              >
-                <option value="">Tỉnh/Thành phố</option>
-                {provinces.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
-              </select>
-              {errors.cityCode && <span className="text-xs text-red-500 mt-1">{errors.cityCode.message}</span>}
-            </div>
-
-            <div className="flex flex-col">
-              <select
-                className={`w-full px-4 border ${errors.wardCode ? 'border-red-500' : 'border-[#E5E7EB]'} h-[46px] bg-[#F9F9F9] rounded focus:bg-white focus:border-[#5A6D57] transition-colors text-sm text-gray-700`}
-                {...register('wardCode', { required: 'Vui lòng chọn Quận/Huyện/Phường' })}
-                disabled={!wards.length}
-              >
-                <option value="">Quận / Huyện / Phường</option>
-                {wards.map(w => <option key={w.code} value={w.code}>{w.name}</option>)}
-              </select>
-              {errors.wardCode && <span className="text-xs text-red-500 mt-1">{errors.wardCode.message}</span>}
-            </div>
-          </div>
 
           <label className="flex items-center gap-2 cursor-pointer mt-2">
             <input type="checkbox" {...register('isDefault')} className="w-4 h-4 accent-[#5A6D57]" />

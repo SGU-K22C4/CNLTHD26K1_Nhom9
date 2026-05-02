@@ -776,7 +776,7 @@ metadata:
   labels:
     app: frontend
 spec:
-  type: LoadBalancer
+  type: ClusterIP  # Routed through Kong Gateway (single LoadBalancer entry point)
   selector:
     app: frontend
   ports:

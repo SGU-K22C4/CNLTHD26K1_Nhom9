@@ -173,6 +173,13 @@ data:
                 config:
                   jwt_secret: "${JWT_SECRET}"
 
+      # ── Frontend (catch-all: every non-API request goes to React) ──
+      - name: frontend-service
+        url: http://frontend:80
+        routes:
+          - name: frontend-catch-all
+            paths: ["/"]
+            strip_path: false
 
 ---
 # ── Kong Entrypoint Wrapper Script ──────────────────────────────────────────

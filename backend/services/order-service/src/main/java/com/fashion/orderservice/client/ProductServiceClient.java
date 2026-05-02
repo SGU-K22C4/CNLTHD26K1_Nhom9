@@ -1,5 +1,6 @@
 package com.fashion.orderservice.client;
 
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
@@ -16,11 +17,12 @@ import org.springframework.web.client.RestTemplate;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class ProductServiceClient {
 
     private final RestTemplate restTemplate;
 
-    @Value("${order.integration.product-service-url:http://localhost:8082}")
+    @Value("${order.integration.product-service-url:${PRODUCT_SERVICE_URL:http://localhost:8082}}")
     private String productServiceUrl;
 
     /**
@@ -37,12 +39,16 @@ public class ProductServiceClient {
                     url, HttpMethod.GET, null, Object.class);
             return response.getStatusCode().is2xxSuccessful();
         } catch (HttpClientErrorException.NotFound ex) {
+            log.warn("Product not found while verifying productId={} via url={}", productId, url);
             return false;
         } catch (HttpClientErrorException ex) {
+            log.warn("Product verification failed with status={} for productId={} via url={} body={}",
+                    ex.getStatusCode(), productId, url, ex.getResponseBodyAsString());
             return false;
         } catch (RestClientException ex) {
+            log.error("Product service call failed for productId={} via url={}", productId, url, ex);
             throw new IllegalStateException(
-                    "Unable to verify product at this time. Product Service may be unavailable.");
+                    "Unable to verify product at this time. Product Service may be unavailable.", ex);
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.fashion.orderservice.client;
 
+import com.fashion.common.util.RestClientUtils;
 import com.fashion.orderservice.client.dto.LoyaltyMutationResponse;
 import com.fashion.orderservice.client.dto.LoyaltyEarnOrderRequest;
 import com.fashion.orderservice.client.dto.LoyaltyRedeemRequest;
@@ -23,7 +24,7 @@ public class LoyaltyServiceClient {
 
     private final RestTemplate restTemplate;
 
-    @Value("${order.integration.promotion-service-url:http://localhost:8085}")
+    @Value("${order.integration.promotion-service-url:${PROMOTION_SERVICE_URL:http://localhost:8085}}")
     private String promotionServiceUrl;
 
     public LoyaltyMutationResponse redeemPoints(String userId, String orderId, BigDecimal orderAmount, Integer requestedPoints) {
@@ -75,28 +76,10 @@ public class LoyaltyServiceClient {
             );
             return response.getBody();
         } catch (HttpClientErrorException ex) {
-            String message = extractMessage(ex.getResponseBodyAsString(), ex.getStatusText());
+            String message = RestClientUtils.extractMessage(ex.getResponseBodyAsString(), ex.getStatusText());
             throw new IllegalArgumentException(message);
         } catch (RestClientException ex) {
             throw new IllegalStateException(fallbackErrorMessage);
         }
-    }
-
-    private String extractMessage(String body, String fallback) {
-        if (body == null || body.isBlank()) {
-            return fallback;
-        }
-
-        String marker = "\"message\":\"";
-        int start = body.indexOf(marker);
-        if (start < 0) {
-            return fallback;
-        }
-        start += marker.length();
-        int end = body.indexOf('"', start);
-        if (end <= start) {
-            return fallback;
-        }
-        return body.substring(start, end);
     }
 }

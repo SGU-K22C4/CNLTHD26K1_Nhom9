@@ -110,6 +110,7 @@ services:
     container_name: fashion-user-service
     restart: unless-stopped
     environment:
+      - SERVER_PORT=8081
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_user_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD}
@@ -161,6 +162,7 @@ services:
     container_name: fashion-cart-service
     restart: unless-stopped
     environment:
+      - SERVER_PORT=8083
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
@@ -190,6 +192,7 @@ services:
       - VNPAY_PAYMENT_URL=${VNPAY_PAYMENT_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
       - VNPAY_API_URL=${VNPAY_API_URL:-https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
       - VNPAY_RETURN_URL=${VNPAY_RETURN_URL:-http://localhost:5173/payment/vnpay-return}
+      - PRODUCT_SERVICE_URL=http://product-service:8082
       - PROMOTION_SERVICE_URL=http://promotion-service:8085
     depends_on:
       mysql:
@@ -206,6 +209,7 @@ services:
     container_name: fashion-promotion-service
     restart: unless-stopped
     environment:
+      - SERVER_PORT=8085
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fashion_promotion_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD}
@@ -268,7 +272,7 @@ services:
     image: kong:3.7-ubuntu
     container_name: fashion_kong_gateway
     restart: unless-stopped
-    # entrypoint: ["/bin/sh", "/kong/docker-entrypoint-wrapper.sh"]
+    entrypoint: ["/bin/sh", "/kong/docker-entrypoint-wrapper.sh"]
     environment:
       KONG_DATABASE: "off"
       KONG_PROXY_ACCESS_LOG: /dev/stdout
@@ -280,11 +284,11 @@ services:
       KONG_LUA_PACKAGE_PATH: /kong/custom-plugins/?.lua;/kong/custom-plugins/?/init.lua;;
       # JWT secret — shared with all Spring Boot services
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      KONG_DECLARATIVE_CONFIG: /kong/template/kong.yml
+      # KONG_DECLARATIVE_CONFIG is set by the entrypoint wrapper after env substitution
     ports:
       - "8080:8080"   # Proxy (frontend calls this)
     volumes:
-      - ./kong.yml:/kong/template/kong.yml:ro
+      - ./kong.yml:/kong/template/kong.yml.template:ro
       - ./kong/docker-entrypoint-wrapper.sh:/kong/docker-entrypoint-wrapper.sh:ro
       - ./kong/plugins/jwt-auth:/kong/custom-plugins/kong/plugins/jwt-auth:ro
     healthcheck:

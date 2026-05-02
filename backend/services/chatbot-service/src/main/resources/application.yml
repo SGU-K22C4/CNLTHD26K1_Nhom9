@@ -27,6 +27,14 @@ chatbot:
     data-path: classpath:knowledge
     top-k: 4
     min-score: 0.3
+    graphrag:
+      enabled: ${CHATBOT_GRAPHRAG_ENABLED:true}
+      merge-weight: ${CHATBOT_GRAPHRAG_MERGE_WEIGHT:0.45}
+      max-keywords-per-chunk: ${CHATBOT_GRAPHRAG_MAX_KEYWORDS:8}
+      max-hits: ${CHATBOT_GRAPHRAG_MAX_HITS:12}
+      related-threshold: ${CHATBOT_GRAPHRAG_RELATED_THRESHOLD:0.25}
+      adjacent-boost: ${CHATBOT_GRAPHRAG_ADJACENT_BOOST:0.25}
+      related-boost: ${CHATBOT_GRAPHRAG_RELATED_BOOST:0.35}
 
 # === LLM Provider (Ollama) ===
 # Supports both local Ollama (http://localhost:11434/v1) and cloud providers.

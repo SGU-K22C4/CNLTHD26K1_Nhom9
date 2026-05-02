@@ -19,3 +19,16 @@ chatbot:
   product-service-url: ${PRODUCT_SERVICE_URL:http://localhost:8080}
   promotion-service-url: ${PROMOTION_SERVICE_URL:http://localhost:8080}
   order-service-url: ${ORDER_SERVICE_URL:http://localhost:8080}
+  knowledge:
+    enabled: ${CHATBOT_KB_ENABLED:true}
+    data-path: classpath:knowledge
+    top-k: 4
+    min-score: 0.3
+    graphrag:
+      enabled: ${CHATBOT_GRAPHRAG_ENABLED:true}
+      merge-weight: ${CHATBOT_GRAPHRAG_MERGE_WEIGHT:0.45}
+      max-keywords-per-chunk: ${CHATBOT_GRAPHRAG_MAX_KEYWORDS:8}
+      max-hits: ${CHATBOT_GRAPHRAG_MAX_HITS:12}
+      related-threshold: ${CHATBOT_GRAPHRAG_RELATED_THRESHOLD:0.25}
+      adjacent-boost: ${CHATBOT_GRAPHRAG_ADJACENT_BOOST:0.25}
+      related-boost: ${CHATBOT_GRAPHRAG_RELATED_BOOST:0.35}

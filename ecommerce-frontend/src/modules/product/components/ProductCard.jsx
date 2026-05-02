@@ -38,7 +38,7 @@ export default function ProductCard({ product }) {
 
   if (!product) return null
 
-  const { id, name, category, price, isNew, image, colors } = product
+  const { id, name, category, price, isNew, image, colors, inStock = true } = product
   const wishlisted = isWishlisted(id)
 
   return (
@@ -56,13 +56,28 @@ export default function ProductCard({ product }) {
           loading="lazy"
         />
 
+        {/* Out-of-stock overlay */}
+        {!inStock && (
+          <div className="absolute inset-0 bg-white/50 z-[1]" />
+        )}
+
         {/* New badge */}
-        {isNew && (
+        {isNew && inStock && (
           <span
-            className="absolute top-3 left-3 bg-white px-2 py-0.5 tracking-wide"
+            className="absolute top-3 left-3 bg-white px-2 py-0.5 tracking-wide z-[2]"
             style={{ fontSize: '10px', fontWeight: 500, fontFamily: 'Montserrat, sans-serif' }}
           >
             New
+          </span>
+        )}
+
+        {/* Out-of-stock badge */}
+        {!inStock && (
+          <span
+            className="absolute top-3 left-3 bg-[#202020] text-white px-2 py-0.5 tracking-wide z-[2]"
+            style={{ fontSize: '10px', fontWeight: 500, fontFamily: 'Montserrat, sans-serif' }}
+          >
+            Hết hàng
           </span>
         )}
 
@@ -105,9 +120,9 @@ export default function ProductCard({ product }) {
         {/* Colour swatches */}
         {colors?.length > 0 && (
           <div className="flex gap-1.5 mt-1">
-            {colors.map((color) => (
+            {colors.map((color, idx) => (
               <span
-                key={color}
+                key={`${color}-${idx}`}
                 className="w-[14px] h-[14px] rounded-full inline-block flex-shrink-0"
                 style={{
                   backgroundColor: color,

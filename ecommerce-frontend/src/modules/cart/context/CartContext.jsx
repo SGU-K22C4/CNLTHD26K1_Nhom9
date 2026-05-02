@@ -86,6 +86,11 @@ export function CartProvider({ children }) {
   }, [ensureProductVariantIndex])
 
   const syncCart = useCallback(async () => {
+    if (!localStorage.getItem('accessToken')) {
+      setItems([])
+      return
+    }
+
     const raw = await cartService.getCart()
     const hydrated = await hydrateCartItems(raw)
     setItems(hydrated)
@@ -95,6 +100,11 @@ export function CartProvider({ children }) {
     let mounted = true
 
     const loadInitialCart = async () => {
+      if (!localStorage.getItem('accessToken')) {
+        if (mounted) setItems([])
+        return
+      }
+
       try {
         const raw = await cartService.getCart()
         const hydrated = await hydrateCartItems(raw)
@@ -114,7 +124,9 @@ export function CartProvider({ children }) {
 
   // === Clear cart on logout, re-sync on login ===
   useEffect(() => {
-    if (!user) {
+    const hasAccessToken = Boolean(localStorage.getItem('accessToken'))
+
+    if (!user || !hasAccessToken) {
       // User just logged out → clear cart state immediately
       setItems([])
       productVariantIndexRef.current = null

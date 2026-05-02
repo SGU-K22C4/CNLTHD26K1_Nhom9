@@ -3,7 +3,10 @@ import { buildUserHeaders } from '@/shared/utils/userHeaders'
 import { generateUUID } from '@/shared/utils/uuid'
 
 const CHATBOT_SESSION_PREFIX = 'chatbot_session_'
-const CHATBOT_TIMEOUT_MS = 25000
+const parsedTimeout = Number(import.meta.env.VITE_CHATBOT_TIMEOUT_MS)
+const CHATBOT_TIMEOUT_MS = Number.isFinite(parsedTimeout) && parsedTimeout > 0
+  ? parsedTimeout
+  : 180000
 
 function getSessionKey(userId) {
   return userId ? `${CHATBOT_SESSION_PREFIX}${userId}` : `${CHATBOT_SESSION_PREFIX}guest`

@@ -1,8 +1,39 @@
 _format_version: "3.0"
 
+plugins:
+  - name: cors
+    config:
+      origins:
+        - http://localhost:5173
+        - http://127.0.0.1:5173
+      methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      headers:
+        - Accept
+        - Accept-Version
+        - Authorization
+        - Content-Length
+        - Content-MD5
+        - Content-Type
+        - Date
+        - Origin
+        - X-Auth-Token
+        - X-Requested-With
+        - X-User-Id
+        - X-User-Email
+      exposed_headers:
+        - Authorization
+      credentials: false
+      max_age: 3600
+
 services:
   - name: user-service
-    url: http://user-service:8081
+    url: http://host.docker.internal:8081
     routes:
       - name: auth-public-route
         paths:
@@ -32,7 +63,7 @@ services:
               jwt_secret: "${JWT_SECRET}"
 
   - name: product-service
-    url: http://product-service:8082
+    url: http://host.docker.internal:8082
     routes:
       - name: product-public-route
         paths:
@@ -64,7 +95,7 @@ services:
               jwt_secret: "${JWT_SECRET}"
 
   - name: cart-service
-    url: http://cart-service:8083
+    url: http://host.docker.internal:8083
     routes:
       - name: cart-route
         paths:
@@ -76,7 +107,7 @@ services:
               jwt_secret: "${JWT_SECRET}"
 
   - name: order-service
-    url: http://order-service:8084
+    url: http://host.docker.internal:8084
     routes:
       - name: order-route
         paths:
@@ -100,7 +131,7 @@ services:
               jwt_secret: "${JWT_SECRET}"
 
   - name: promotion-service
-    url: http://promotion-service:8085
+    url: http://host.docker.internal:8085
     routes:
       - name: promotion-public-route
         paths:
@@ -117,7 +148,7 @@ services:
               jwt_secret: "${JWT_SECRET}"
 
   - name: review-service
-    url: http://review-service:8086
+    url: http://host.docker.internal:8086
     routes:
       - name: review-public-route
         paths:
@@ -133,7 +164,11 @@ services:
               jwt_secret: "${JWT_SECRET}"
 
   - name: chatbot-service
-    url: http://chatbot-service:8087
+    url: http://host.docker.internal:8087
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 180000
+    retries: 0
     routes:
       - name: chatbot-chat-public-route
         paths:

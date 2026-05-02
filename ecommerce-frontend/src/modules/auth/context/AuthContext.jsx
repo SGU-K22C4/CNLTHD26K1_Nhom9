@@ -1,7 +1,8 @@
-import { createContext, useState, useCallback } from 'react';
+import { createContext, useState, useCallback, useEffect } from 'react';
 import { authService } from '../services/authService';
 
 const AuthContext = createContext(null);
+const AUTH_CLEARED_EVENT = 'auth:cleared';
 
 function getStoredUser() {
     try {
@@ -15,6 +16,12 @@ function getStoredUser() {
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(() => getStoredUser());
+
+    useEffect(() => {
+        const handleAuthCleared = () => setUser(null);
+        window.addEventListener(AUTH_CLEARED_EVENT, handleAuthCleared);
+        return () => window.removeEventListener(AUTH_CLEARED_EVENT, handleAuthCleared);
+    }, []);
 
     const login = useCallback((data, navigateTo) => {
         const userInfo = {

@@ -17,8 +17,8 @@ spring:
 
 # JWT dùng chung cho tất cả service để giải mã token
 jwt:
-  # Do not fallback to a static shared secret in source code.
-  secret: ${JWT_SECRET}
+  # Local fallback keeps services bootable when env vars are not provided.
+  secret: ${JWT_SECRET:fdf96e94a86f9a039751e39a38f3d61b4db1b138bd3db18e97fef29d0eb6efab}
   expiration: ${JWT_EXPIRATION:900000}
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
 

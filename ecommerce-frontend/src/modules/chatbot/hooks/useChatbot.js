@@ -57,6 +57,7 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
 
   const hydrateSession = useCallback(async () => {
     if (!autoLoadHistory) return
+    if (!userId) return
 
     setIsHydrating(true)
     setError('')
@@ -94,7 +95,7 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
     } finally {
       setIsHydrating(false)
     }
-  }, [autoLoadHistory, sessionId])
+  }, [autoLoadHistory, sessionId, userId])
 
   useEffect(() => {
     hydrateSession()

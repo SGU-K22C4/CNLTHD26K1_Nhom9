@@ -1,6 +1,15 @@
 import axios from 'axios';
 import { API_CONFIG } from '@/config/api.config';
 
+const AUTH_CLEARED_EVENT = 'auth:cleared';
+
+function clearAuthSession() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('userInfo');
+  window.dispatchEvent(new Event(AUTH_CLEARED_EVENT));
+}
+
 const api = axios.create({
   baseURL: API_CONFIG.BASE_URL,
   timeout: API_CONFIG.TIMEOUT,
@@ -38,6 +47,11 @@ api.interceptors.response.use(
       
       try {
         const refreshToken = localStorage.getItem('refreshToken');
+        if (!refreshToken) {
+          clearAuthSession();
+          return Promise.reject(error);
+        }
+
         const response = await axios.post(
           `${API_CONFIG.BASE_URL}/api/v1/auth/refresh`,
           { refreshToken }
@@ -50,9 +64,8 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return api(originalRequest);
       } catch (refreshError) {
-        // Refresh failed - logout user
-        localStorage.clear();
-        window.location.href = '/login';
+        // Refresh failed - clear local auth state and let route guards handle navigation.
+        clearAuthSession();
         return Promise.reject(refreshError);
       }
     }

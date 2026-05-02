@@ -5,7 +5,7 @@ import com.fashion.chatbotservice.agent.FashionTools;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.model.ollama.OllamaChatModel;
 // FallbackChatLanguageModel is defined in this package (custom implementation for LangChain4j 0.36.x)
 import dev.langchain4j.service.AiServices;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,53 +16,76 @@ import java.time.Duration;
 
 /**
  * Wiring LangChain4j components: model, memory, tools → FashionAgent.
- * Uses Ollama (OpenAI-compatible API) as LLM provider.
+ * Uses Ollama as LLM provider.
  * Supports both local Ollama (localhost:11434) and cloud Ollama endpoints.
  */
 @Configuration
 public class AgentConfig {
 
-    @Value("${openrouter.api-key:}")
-    private String apiKey;
-
-    @Value("${openrouter.base-url:https://openrouter.ai/api/v1}")
+    @Value("${ollama.base-url:https://syncopated-pedagogic-nadia.ngrok-free.dev/api/chat}")
     private String baseUrl;
 
-    @Value("${openrouter.model:openai/gpt-4o-mini}")
+    @Value("${ollama.model:llama3.1:8b}")
     private String modelName;
 
-    @Value("${openrouter.max-tokens:600}")
-    private int maxTokens;
+    @Value("${ollama.fallback-model:llama3.1:8b}")
+    private String fallbackModelName;
+
+    @Value("${ollama.timeout-seconds:120}")
+    private int primaryTimeoutSeconds;
+
+    @Value("${ollama.fallback-timeout-seconds:90}")
+    private int fallbackTimeoutSeconds;
 
     @Value("${chatbot.memory.max-messages:20}")
     private int maxMessages;
 
     @Bean
     public ChatLanguageModel chatLanguageModel() {
-        // Model chính (Ollama - chạy local hoặc cloud, miễn phí không giới hạn)
-        ChatLanguageModel primaryModel = OpenAiChatModel.builder()
-                .apiKey(apiKey)
-                .baseUrl(baseUrl)
-                .modelName(modelName) // Ví dụ: qwen2.5:7b (Ollama)
-                .maxTokens(maxTokens)
-                .temperature(0.3)
-                .timeout(Duration.ofSeconds(60)) // Ollama local có thể chậm hơn cloud
-                .logRequests(true)
-                .logResponses(true)
-                .build();
+        String normalizedBaseUrl = normalizeOllamaBaseUrl(baseUrl);
+        Duration primaryTimeout = Duration.ofSeconds(Math.max(10, primaryTimeoutSeconds));
+        Duration fallbackTimeout = Duration.ofSeconds(Math.max(10, fallbackTimeoutSeconds));
 
-        // Model dự phòng (Ollama fallback - model nhẹ hơn nếu model chính quá tải)
-        ChatLanguageModel fallbackModel = OpenAiChatModel.builder()
-                .apiKey(apiKey)
-                .baseUrl(baseUrl)
-                .modelName("llama3.1:8b") // Model dự phòng nhẹ của Ollama
-                .maxTokens(maxTokens)
-                .temperature(0.3)
-                .timeout(Duration.ofSeconds(30))
-                .build();
+        // Ollama native API supports base host URL and also tolerates user-provided /api/chat URL via normalization.
+        ChatLanguageModel primaryModel = buildModel(normalizedBaseUrl, modelName, primaryTimeout);
 
-        // Tự động chuyển sang fallbackModel nếu primaryModel fail (Timeout, model not found...)
+        if (fallbackModelName == null
+                || fallbackModelName.isBlank()
+                || fallbackModelName.equalsIgnoreCase(modelName)) {
+            return primaryModel;
+        }
+
+        ChatLanguageModel fallbackModel = buildModel(normalizedBaseUrl, fallbackModelName, fallbackTimeout);
         return new FallbackChatLanguageModel(primaryModel, fallbackModel);
+    }
+
+    private ChatLanguageModel buildModel(String normalizedBaseUrl, String targetModel, Duration timeout) {
+        return OllamaChatModel.builder()
+                .baseUrl(normalizedBaseUrl)
+                .modelName(targetModel)
+                .temperature(0.3)
+                .timeout(timeout)
+                .build();
+    }
+
+    private String normalizeOllamaBaseUrl(String rawBaseUrl) {
+        String normalized = rawBaseUrl == null || rawBaseUrl.isBlank()
+                ? "https://syncopated-pedagogic-nadia.ngrok-free.dev/api/chat"
+                : rawBaseUrl.trim();
+
+        if (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+
+        if (normalized.endsWith("/api/chat")) {
+            return normalized.substring(0, normalized.length() - "/api/chat".length());
+        }
+
+        if (normalized.endsWith("/v1")) {
+            return normalized.substring(0, normalized.length() - "/v1".length());
+        }
+
+        return normalized;
     }
 
     @Bean

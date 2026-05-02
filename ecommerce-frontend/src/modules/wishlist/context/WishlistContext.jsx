@@ -124,6 +124,11 @@ export function WishlistProvider({ children }) {
   const [pendingRemoveId, setPendingRemoveId] = useState(null)
 
   const syncWishlist = useCallback(async () => {
+    if (!localStorage.getItem('accessToken')) {
+      setWishlistIds(new Set())
+      return
+    }
+
     try {
       const ids = await wishlistService.getWishlistIds()
       setWishlistIds(new Set(ids))

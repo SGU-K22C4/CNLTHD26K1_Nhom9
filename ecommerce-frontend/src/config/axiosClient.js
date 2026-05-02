@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { API_CONFIG } from './api.config';
 
+const AUTH_CLEARED_EVENT = 'auth:cleared';
+
 export const axiosClient = axios.create({
   baseURL: API_CONFIG.BASE_URL,
   timeout: API_CONFIG.TIMEOUT,
@@ -30,13 +32,17 @@ const getStorageItem = (key) => isBrowser ? localStorage.getItem(key) : null;
 const setStorageItem = (key, value) => { if (isBrowser) localStorage.setItem(key, value); };
 const removeStorageItem = (key) => { if (isBrowser) localStorage.removeItem(key); };
 
-const handleLogout = () => {
+const clearAuthSession = () => {
   removeStorageItem('accessToken');
   removeStorageItem('refreshToken');
   removeStorageItem('userInfo');
   if (isBrowser) {
-    window.location.href = '/login';
+    window.dispatchEvent(new Event(AUTH_CLEARED_EVENT));
   }
+};
+
+const handleLogout = () => {
+  clearAuthSession();
 };
 
 // --- Interceptors ---

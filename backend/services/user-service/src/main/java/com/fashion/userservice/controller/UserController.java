@@ -29,16 +29,14 @@ public class UserController {
     @PutMapping("/me")
     public ResponseEntity<UserProfileResponse> updateProfile(
             @RequestHeader("X-User-Id") String userId,
-            @Valid @RequestBody UpdateProfileRequest request
-    ) {
+            @Valid @RequestBody UpdateProfileRequest request) {
         return ResponseEntity.ok(userService.updateProfile(userId, request));
     }
 
     @PatchMapping("/me/password")
     public ResponseEntity<Void> changePassword(
             @RequestHeader("X-User-Id") String userId,
-            @Valid @RequestBody ChangePasswordRequest request
-    ) {
+            @Valid @RequestBody ChangePasswordRequest request) {
         userService.changePassword(userId, request);
         return ResponseEntity.noContent().build();
     }
@@ -53,8 +51,7 @@ public class UserController {
     @PostMapping("/me/addresses")
     public ResponseEntity<AddressResponse> addAddress(
             @RequestHeader("X-User-Id") String userId,
-            @Valid @RequestBody AddressRequest request
-    ) {
+            @Valid @RequestBody AddressRequest request) {
         return ResponseEntity.ok(userService.addAddress(userId, request));
     }
 
@@ -62,16 +59,14 @@ public class UserController {
     public ResponseEntity<AddressResponse> updateAddress(
             @RequestHeader("X-User-Id") String userId,
             @PathVariable String addressId,
-            @Valid @RequestBody AddressRequest request
-    ) {
+            @Valid @RequestBody AddressRequest request) {
         return ResponseEntity.ok(userService.updateAddress(userId, addressId, request));
     }
 
     @DeleteMapping("/me/addresses/{addressId}")
     public ResponseEntity<Void> deleteAddress(
             @RequestHeader("X-User-Id") String userId,
-            @PathVariable String addressId
-    ) {
+            @PathVariable String addressId) {
         userService.deleteAddress(userId, addressId);
         return ResponseEntity.noContent().build();
     }

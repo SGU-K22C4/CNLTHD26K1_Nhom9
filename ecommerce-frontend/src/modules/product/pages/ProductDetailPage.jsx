@@ -1,10 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { MOCK_PRODUCTS } from '../data/mockProducts'
+import { productService } from '../services/productService'
 import ProductGallery from '../components/ProductGallery'
 import SizeSelector from '../components/SizeSelector'
 import ColorSelector from '../components/ColorSelector'
 import ProductCard from '../components/ProductCard'
+import { formatCurrency } from '../../../shared/utils/format'
+import { useCartContext } from '../../cart/hooks/useCartContext'
+import { useWishlistContext } from '../../wishlist/context/useWishlistContext'
+import ProductReviewSection from '../../review/components/ProductReviewSection'
+import { useAuth } from '../../auth/hooks/useAuth'
 
 const PRIMARY = '#5A6D57'
 
@@ -21,17 +26,6 @@ function HeartFilledDark() {
       <path d="M12 21C12 21 3 14.5 3 8.5C3 5.42 5.42 3 8.5 3C10.24 3 11.91 3.81 13 5.08C14.09 3.81 15.76 3 17.5 3C20.58 3 23 5.42 23 8.5C23 14.5 12 21 12 21Z" fill="#C0392B" stroke="#C0392B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
-}
-
-/* derive 4 gallery thumbnails from the base Unsplash URL */
-function buildGallery(baseUrl) {
-  const base = baseUrl.split('?')[0]
-  return [
-    `${base}?w=800&h=1000&fit=crop&crop=top`,
-    `${base}?w=800&h=1000&fit=crop&crop=center`,
-    `${base}?w=800&h=1000&fit=crop&crop=bottom`,
-    `${base}?w=800&h=1000&fit=crop&crop=entropy`,
-  ]
 }
 
 /* ── Quantity control ─────────────────────────────────────── */
@@ -82,14 +76,86 @@ function DetailRow({ label, content, defaultOpen = false }) {
 export default function ProductDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { addItem, openDrawer } = useCartContext()
+  const { user } = useAuth()
 
-  const product = MOCK_PRODUCTS.find((p) => String(p.id) === String(id))
+  const [product, setProduct] = useState(null)
+  const [related, setRelated] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [cartError, setCartError] = useState('')
 
-  const [selectedColor, setSelectedColor] = useState(product?.colors?.[0] || null)
+  const [selectedColor, setSelectedColor] = useState(null)
   const [selectedSize, setSelectedSize] = useState(null)
   const [qty, setQty] = useState(1)
-  const [wishlisted, setWishlisted] = useState(false)
   const [addedToCart, setAddedToCart] = useState(false)
+
+  const { isWishlisted, toggleWishlist } = useWishlistContext()
+  const wishlisted = product ? isWishlisted(product.id) : false
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadProduct = async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const detail = await productService.getById(id)
+        if (!isMounted) return
+
+        setProduct(detail)
+        setSelectedColor(detail?.colors?.[0] || null)
+
+        const list = await productService.getAll({
+          categoryId: detail?.categoryId || undefined,
+          size: 20,
+        })
+
+        if (!isMounted) return
+        setRelated((list.items || []).filter((p) => p.id !== detail.id).slice(0, 4))
+      } catch (err) {
+        if (!isMounted) return
+        setError(err?.response?.data?.message || err?.message || 'Failed to load product')
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    loadProduct()
+
+    return () => {
+      isMounted = false
+    }
+  }, [id])
+
+  const galleryImages = useMemo(() => {
+    if (!product) return []
+    if (product.images?.length) return product.images
+    return product.image ? [product.image] : []
+  }, [product])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <p className="text-lg font-medium text-[#202020]">Loading product...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <p className="text-lg font-medium text-[#202020]">Could not load product</p>
+        <p className="text-sm text-[#888]">{error}</p>
+        <button
+          onClick={() => navigate('/products')}
+          className="text-[13px] underline text-[#5A6D57]"
+        >
+          Back to Collection
+        </button>
+      </div>
+    )
+  }
 
   if (!product) {
     return (
@@ -105,17 +171,45 @@ export default function ProductDetailPage() {
     )
   }
 
-  const { name, category, price, isNew, image, colors, sizes, collection, fabric } = product
-  const galleryImages = buildGallery(image)
+  const { name, category, price, isNew, colors, sizes, collection, fabric, description, variants, colorLabels, inStock, stockBySize } = product
 
-  const handleAddToCart = () => {
+  // Sizes that are out of stock (quantity = 0)
+  const disabledSizes = sizes.filter((s) => !(stockBySize?.[s] > 0))
+
+  const handleAddToCart = async (e) => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
     if (!selectedSize) return
-    setAddedToCart(true)
-    setTimeout(() => setAddedToCart(false), 2000)
-  }
+    setCartError('')
 
-  /* Related products: same collection, different id */
-  const related = MOCK_PRODUCTS.filter((p) => p.collection === collection && p.id !== product.id).slice(0, 4)
+    // Find the matching variant by selected color
+    const selectedColorIndex = colors?.indexOf(selectedColor) ?? 0
+    const selectedColorLabel = colorLabels?.[selectedColorIndex] || ''
+    const variant = variants?.find((v) => v.colorName === selectedColorLabel) || variants?.[0]
+
+    // Find the size ID within that variant
+    const sizeObj = variant?.sizes?.find((s) => s.sizeName === selectedSize)
+    const variantSizeId = sizeObj?.id
+
+    if (!variantSizeId) {
+      console.error('Could not find variantSizeId for', selectedColorLabel, selectedSize)
+      setCartError('Không tìm thấy sản phẩm với kích thước này')
+      return
+    }
+
+    try {
+      setAddedToCart(true)
+      await addItem({ variantSizeId, quantity: qty })
+      openDrawer(e)
+      setTimeout(() => setAddedToCart(false), 2000)
+    } catch (err) {
+      console.error('Add to cart failed:', err)
+      setCartError(err?.message || 'Không thể thêm vào giỏ hàng')
+      setAddedToCart(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -154,7 +248,7 @@ export default function ProductDetailPage() {
                 {name}
               </h1>
               <button
-                onClick={() => setWishlisted((p) => !p)}
+                onClick={() => toggleWishlist(product.id)}
                 className="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
                 aria-label="Toggle wishlist"
               >
@@ -166,10 +260,17 @@ export default function ProductDetailPage() {
 
             {/* Price */}
             <p className="text-[20px] font-semibold text-[#202020] mb-5">
-              ${price}
+              {formatCurrency(price)}
             </p>
 
             <div className="border-t border-[#E8E8E8] mb-5" />
+
+            {/* Out-of-stock banner */}
+            {!inStock && (
+              <div className="mb-5 px-4 py-3 bg-[#FFF3F3] border border-[#F5C6CB] rounded text-[13px] text-[#721C24]">
+                Sản phẩm hiện đã hết hàng
+              </div>
+            )}
 
             {/* Color selector */}
             {colors?.length > 0 && (
@@ -200,6 +301,7 @@ export default function ProductDetailPage() {
                   sizes={sizes}
                   selected={selectedSize}
                   onSelect={setSelectedSize}
+                  disabledSizes={disabledSizes}
                 />
                 {!selectedSize && (
                   <p className="text-[11px] text-[#CBCBCB] mt-1.5">Please select a size</p>
@@ -222,16 +324,20 @@ export default function ProductDetailPage() {
             {/* Add to Cart button */}
             <button
               onClick={handleAddToCart}
-              disabled={!selectedSize}
+              disabled={!selectedSize || !inStock}
               className="w-full h-[52px] text-[13px] font-medium tracking-[0.1em] uppercase text-white transition-opacity disabled:opacity-40 hover:opacity-90 mb-3"
               style={{ backgroundColor: PRIMARY }}
             >
-              {addedToCart ? 'Added to Cart ✓' : 'Add to Cart'}
+              {!inStock ? 'Hết hàng' : addedToCart ? 'Added to Cart ✓' : 'Add to Cart'}
             </button>
+
+            {cartError && (
+              <p className="text-[13px] text-red-500 mb-3 text-center">{cartError}</p>
+            )}
 
             {/* Add to Wishlist text button */}
             <button
-              onClick={() => setWishlisted((p) => !p)}
+              onClick={() => toggleWishlist(product.id)}
               className="w-full h-[52px] text-[13px] font-medium tracking-[0.1em] uppercase text-[#202020] border border-[#CBCBCB] hover:border-[#202020] transition-colors mb-6"
             >
               {wishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}
@@ -241,7 +347,7 @@ export default function ProductDetailPage() {
             <DetailRow
               label="Product Details"
               defaultOpen
-              content={`Fabric: ${fabric}. Part of the ${collection} collection. This versatile piece is designed for everyday comfort without compromising on style. True to size — we recommend ordering your usual size.`}
+              content={description || `Fabric: ${fabric}. Part of the ${collection} collection. This versatile piece is designed for everyday comfort without compromising on style. True to size and easy to mix with your everyday wardrobe.`}
             />
             <DetailRow
               label="Shipping & Returns"
@@ -253,6 +359,8 @@ export default function ProductDetailPage() {
             />
           </div>
         </div>
+
+        <ProductReviewSection productId={product.id} />
 
         {/* ── Related Products ───────────────────────────── */}
         {related.length > 0 && (

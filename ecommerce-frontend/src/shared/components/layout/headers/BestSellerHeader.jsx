@@ -8,7 +8,7 @@ function BestSellerHeader() {
       </h2>
       
       <Link 
-        to="/collection/best-sellers" 
+        to="/products" 
         className="font-medium text-[#5A6D57] transition-colors hover:text-[#4a5547] hover:underline"
       >
         View all

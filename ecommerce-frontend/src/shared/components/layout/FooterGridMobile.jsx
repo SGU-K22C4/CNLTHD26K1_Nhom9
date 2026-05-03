@@ -51,7 +51,7 @@ function FooterGridMobile() {
       </Box>
 
       <Grid container spacing={2}>
-        <Grid item xs={6}>
+        <Grid size={{ xs: 6 }}>
           <Box
             sx={{
               display: 'flex',
@@ -75,7 +75,7 @@ function FooterGridMobile() {
             <Typography>Copyright Notice</Typography>
           </Box>
         </Grid>
-        <Grid item xs={6}>
+        <Grid size={{ xs: 6 }}>
           <Box
             sx={{
               display: 'flex',
@@ -97,7 +97,7 @@ function FooterGridMobile() {
             <Typography>Contact Us</Typography>
           </Box>
         </Grid>
-        <Grid item xs={6}>
+        <Grid size={{ xs: 6 }}>
           <Box
             sx={{
               display: 'flex',

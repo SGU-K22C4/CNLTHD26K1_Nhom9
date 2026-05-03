@@ -5,15 +5,12 @@ CREATE TABLE IF NOT EXISTS users (
     id                   VARCHAR(36)  NOT NULL PRIMARY KEY,
     email                VARCHAR(100) NOT NULL UNIQUE,
     password             VARCHAR(255) NOT NULL,
-    first_name           VARCHAR(50),
-    last_name            VARCHAR(50),
-    phone_number         VARCHAR(20),
-    avatar_url           VARCHAR(500),
+    full_name            VARCHAR(100),
+    phone                VARCHAR(20),
+    avatar               VARCHAR(500),
+    gender               TINYINT(1),
     role                 ENUM('CUSTOMER','ADMIN') NOT NULL DEFAULT 'CUSTOMER',
-    is_active            TINYINT(1)   NOT NULL DEFAULT 1,
     is_email_verified    TINYINT(1)   NOT NULL DEFAULT 0,
-    failed_login_attempts INT         NOT NULL DEFAULT 0,
-    locked_until         DATETIME,
     created_at           DATETIME     NOT NULL,
     updated_at           DATETIME
 );
@@ -25,7 +22,6 @@ CREATE TABLE IF NOT EXISTS addresses (
     phone_number VARCHAR(20)  NOT NULL,
     street       VARCHAR(255) NOT NULL,
     ward         VARCHAR(100) NOT NULL,
-    district     VARCHAR(100) NOT NULL,
     city         VARCHAR(100) NOT NULL,
     is_default   TINYINT(1)   NOT NULL DEFAULT 0,
     CONSTRAINT fk_address_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

@@ -1,0 +1,105 @@
+# ============================================================================
+# Kubernetes ConfigMap — Fashion E-commerce
+# Non-sensitive configuration shared across all microservices.
+# Maps directly from docker-compose.yml environment variables.
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fashion-config
+  namespace: fashion
+  labels:
+    app.kubernetes.io/part-of: fashion-ecommerce
+data:
+  # ── Database URLs ──────────────────────────────────────────────────────────
+  # In K8s, services are reachable by their Service name within the namespace.
+  # "mysql" here refers to the K8s Service named "mysql" in namespace "fashion".
+  SPRING_DATASOURCE_USERNAME: "root"
+
+  # User Service DB
+  USER_DB_URL: "jdbc:mysql://mysql:3306/fashion_user_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+  # Product Service DB
+  PRODUCT_DB_URL: "jdbc:mysql://mysql:3306/fashion_product_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+  # Order Service DB
+  ORDER_DB_URL: "jdbc:mysql://mysql:3306/fashion_order_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+  # Promotion Service DB
+  PROMOTION_DB_URL: "jdbc:mysql://mysql:3306/fashion_promotion_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+
+  # ── Redis (Cart Service) ──────────────────────────────────────────────────
+  SPRING_DATA_REDIS_HOST: "redis"
+  SPRING_DATA_REDIS_PORT: "6379"
+
+  # ── MongoDB (Review + Chatbot) ────────────────────────────────────────────
+  REVIEW_MONGODB_URI: "mongodb://mongo:27017/fashion_review_db"
+  CHATBOT_MONGODB_URI: "mongodb://mongo:27017/fashion_chatbot_db"
+
+  # ── Kafka ─────────────────────────────────────────────────────────────────
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+
+  # ── VNPay URLs (non-sensitive) ────────────────────────────────────────────
+  VNPAY_PAYMENT_URL: "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
+  VNPAY_API_URL: "https://sandbox.vnpayment.vn/merchant_webapi/api/transaction"
+  VNPAY_RETURN_URL: "https://modimal.tranhuy.dev/payment/vnpay-return"
+
+  # ── App URLs ──────────────────────────────────────────────────────────────
+  FRONTEND_URL: "https://modimal.tranhuy.dev"
+  EMAIL_VERIFICATION_REQUIRED: "true"
+
+  # ── Mail (Brevo SMTP relay for User Service) ─────────────────────────────
+  MAIL_HOST: "smtp-relay.brevo.com"
+  MAIL_PORT: "2525"
+  MAIL_FROM: "no-reply@modimal.tranhuy.dev"
+
+  # ── Chatbot Cross-Service URLs ────────────────────────────────────────────
+  PRODUCT_SERVICE_URL: "http://product-service:8082"
+  PROMOTION_SERVICE_URL: "http://promotion-service:8085"
+  ORDER_SERVICE_URL: "http://order-service:8084"
+  CART_SERVICE_URL: "http://cart-service:8083"
+
+  # ── AI Model (Ollama) ─────────────────────────────────────────────────────
+  OLLAMA_MODEL: "qwen2.5:7b"
+  OLLAMA_BASE_URL: "http://localhost:11434/v1"
+
+---
+# ============================================================================
+# MySQL Init Scripts — Create databases on first startup
+# Referenced by: databases.yaml → mysql StatefulSet → volumeMount mysql-init
+# Without this ConfigMap, MySQL starts but NO databases are created,
+# causing all Spring Boot services to crash on startup.
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init-scripts
+  namespace: fashion
+  labels:
+    app.kubernetes.io/part-of: fashion-ecommerce
+data:
+  01-create-databases.sql: |
+    CREATE DATABASE IF NOT EXISTS fashion_user_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    CREATE DATABASE IF NOT EXISTS fashion_product_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    CREATE DATABASE IF NOT EXISTS fashion_order_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    CREATE DATABASE IF NOT EXISTS fashion_promotion_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+---
+# ============================================================================
+# Redis Configuration — Persistence settings
+# Referenced by: databases.yaml → redis StatefulSet → volumeMount redis-config
+# Without this ConfigMap, Redis container fails to start because the command
+# explicitly loads /usr/local/etc/redis/redis.conf which doesn't exist.
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: fashion
+  labels:
+    app.kubernetes.io/part-of: fashion-ecommerce
+data:
+  redis.conf: |
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    save 900 1
+    save 300 10
+    save 60 10000

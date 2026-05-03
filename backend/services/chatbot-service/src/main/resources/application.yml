@@ -1,14 +1,44 @@
-server:
-  port: 8087
-
 spring:
   application:
     name: chatbot-service
+  config:
+    import: "optional:configserver:http://localhost:8888"
+  data:
+    mongodb:
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/fashion_chatbot_db}
 
-openai:
-  api-key: ${OPENAI_API_KEY:your-api-key}
-  model: gpt-4o-mini
-  max-tokens: 500
+# === Service URLs ===
+chatbot:
+  product-service-url: ${PRODUCT_SERVICE_URL:http://localhost:8080}
+  promotion-service-url: ${PROMOTION_SERVICE_URL:http://localhost:8080}
+  order-service-url: ${ORDER_SERVICE_URL:http://localhost:8080}
+  cart-service-url: ${CART_SERVICE_URL:http://localhost:8080}
 
-jwt:
-  secret: ${JWT_SECRET:CHANGE_ME_base64_encoded_secret_key_at_least_32_bytes}
+  # Agent mode: true = LangChain4j agent, false = heuristic fallback
+  use-agent: ${CHATBOT_USE_AGENT:true}
+
+  # Memory
+  memory:
+    max-messages: ${CHATBOT_MEMORY_MAX_MESSAGES:20}
+
+  # Knowledge Base
+  knowledge:
+    enabled: ${CHATBOT_KB_ENABLED:true}
+    data-path: classpath:knowledge
+    top-k: 4
+    min-score: 0.3
+
+# === LLM Provider (Ollama) ===
+# Supports both local Ollama (http://localhost:11434/v1) and cloud providers.
+# Ollama API is OpenAI-compatible, so LangChain4j OpenAiChatModel works seamlessly.
+openrouter:
+  api-key: ${OLLAMA_API_KEY:}
+  model: ${OLLAMA_MODEL:qwen2.5:7b}
+  fallback-model: ${OLLAMA_FALLBACK_MODEL:llama3.1:8b}
+  base-url: ${OLLAMA_BASE_URL:http://localhost:11434/v1}
+  max-tokens: ${OLLAMA_MAX_TOKENS:600}
+  site-url: ${OLLAMA_SITE_URL:http://localhost:8087}
+  app-name: ${OLLAMA_APP_NAME:fashion-chatbot-service}
+
+server:
+  port: ${SERVER_PORT:8087}

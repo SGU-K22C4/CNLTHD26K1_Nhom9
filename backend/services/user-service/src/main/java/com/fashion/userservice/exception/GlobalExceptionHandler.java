@@ -1,7 +1,11 @@
 package com.fashion.userservice.exception;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -12,6 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(EmailAlreadyExistsException.class)
@@ -24,9 +29,19 @@ public class GlobalExceptionHandler {
         return buildError(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
 
-    @ExceptionHandler(AccountLockedException.class)
-    public ResponseEntity<ErrorResponse> handleAccountLocked(AccountLockedException ex) {
-        return buildError(HttpStatus.LOCKED, ex.getMessage());
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ErrorResponse> handleBadCredentials(BadCredentialsException ex) {
+        return buildError(HttpStatus.UNAUTHORIZED, "Email hoặc mật khẩu không chính xác");
+    }
+
+    @ExceptionHandler(DisabledException.class)
+    public ResponseEntity<ErrorResponse> handleDisabled(DisabledException ex) {
+        return buildError(HttpStatus.FORBIDDEN, "Tài khoản chưa được kích hoạt. Vui lòng xác thực email!");
+    }
+
+    @ExceptionHandler({LockedException.class, AccountLockedException.class})
+    public ResponseEntity<ErrorResponse> handleAccountLocked(Exception ex) {
+        return buildError(HttpStatus.FORBIDDEN, ex.getMessage());
     }
 
     @ExceptionHandler(TokenExpiredException.class)
@@ -41,6 +56,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
+        return buildError(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalState(IllegalStateException ex) {
         return buildError(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
@@ -60,14 +80,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
+        log.error("Unhandled exception", ex);
         return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
     }
 
     private ResponseEntity<ErrorResponse> buildError(HttpStatus status, String message) {
         return ResponseEntity.status(status).body(
-                new ErrorResponse(LocalDateTime.now().toString(), status.value(), message)
-        );
+                new ErrorResponse(LocalDateTime.now().toString(), status.value(), message));
     }
 
-    public record ErrorResponse(String timestamp, int status, String message) {}
+    public record ErrorResponse(String timestamp, int status, String message) {
+    }
 }

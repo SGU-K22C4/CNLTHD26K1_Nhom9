@@ -1,0 +1,183 @@
+{
+  "info": {
+    "_postman_id": "2f6ef4cb-117f-4f6d-9f81-4381dcf67f72",
+    "name": "QA - Saga VNPAY Cancel Compensation",
+    "description": "Test scenario: create VNPAY order, simulate customer cancel payment at VNPay (response code 24), verify Saga compensation path.\n\nImportant variables:\n- baseUrl: order-service base URL (default http://localhost:8084)\n- vnpHashSecret: VNPay hash secret used by your backend\n- productId, productName, productSlug, itemSize, unitPrice: a valid in-stock product from DB\n- itemQty: quantity to reserve\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8084" },
+    { "key": "xUserId", "value": "qa-user-001" },
+    { "key": "productId", "value": "495677799" },
+    { "key": "productName", "value": "QA Product" },
+    { "key": "productSlug", "value": "qa-product" },
+    { "key": "itemSize", "value": "44" },
+    { "key": "unitPrice", "value": "1199000" },
+    { "key": "itemQty", "value": "1" },
+    { "key": "vnpResponseCode", "value": "24" },
+    { "key": "vnpHashSecret", "value": "V0UJ9R7MWMJLFJREF60KQR5P9RO1XIYH" }
+  ],
+  "item": [
+    {
+      "name": "1) Create Order - VNPAY",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-User-Id", "value": "{{xUserId}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recipientName\": \"QA Saga User\",\n  \"recipientPhone\": \"0900000000\",\n  \"shippingAddress\": \"123 QA Street\",\n  \"paymentMethod\": \"VNPAY\",\n  \"note\": \"QA test - VNPAY cancel compensation\",\n  \"couponCode\": null,\n  \"discount\": 0,\n  \"shippingFee\": 0,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"productName\": \"{{productName}}\",\n      \"productSlug\": \"{{productSlug}}\",\n      \"imageUrl\": \"\",\n      \"color\": \"\",\n      \"size\": \"{{itemSize}}\",\n      \"quantity\": {{itemQty}},\n      \"unitPrice\": {{unitPrice}}\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "orders"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Create order status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "const data = pm.response.json();",
+              "pm.test('Response contains order id', function () {",
+              "  pm.expect(data.id).to.exist;",
+              "});",
+              "",
+              "pm.environment.set('orderId', String(data.id));",
+              "pm.environment.set('orderNumber', String(data.orderNumber || ''));",
+              "pm.environment.set('vnpTxnRef', String(data.id));",
+              "",
+              "console.log('Saved orderId=', pm.environment.get('orderId'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2) Simulate VNPay Cancel Callback (vnp_ResponseCode=24)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/payments/vnpay/payment-return?vnp_TxnRef={{vnpTxnRef}}&vnp_ResponseCode={{vnpResponseCode}}&vnp_TransactionNo={{vnpTransactionNo}}&vnp_SecureHash={{vnpSecureHash}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "payments", "vnpay", "payment-return"],
+          "query": [
+            { "key": "vnp_TxnRef", "value": "{{vnpTxnRef}}" },
+            { "key": "vnp_ResponseCode", "value": "{{vnpResponseCode}}" },
+            { "key": "vnp_TransactionNo", "value": "{{vnpTransactionNo}}" },
+            { "key": "vnp_SecureHash", "value": "{{vnpSecureHash}}" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "function javaUrlEncode(val) {",
+              "  return encodeURIComponent(String(val))",
+              "    .replace(/%20/g, '+')",
+              "    .replace(/[!'()*]/g, function (c) {",
+              "      return '%' + c.charCodeAt(0).toString(16).toUpperCase();",
+              "    });",
+              "}",
+              "",
+              "const txnRef = pm.environment.get('vnpTxnRef') || pm.environment.get('orderId');",
+              "if (!txnRef) {",
+              "  throw new Error('Missing orderId/vnpTxnRef. Run request 1 first.');",
+              "}",
+              "",
+              "const responseCode = pm.environment.get('vnpResponseCode') || '24';",
+              "const transactionNo = 'SIM' + Date.now();",
+              "pm.environment.set('vnpTransactionNo', transactionNo);",
+              "",
+              "const params = {",
+              "  vnp_ResponseCode: responseCode,",
+              "  vnp_TransactionNo: transactionNo,",
+              "  vnp_TxnRef: String(txnRef)",
+              "};",
+              "",
+              "const sortedKeys = Object.keys(params).sort();",
+              "const hashData = sortedKeys",
+              "  .map(k => k + '=' + javaUrlEncode(params[k]))",
+              "  .join('&');",
+              "",
+              "const secret = pm.environment.get('vnpHashSecret');",
+              "if (!secret) {",
+              "  throw new Error('Missing vnpHashSecret in environment');",
+              "}",
+              "",
+              "const secureHash = CryptoJS.HmacSHA512(hashData, secret).toString(CryptoJS.enc.Hex);",
+              "pm.environment.set('vnpSecureHash', secureHash);",
+              "",
+              "console.log('VNPay hashData:', hashData);",
+              "console.log('VNPay secureHash:', secureHash);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('VNPay callback endpoint is reachable', function () {",
+              "  pm.expect(pm.response.code).to.be.oneOf([200, 400]);",
+              "});",
+              "",
+              "const data = pm.response.json();",
+              "pm.environment.set('paymentCallbackSuccess', String(data.success));",
+              "pm.environment.set('paymentCallbackMessage', String(data.message || ''));",
+              "",
+              "console.log('Callback response:', data);",
+              "",
+              "pm.test('Cancel callback should be marked unsuccessfully paid', function () {",
+              "  pm.expect(data.success).to.eql(false);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3) Check Order Final State",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orders/detail/{{orderId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "orders", "detail", "{{orderId}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Order detail API reachable', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "const data = pm.response.json();",
+              "pm.environment.set('orderStatusAfterCallback', String(data.status || ''));",
+              "pm.environment.set('paymentStatusAfterCallback', String(data.paymentStatus || ''));",
+              "",
+              "console.log('Order status:', data.status, 'paymentStatus:', data.paymentStatus);"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

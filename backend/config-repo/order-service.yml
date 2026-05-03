@@ -1,0 +1,44 @@
+server:
+  port: 8084
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3307/fashion_order_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      # ddl-auto: validate
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+vnpay:
+  tmn-code: ${VNPAY_TMN_CODE:XWJEG5N8}
+  hash-secret: ${VNPAY_HASH_SECRET}
+  payment-url: ${VNPAY_PAYMENT_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+  api-url: ${VNPAY_API_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
+  return-url: ${VNPAY_RETURN_URL:http://localhost:5173/payment/vnpay-return}
+
+order:
+  integration:
+    product-service-url: ${PRODUCT_SERVICE_URL:http://localhost:8082}
+    promotion-service-url: ${PROMOTION_SERVICE_URL:http://localhost:8085}
+
+app:
+  kafka:
+    saga:
+      retry-attempts: ${SAGA_RETRY_ATTEMPTS:4}
+      retry-delay-ms: ${SAGA_RETRY_DELAY_MS:1000}
+      retry-multiplier: ${SAGA_RETRY_MULTIPLIER:2.0}

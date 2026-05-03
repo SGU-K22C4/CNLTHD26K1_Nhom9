@@ -1,0 +1,70 @@
+$kind: http-request
+name: http://localhost:8084/api/v1/orders
+url: http://localhost:8084/api/v1/orders
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \  \"recipientName\": \"Trần Văn ABC\",\r
+
+    \  \"recipientPhone\": \"0987654321\",\r
+
+    \  \"shippingAddress\": \"123 Đường Nguyễn Trãi, Quận 5, TP.HCM\",\r
+
+    \  \"paymentMethod\": \"COD\",\r
+
+    \  \"note\": \"Giao hàng vào buổi sáng giúp mình\",\r
+
+    \  \"couponCode\": \"GIAM50K\",\r
+
+    \  \"discount\": 50000,\r
+
+    \  \"shippingFee\": 30000,\r
+
+    \  \"items\": [\r
+
+    \    {\r
+
+    \      \"productId\": 1,\r
+
+    \      \"productName\": \"Áo Thun Nam Cổ Tròn Cao Cấp\",\r
+
+    \      \"productSlug\": \"ao-thun-nam-co-tron\",\r
+
+    \      \"imageUrl\": \"https://example.com/images/ao-thun.jpg\",\r
+
+    \      \"color\": \"Đen\",\r
+
+    \      \"size\": \"L\",\r
+
+    \      \"quantity\": 2,\r
+
+    \      \"unitPrice\": 150000\r
+
+    \    },\r
+
+    \    {\r
+
+    \      \"productId\": 2,\r
+
+    \      \"productName\": \"Quần Jean Nam Ống Rộng\",\r
+
+    \      \"productSlug\": \"quan-jean-nam-ong-rong\",\r
+
+    \      \"imageUrl\": \"https://example.com/images/quan-jean.jpg\",\r
+
+    \      \"color\": \"Xanh nhạt\",\r
+
+    \      \"size\": \"32\",\r
+
+    \      \"quantity\": 1,\r
+
+    \      \"unitPrice\": 350000\r
+
+    \    }\r
+
+    \  ]\r
+
+    }"
+order: 1859082992108745

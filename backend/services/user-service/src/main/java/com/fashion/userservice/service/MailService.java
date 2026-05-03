@@ -15,10 +15,12 @@ public class MailService {
 
     private final JavaMailSender mailSender;
 
-    @Value("${spring.mail.username}")
+    // Brevo SMTP login is not always a valid sender address.
+    // Prefer MAIL_FROM (verified sender/domain), fallback to SMTP username for compatibility.
+    @Value("${app.mail.from:${spring.mail.username}}")
     private String fromEmail;
 
-    @Value("${app.frontend-url}")
+    @Value("${app.frontend-url:${FRONTEND_URL:http://localhost:5173}}")
     private String frontendUrl;
 
     @Async
@@ -61,6 +63,30 @@ public class MailService {
             mailSender.send(message);
         } catch (Exception e) {
             log.error("Failed to send welcome email to {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    @Async
+    public void sendVerificationEmail(String toEmail, String firstName, String token) {
+        String verificationLink = frontendUrl + "/verify-email?token=" + token;
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromEmail);
+        message.setTo(toEmail);
+        message.setSubject("Verify your email address - Fashion Store");
+        message.setText(
+            "Hi " + firstName + ",\n\n" +
+            "Almost there! Please verify your email address to activate your Fashion Store account.\n\n" +
+            "Click the link below (valid for 24 hours):\n\n" +
+            verificationLink + "\n\n" +
+            "If you didn't create an account, please ignore this email.\n\n" +
+            "Fashion Store Team"
+        );
+
+        try {
+            mailSender.send(message);
+            log.info("Verification email sent to {}", toEmail);
+        } catch (Exception e) {
+            log.error("Failed to send verification email to {}: {}", toEmail, e.getMessage());
         }
     }
 }

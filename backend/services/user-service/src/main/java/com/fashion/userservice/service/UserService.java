@@ -9,6 +9,7 @@ import com.fashion.userservice.entity.Address;
 import com.fashion.userservice.entity.User;
 import com.fashion.userservice.exception.ResourceNotFoundException;
 import com.fashion.userservice.repository.AddressRepository;
+import com.fashion.userservice.repository.RefreshTokenRepository;
 import com.fashion.userservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,6 +24,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final AddressRepository addressRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
 
     public UserProfileResponse getProfile(String userId) {
@@ -33,9 +35,8 @@ public class UserService {
     @Transactional
     public UserProfileResponse updateProfile(String userId, UpdateProfileRequest request) {
         User user = findUserById(userId);
-        user.setFirstName(request.getFirstName());
-        user.setLastName(request.getLastName());
-        user.setPhoneNumber(request.getPhoneNumber());
+        user.setFullName(request.getFullName());
+        user.setPhone(request.getPhone());
         userRepository.save(user);
         return toProfileResponse(user);
     }
@@ -49,6 +50,9 @@ public class UserService {
         }
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+
+        // Password rotation invalidates all existing sessions.
+        refreshTokenRepository.revokeAllByUserId(userId);
     }
 
     // ─── Address ───────────────────────────────────────────────────────────────
@@ -76,7 +80,6 @@ public class UserService {
                 .phoneNumber(request.getPhoneNumber())
                 .street(request.getStreet())
                 .ward(request.getWard())
-                .district(request.getDistrict())
                 .city(request.getCity())
                 .isDefault(request.isDefault() || isFirst)
                 .build();
@@ -97,7 +100,6 @@ public class UserService {
         address.setPhoneNumber(request.getPhoneNumber());
         address.setStreet(request.getStreet());
         address.setWard(request.getWard());
-        address.setDistrict(request.getDistrict());
         address.setCity(request.getCity());
         address.setDefault(request.isDefault());
         addressRepository.save(address);
@@ -131,10 +133,10 @@ public class UserService {
         return UserProfileResponse.builder()
                 .id(user.getId())
                 .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
-                .phoneNumber(user.getPhoneNumber())
-                .avatarUrl(user.getAvatarUrl())
+                .firstName(user.getFullName())
+                .lastName("")
+                .phoneNumber(user.getPhone())
+                .avatarUrl(user.getAvatar())
                 .role(user.getRole().name())
                 .build();
     }
@@ -146,7 +148,6 @@ public class UserService {
                 .phoneNumber(address.getPhoneNumber())
                 .street(address.getStreet())
                 .ward(address.getWard())
-                .district(address.getDistrict())
                 .city(address.getCity())
                 .isDefault(address.isDefault())
                 .build();

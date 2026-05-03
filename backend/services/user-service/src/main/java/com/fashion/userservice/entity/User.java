@@ -31,37 +31,26 @@ public class User {
     @Column(nullable = false)
     private String password;
 
-    @Column(name = "first_name", length = 50)
-    private String firstName;
+    @Column(name = "full_name", length = 100)
+    private String fullName;
 
-    @Column(name = "last_name", length = 50)
-    private String lastName;
+    @Column(name = "phone", length = 20)
+    private String phone;
 
-    @Column(name = "phone_number", length = 20)
-    private String phoneNumber;
+    @Column(name = "avatar", length = 500)
+    private String avatar;
 
-    @Column(name = "avatar_url")
-    private String avatarUrl;
+    @Column(name = "gender")
+    private Integer gender;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default
     private Role role = Role.CUSTOMER;
 
-    @Column(name = "is_active", nullable = false)
-    @Builder.Default
-    private boolean isActive = true;
-
     @Column(name = "is_email_verified", nullable = false)
     @Builder.Default
     private boolean isEmailVerified = false;
-
-    @Column(name = "failed_login_attempts", nullable = false)
-    @Builder.Default
-    private int failedLoginAttempts = 0;
-
-    @Column(name = "locked_until")
-    private LocalDateTime lockedUntil;
 
     @CreatedDate
     @Column(name = "created_at", updatable = false)

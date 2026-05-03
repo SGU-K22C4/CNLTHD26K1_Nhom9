@@ -1,4 +1,160 @@
+import axios from 'axios'
+import { API_CONFIG } from '../../../config/api.config'
+
+const api = axios.create({
+  baseURL: API_CONFIG.BASE_URL,
+  timeout: API_CONFIG.TIMEOUT,
+})
+
+const COLOR_TO_HEX = {
+  black: '#1C1C1C',
+  white: '#FFFFFF',
+  red: '#C0392B',
+  blue: '#2E86DE',
+  green: '#5A6D57',
+  yellow: '#F1C40F',
+  gray: '#C0C0C0',
+  grey: '#C0C0C0',
+  pink: '#F78FB3',
+  purple: '#9B59B6',
+  brown: '#8B7355',
+  orange: '#E67E22',
+  beige: '#D2B48C',
+  navy: '#1F3A93',
+}
+
+function toColorHex(colorName = '') {
+  const normalized = String(colorName).toLowerCase().trim()
+  return COLOR_TO_HEX[normalized] || '#A8A8A8'
+}
+
+function toImageList(product) {
+  const images = (product.variants || [])
+    .flatMap((variant) => variant.images || [])
+    .sort((a, b) => {
+      if (a.primary && !b.primary) return -1
+      if (!a.primary && b.primary) return 1
+      return (a.sortOrder || 0) - (b.sortOrder || 0)
+    })
+    .map((img) => img.imageUrl)
+    .filter(Boolean)
+
+  return [...new Set(images)]
+}
+
+/* ── Extract main fabric keywords from compositionDetail ─── */
+const FABRIC_KEYWORDS = [
+  { keyword: 'cotton', label: 'Cotton' },
+  { keyword: 'linen', label: 'Linen' },
+  { keyword: 'lanh', label: 'Linen' },
+  { keyword: 'pôliexte', label: 'Polyester' },
+  { keyword: 'polyester', label: 'Polyester' },
+  { keyword: 'len', label: 'Len' },
+  { keyword: 'wool', label: 'Len' },
+  { keyword: 'lụa', label: 'Lụa' },
+  { keyword: 'silk', label: 'Lụa' },
+  { keyword: 'lyocell', label: 'Lyocell' },
+  { keyword: 'elastane', label: 'Elastane' },
+  { keyword: 'poliamit', label: 'Polyamide' },
+  { keyword: 'nylon', label: 'Nylon' },
+  { keyword: 'acrylic', label: 'Acrylic' },
+  { keyword: 'viscose', label: 'Viscose' },
+  { keyword: 'vitcô', label: 'Viscose' },
+  { keyword: 'da', label: 'Da' },
+  { keyword: 'leather', label: 'Da' },
+  { keyword: 'denim', label: 'Denim' },
+]
+
+function extractFabric(compositionDetail = '') {
+  if (!compositionDetail) return null
+  const lower = compositionDetail.toLowerCase()
+  for (const { keyword, label } of FABRIC_KEYWORDS) {
+    if (lower.includes(keyword)) {
+      return label
+    }
+  }
+  return null
+}
+
+export function normalizeProduct(product) {
+  const variants = product.variants || []
+  const firstVariant = variants[0]
+  const prices = variants
+    .map((v) => Number(v.price))
+    .filter((value) => Number.isFinite(value))
+
+  const colors = [...new Set(variants.map((v) => v.colorName).filter(Boolean))]
+  const sizes = [...new Set(variants.flatMap((v) => (v.sizes || []).map((s) => s.sizeName).filter(Boolean)))]
+  const images = toImageList(product)
+  const createdAt = product.createdAt ? new Date(product.createdAt) : null
+  const now = Date.now()
+  const isNew = createdAt ? now - createdAt.getTime() <= 1000 * 60 * 60 * 24 * 30 : false
+
+  // Stock calculation
+  const allSizes = variants.flatMap((v) => v.sizes || [])
+  const totalStock = allSizes.reduce((sum, s) => sum + (s.quantity || 0), 0)
+  const inStock = totalStock > 0
+
+  // Per-size stock: { "M": 10, "L": 0, ... }
+  const stockBySize = {}
+  for (const s of allSizes) {
+    if (s.sizeName) {
+      stockBySize[s.sizeName] = (stockBySize[s.sizeName] || 0) + (s.quantity || 0)
+    }
+  }
+
+  return {
+    id: product.id,
+    name: product.name,
+    description: product.description,
+    categoryId: product.categoryId,
+    category: product.categoryName || 'Collection',
+    categoryName: product.categoryName,
+    categoryGender: product.categoryGender,
+    variants,
+    price: prices.length ? Math.min(...prices) : 0,
+    isNew,
+    inStock,
+    totalStock,
+    stockBySize,
+    image: images[0] || '',
+    images,
+    colors: colors.map(toColorHex),
+    colorLabels: colors,
+    sizes,
+    collection: product.categoryName || '',
+    fabric: extractFabric(firstVariant?.compositionDetail) || 'Khác',
+    createdAt: product.createdAt,
+    updatedAt: product.updatedAt,
+  }
+}
+
+
 export const productService = {
-  getAll: async () => [],
-  getById: async () => null,
+  getAll: async (params = {}) => {
+    const response = await api.get('/api/v1/products', {
+      params: {
+        page: 0,
+        size: 100,
+        sortBy: 'createdAt',
+        sortDir: 'desc',
+        ...params,
+      },
+    })
+
+    const pageData = response.data || {}
+    const items = Array.isArray(pageData.content) ? pageData.content.map(normalizeProduct) : []
+
+    return {
+      items,
+      totalElements: pageData.totalElements ?? items.length,
+      totalPages: pageData.totalPages ?? 1,
+    }
+  },
+
+  getById: async (id) => {
+    const response = await api.get(`/api/v1/products/${id}`)
+    if (!response.data) return null
+    return normalizeProduct(response.data)
+  },
 }

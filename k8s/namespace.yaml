@@ -1,0 +1,11 @@
+# ============================================================================
+# Kubernetes Namespace
+# Isolate all Fashion E-commerce resources in a dedicated namespace.
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fashion
+  labels:
+    app.kubernetes.io/part-of: fashion-ecommerce
+    environment: production

@@ -6,6 +6,8 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+// XÓA 2 DÒNG @Mock và khai báo biến ở đây đi nhé!
+
 @Repository
 public interface CategoryRepository extends JpaRepository<Category, String> {
     List<Category> findByParentIsNullAndVisibleTrue();

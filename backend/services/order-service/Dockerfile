@@ -16,9 +16,9 @@ COPY services/chatbot-service/pom.xml services/chatbot-service/pom.xml
 COPY services/order-service/pom.xml services/order-service/pom.xml
 RUN mvn -pl common -pl services/order-service -am dependency:resolve -q 2>/dev/null || true
 
+COPY common/ common/
 COPY services/order-service/src services/order-service/src
-RUN mvn -pl common -pl services/order-service -am clean package -DskipTests -q
-
+RUN mvn clean install -pl common,services/order-service -am -DskipTests -Dmaven.test.skip=true
 # ── Run stage ────────────────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app

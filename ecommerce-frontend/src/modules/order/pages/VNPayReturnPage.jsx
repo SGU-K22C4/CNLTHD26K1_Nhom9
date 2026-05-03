@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useCartContext } from '@/modules/cart/context/CartContext'
+import { useCartContext } from '@/modules/cart/hooks/useCartContext'
 import { paymentService } from '../services/paymentService'
 import PaymentResultBanner from '../components/PaymentResultBanner'
 
@@ -49,7 +49,7 @@ export default function VNPayReturnPage() {
       }
     }
     verify()
-  }, [searchParams, navigate])
+  }, [searchParams, navigate, clearCart])
 
   if (loading) {
     return (

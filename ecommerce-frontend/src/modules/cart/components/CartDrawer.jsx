@@ -1,7 +1,7 @@
 import { useEffect, useCallback } from 'react'
 import { X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useCartContext } from '../context/CartContext'
+import { useCartContext } from '../hooks/useCartContext'
 import CartItem from './CartItem'
 import { formatCurrency } from '../../../shared/utils/format'
 

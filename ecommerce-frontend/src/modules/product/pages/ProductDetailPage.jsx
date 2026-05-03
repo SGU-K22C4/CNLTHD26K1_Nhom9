@@ -6,8 +6,13 @@ import SizeSelector from '../components/SizeSelector'
 import ColorSelector from '../components/ColorSelector'
 import ProductCard from '../components/ProductCard'
 import { formatCurrency } from '../../../shared/utils/format'
+<<<<<<< HEAD
 import { useCartContext } from '../../cart/context/CartContext'
 import { useWishlistContext } from '../../wishlist/context/useWishlistContext'
+=======
+import { useCartContext } from '../../cart/hooks/useCartContext'
+import { useWishlistContext } from '../../wishlist/context/WishlistContext'
+>>>>>>> ca0d5c99397223b8210796496db2de4d233a7b76
 import ProductReviewSection from '../../review/components/ProductReviewSection'
 import { useAuth } from '../../auth/hooks/useAuth'
 

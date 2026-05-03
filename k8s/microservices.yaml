@@ -481,6 +481,8 @@ spec:
           ports:
             - containerPort: 8085
           env:
+            - name: SERVER_PORT
+              value: "8085"
             - name: SPRING_DATASOURCE_URL
               valueFrom:
                 configMapKeyRef:

@@ -23,7 +23,6 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@SuppressWarnings("null")
 public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;
@@ -56,7 +55,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional(readOnly = true)
     public Page<ProductResponse> getNewArrivals(Pageable pageable) {
-        return productRepository.findByVisibleTrue(pageable).map(productMapper::toResponse);
+        return productRepository.findByVisibleTrueOrderByCreatedAtDesc(pageable).map(productMapper::toResponse);
     }
 
     @Override

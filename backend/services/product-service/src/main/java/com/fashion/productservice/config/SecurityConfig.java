@@ -2,10 +2,14 @@ package com.fashion.productservice.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.util.StringUtils;
 
 @Configuration
 public class SecurityConfig {
@@ -13,7 +17,6 @@ public class SecurityConfig {
     private static final String[] PUBLIC_ENDPOINTS = {
             "/api/v1/products/**",
             "/api/v1/categories/**",
-            "/api/v1/wishlists/**",
             "/actuator/health"
     };
 
@@ -27,9 +30,18 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
-                        .anyRequest().authenticated()
+                        .anyRequest().access(hasGatewayIdentity())
                 );
 
         return http.build();
     }
-}
+
+    private AuthorizationManager<RequestAuthorizationContext> hasGatewayIdentity() {
+        return (authentication, context) -> {
+            String userId = context.getRequest().getHeader("X-User-Id");
+            String userRole = context.getRequest().getHeader("X-User-Role");
+            boolean allowed = StringUtils.hasText(userId) || StringUtils.hasText(userRole);
+            return new AuthorizationDecision(allowed);
+        };
+    }
+}

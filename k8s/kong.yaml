@@ -1,0 +1,492 @@
+# ============================================================================
+# Kong Gateway — Kubernetes Deployment
+# DB-less mode with declarative config from ConfigMap.
+# Custom jwt-auth Lua plugin validates HS256 tokens and injects headers.
+# ============================================================================
+
+# ── Kong Declarative Config (kong.yml) ──────────────────────────────────────
+# In K8s, service URLs use internal DNS names instead of host.docker.internal
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-config
+  namespace: fashion
+  labels:
+    app: kong
+data:
+  kong.yml.template: |
+    # Kong Gateway Declarative Configuration (K8s version)
+    _format_version: "3.0"
+
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "http://146.190.5.69"
+            - "http://modimal.tranhuy.dev"
+            - "https://modimal.tranhuy.dev"
+            - "http://localhost:5173"
+            - "http://localhost:3000"
+          methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+          headers:
+            - "Authorization"
+            - "Content-Type"
+            - "Accept"
+            - "Origin"
+            - "X-Requested-With"
+            - "X-User-Id"
+            - "X-User-Email"
+          exposed_headers: ["X-Total-Count"]
+          credentials: true
+          max_age: 3600
+
+      - name: rate-limiting
+        config:
+          minute: 100
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
+
+    services:
+      - name: user-service
+        url: http://user-service:8081
+        routes:
+          - name: auth-public-route
+            paths:
+              - /api/v1/auth/register
+              - /api/v1/auth/login
+              - /api/v1/auth/refresh
+              - /api/v1/auth/forgot-password
+              - /api/v1/auth/reset-password
+              - /api/v1/auth/verify-email
+              - /api/v1/auth/resend-verification
+            strip_path: false
+          - name: auth-logout-route
+            paths: ["/api/v1/auth/logout"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
+          - name: user-route
+            paths: ["/api/v1/users"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
+
+      - name: product-service
+        url: http://product-service:8082
+        routes:
+          - name: product-public-route
+            paths: ["/api/v1/products", "/api/v1/categories"]
+            methods: ["GET"]
+            strip_path: false
+          - name: product-write-route
+            paths: ["/api/v1/products"]
+            methods: ["POST", "PUT", "PATCH", "DELETE"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
+          - name: wishlist-route
+            paths: ["/api/v1/wishlists"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
+
+      - name: cart-service
+        url: http://cart-service:8083
+        routes:
+          - name: cart-route
+            paths: ["/api/v1/cart"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
+
+      - name: order-service
+        url: http://order-service:8084
+        routes:
+          - name: order-route
+            paths: ["/api/v1/orders"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
+          - name: payment-return-public-route
+            paths: ["/api/v1/payments/vnpay/payment-return"]
+            strip_path: false
+          - name: payment-route
+            paths: ["/api/v1/payments"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
+
+      - name: promotion-service
+        url: http://promotion-service:8085
+        routes:
+          - name: promotion-public-route
+            paths: ["/api/v1/promotions/active", "/api/v1/promotions/validate"]
+            strip_path: false
+          - name: loyalty-route
+            paths: ["/api/v1/promotions/loyalty"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
+
+      - name: review-service
+        url: http://review-service:8086
+        routes:
+          - name: review-public-route
+            paths: ["/api/v1/reviews/product"]
+            strip_path: false
+          - name: review-route
+            paths: ["/api/v1/reviews"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
+
+      - name: chatbot-service
+        url: http://chatbot-service:8087
+        routes:
+          - name: chatbot-chat-public-route
+            paths: ["/api/v1/chatbot/chat"]
+            strip_path: false
+          - name: chatbot-session-route
+            paths: ["/api/v1/chatbot/sessions"]
+            strip_path: false
+            plugins:
+              - name: jwt-auth
+                config:
+                  jwt_secret: "${JWT_SECRET}"
+
+      # ── Frontend (catch-all: every non-API request goes to React) ──
+      - name: frontend-service
+        url: http://frontend:80
+        routes:
+          - name: frontend-catch-all
+            paths: ["/"]
+            strip_path: false
+
+---
+# ── Kong Entrypoint Wrapper Script ──────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-entrypoint
+  namespace: fashion
+  labels:
+    app: kong
+data:
+  docker-entrypoint-wrapper.sh: |
+    #!/bin/sh
+    set -e
+    TEMPLATE_FILE="/kong/template/kong.yml.template"
+    CONFIG_FILE="/tmp/kong.yml"
+    if [ -z "$JWT_SECRET" ]; then
+      echo "[kong-entrypoint] WARNING: JWT_SECRET is not set."
+    fi
+    echo "[kong-entrypoint] Injecting JWT_SECRET into Kong config..."
+    sed "s|\${JWT_SECRET}|${JWT_SECRET}|g" "$TEMPLATE_FILE" > "$CONFIG_FILE"
+    export KONG_DECLARATIVE_CONFIG="$CONFIG_FILE"
+    echo "[kong-entrypoint] Config ready. Starting Kong..."
+    exec /docker-entrypoint.sh kong docker-start
+
+---
+# ── Kong jwt-auth Lua Plugin ────────────────────────────────────────────────
+# Mount the custom jwt-auth plugin files via ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-jwt-auth-plugin
+  namespace: fashion
+  labels:
+    app: kong
+data:
+  handler.lua: |
+    -- Custom JWT Auth Plugin for Kong Gateway
+    -- Replicates the Spring Cloud Gateway JwtAuthFilter behavior:
+    --   1. Extracts Bearer token from Authorization header
+    --   2. Validates HS256/HS384 signature using shared secret
+    --   3. Checks expiration claim
+    --   4. Injects X-User-Id / X-User-Role / X-Consumer-Username headers
+    local cjson = require "cjson.safe"
+    local openssl_hmac = require "resty.openssl.hmac"
+    local ngx_encode_base64 = ngx.encode_base64
+    local ngx_decode_base64 = ngx.decode_base64
+
+    local plugin = {
+      PRIORITY = 1000,
+      VERSION  = "1.0.0",
+    }
+
+    local function base64url_decode(input)
+      local reminder = #input % 4
+      if reminder > 0 then
+        input = input .. string.rep("=", 4 - reminder)
+      end
+      input = input:gsub("-", "+"):gsub("_", "/")
+      return ngx_decode_base64(input)
+    end
+
+    local function base64url_encode(input)
+      local result = ngx_encode_base64(input)
+      result = result:gsub("+", "-"):gsub("/", "_"):gsub("=", "")
+      return result
+    end
+
+    local function split_token(token)
+      local parts = {}
+      for part in token:gmatch("[^%.]+") do
+        table.insert(parts, part)
+      end
+      if #parts ~= 3 then
+        return nil, "invalid JWT structure (expected 3 parts)"
+      end
+      return parts
+    end
+
+    function plugin:access(conf)
+      local auth_header = kong.request.get_header("Authorization")
+      if not auth_header then
+        return kong.response.exit(401, { message = "Missing Authorization header" })
+      end
+      if not auth_header:find("^Bearer ") then
+        return kong.response.exit(401, { message = "Invalid Authorization format. Expected: Bearer <token>" })
+      end
+
+      local token = auth_header:sub(8)
+      local parts, err = split_token(token)
+      if not parts then
+        return kong.response.exit(401, { message = "Invalid token: " .. err })
+      end
+
+      local header_b64 = parts[1]
+      local payload_b64 = parts[2]
+      local signature_b64 = parts[3]
+
+      local header_json = base64url_decode(header_b64)
+      if not header_json then
+        return kong.response.exit(401, { message = "Failed to decode token header" })
+      end
+
+      local header = cjson.decode(header_json)
+      if not header then
+        return kong.response.exit(401, { message = "Failed to parse token header" })
+      end
+
+      local alg_map = {
+        HS256 = "SHA256",
+        HS384 = "SHA384",
+      }
+      local sha_alg = alg_map[header.alg]
+      if not sha_alg then
+        return kong.response.exit(401, { message = "Unsupported algorithm: " .. (header.alg or "unknown") .. ". Supported: HS256, HS384." })
+      end
+
+      local signing_input = header_b64 .. "." .. payload_b64
+      local secret_decoded = ngx_decode_base64(conf.jwt_secret)
+      if not secret_decoded then
+        kong.log.err("Failed to Base64-decode jwt_secret.")
+        return kong.response.exit(500, { message = "Internal server error" })
+      end
+
+      local computed_hmac, hmac_err = openssl_hmac.new(secret_decoded, sha_alg)
+      if not computed_hmac then
+        kong.log.err("Failed to create HMAC: ", hmac_err)
+        return kong.response.exit(500, { message = "Internal server error" })
+      end
+
+      computed_hmac:update(signing_input)
+      local digest = computed_hmac:final()
+      local expected_signature = base64url_encode(digest)
+
+      if expected_signature ~= signature_b64 then
+        return kong.response.exit(401, { message = "Invalid token signature" })
+      end
+
+      local payload_json = base64url_decode(payload_b64)
+      if not payload_json then
+        return kong.response.exit(401, { message = "Failed to decode token payload" })
+      end
+
+      local payload = cjson.decode(payload_json)
+      if not payload then
+        return kong.response.exit(401, { message = "Failed to parse token payload" })
+      end
+
+      if payload.exp then
+        local now = ngx.time()
+        if now > payload.exp then
+          return kong.response.exit(401, { message = "Token has expired" })
+        end
+      end
+
+      local subject = payload.sub
+      if not subject or subject == "" then
+        return kong.response.exit(401, { message = "Token missing 'sub' claim" })
+      end
+
+      kong.service.request.set_header("X-User-Email", subject)
+      local user_id = payload.userId
+      if user_id then
+        kong.service.request.set_header("X-User-Id", tostring(user_id))
+      else
+        kong.service.request.set_header("X-User-Id", subject)
+      end
+
+      local role = payload.role
+      if role then
+        kong.service.request.set_header("X-User-Role", role)
+      end
+      kong.service.request.set_header("X-Consumer-Username", subject)
+    end
+
+    return plugin
+  schema.lua: |
+    -- Schema definition for the custom jwt-auth plugin
+    local typedefs = require "kong.db.schema.typedefs"
+    return {
+      name = "jwt-auth",
+      fields = {
+        { consumer = typedefs.no_consumer },
+        { protocols = typedefs.protocols_http },
+        {
+          config = {
+            type = "record",
+            fields = {
+              {
+                jwt_secret = {
+                  type = "string",
+                  required = true,
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+
+---
+# ── Kong Gateway Deployment ─────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong
+  namespace: fashion
+  labels:
+    app: kong
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kong
+  template:
+    metadata:
+      labels:
+        app: kong
+    spec:
+      containers:
+        - name: kong
+          image: kong:3.7-ubuntu
+          command: ["/bin/sh", "/kong/scripts/docker-entrypoint-wrapper.sh"]
+          ports:
+            - containerPort: 8080
+              name: proxy
+            - containerPort: 8001
+              name: admin
+          env:
+            - name: KONG_DATABASE
+              value: "off"
+            - name: KONG_PROXY_ACCESS_LOG
+              value: /dev/stdout
+            - name: KONG_PROXY_ERROR_LOG
+              value: /dev/stderr
+            - name: KONG_PROXY_LISTEN
+              value: "0.0.0.0:8080"
+            - name: KONG_ADMIN_LISTEN
+              value: "127.0.0.1:8001"
+            - name: KONG_PLUGINS
+              value: "bundled,jwt-auth"
+            - name: KONG_LUA_PACKAGE_PATH
+              value: "/kong/custom-plugins/?.lua;/kong/custom-plugins/?/init.lua;;"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fashion-secrets
+                  key: JWT_SECRET
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: kong-config-template
+              mountPath: /kong/template
+            - name: kong-entrypoint-script
+              mountPath: /kong/scripts
+            - name: kong-jwt-plugin
+              mountPath: /kong/custom-plugins/kong/plugins/jwt-auth
+          livenessProbe:
+            exec:
+              command: ["kong", "health"]
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command: ["kong", "health"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: kong-config-template
+          configMap:
+            name: kong-config
+            items:
+              - key: kong.yml.template
+                path: kong.yml.template
+        - name: kong-entrypoint-script
+          configMap:
+            name: kong-entrypoint
+            defaultMode: 0755
+            items:
+              - key: docker-entrypoint-wrapper.sh
+                path: docker-entrypoint-wrapper.sh
+        - name: kong-jwt-plugin
+          configMap:
+            name: kong-jwt-auth-plugin
+
+---
+# ── Kong Service (Expose Gateway) ──────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong
+  namespace: fashion
+  labels:
+    app: kong
+spec:
+  type: LoadBalancer  # Or NodePort for Minikube
+  selector:
+    app: kong
+  ports:
+    - name: proxy
+      port: 8080
+      targetPort: 8080

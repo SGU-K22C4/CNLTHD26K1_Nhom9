@@ -8,6 +8,8 @@ import ProductCard from '../components/ProductCard'
 import { formatCurrency } from '../../../shared/utils/format'
 import { useCartContext } from '../../cart/context/CartContext'
 import { useWishlistContext } from '../../wishlist/context/WishlistContext'
+import ProductReviewSection from '../../review/components/ProductReviewSection'
+import { useAuth } from '../../auth/hooks/useAuth'
 
 const PRIMARY = '#5A6D57'
 
@@ -75,6 +77,7 @@ export default function ProductDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { addItem, openDrawer } = useCartContext()
+  const { user } = useAuth()
 
   const [product, setProduct] = useState(null)
   const [related, setRelated] = useState([])
@@ -168,9 +171,16 @@ export default function ProductDetailPage() {
     )
   }
 
-  const { name, category, price, isNew, colors, sizes, collection, fabric, description, variants, colorLabels } = product
+  const { name, category, price, isNew, colors, sizes, collection, fabric, description, variants, colorLabels, inStock, stockBySize } = product
+
+  // Sizes that are out of stock (quantity = 0)
+  const disabledSizes = sizes.filter((s) => !(stockBySize?.[s] > 0))
 
   const handleAddToCart = async (e) => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
     if (!selectedSize) return
     setCartError('')
 
@@ -255,6 +265,13 @@ export default function ProductDetailPage() {
 
             <div className="border-t border-[#E8E8E8] mb-5" />
 
+            {/* Out-of-stock banner */}
+            {!inStock && (
+              <div className="mb-5 px-4 py-3 bg-[#FFF3F3] border border-[#F5C6CB] rounded text-[13px] text-[#721C24]">
+                Sản phẩm hiện đã hết hàng
+              </div>
+            )}
+
             {/* Color selector */}
             {colors?.length > 0 && (
               <div className="mb-5">
@@ -284,6 +301,7 @@ export default function ProductDetailPage() {
                   sizes={sizes}
                   selected={selectedSize}
                   onSelect={setSelectedSize}
+                  disabledSizes={disabledSizes}
                 />
                 {!selectedSize && (
                   <p className="text-[11px] text-[#CBCBCB] mt-1.5">Please select a size</p>
@@ -306,11 +324,11 @@ export default function ProductDetailPage() {
             {/* Add to Cart button */}
             <button
               onClick={handleAddToCart}
-              disabled={!selectedSize}
+              disabled={!selectedSize || !inStock}
               className="w-full h-[52px] text-[13px] font-medium tracking-[0.1em] uppercase text-white transition-opacity disabled:opacity-40 hover:opacity-90 mb-3"
               style={{ backgroundColor: PRIMARY }}
             >
-              {addedToCart ? 'Added to Cart ✓' : 'Add to Cart'}
+              {!inStock ? 'Hết hàng' : addedToCart ? 'Added to Cart ✓' : 'Add to Cart'}
             </button>
 
             {cartError && (
@@ -341,6 +359,8 @@ export default function ProductDetailPage() {
             />
           </div>
         </div>
+
+        <ProductReviewSection productId={product.id} />
 
         {/* ── Related Products ───────────────────────────── */}
         {related.length > 0 && (

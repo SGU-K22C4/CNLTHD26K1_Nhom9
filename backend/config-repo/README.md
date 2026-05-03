@@ -25,8 +25,8 @@ Quy tắc vàng: **LUÔN BẬT `ConfigServiceApplication` (Port 8888) TRƯỚC T
 
 Ở dạng cấu hình hiện hành, các file như `application.yml` đang được set giá trị Default (dự phòng) qua biến môi trường. Ví dụ: `${JWT_SECRET:chuoi-bi-mat}`.
 - Nếu bạn code ở máy Local, các giá trị dự phòng trong file này (như `localhost:3306`) đã đủ để nó chạy **TRƠN TRU NGAY TỨC KHẮC** mà không cần sửa gì thêm.
-- **Để Test API cần Key Thật (như VNPay, OpenAI GPT, Gửi Mail)**: Do các hàm này gọi API tốn tiền/sandbox riêng tư, hãy tự thiết lập biến Environment Variable cục bộ trên máy tính hoặc config trực tiếp vào IDE (phần Edit Configurations trong IntelliJ/Eclipse) các biến:
-  - `OPENAI_API_KEY`: Mã ChatGPT thực tế
+- **Để Test API cần Key Thật (như VNPay, OpenRouter, Gửi Mail)**: Do các hàm này gọi API tốn tiền/sandbox riêng tư, hãy tự thiết lập biến Environment Variable cục bộ trên máy tính hoặc config trực tiếp vào IDE (phần Edit Configurations trong IntelliJ/Eclipse) các biến:
+  - `OPENROUTER_API_KEY`: API key OpenRouter thực tế
   - `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`: Key test thanh toán
   - `MAIL_USERNAME`, `MAIL_PASSWORD`: Mật khẩu ứng dụng Gmail
 

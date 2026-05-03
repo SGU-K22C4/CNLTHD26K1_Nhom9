@@ -4,10 +4,10 @@
 spring:
   # Cấu hình mail (nếu các service khác cũng có xài gửi mail)
   mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:your-email@gmail.com}
-    password: ${MAIL_PASSWORD:your-app-password}
+    host: ${SPRING_MAIL_HOST:${MAIL_HOST:smtp-relay.brevo.com}}
+    port: ${SPRING_MAIL_PORT:${MAIL_PORT:2525}}
+    username: ${SPRING_MAIL_USERNAME:${MAIL_USERNAME:}}
+    password: ${SPRING_MAIL_PASSWORD:${MAIL_PASSWORD:}}
     properties:
       mail:
         smtp:
@@ -17,9 +17,12 @@ spring:
 
 # JWT dùng chung cho tất cả service để giải mã token
 jwt:
-  secret: ${JWT_SECRET:ZmFzaGlvbi1lLWNvbW1lcmNlLXNlY3JldC1rZXktdGhhdC1pcy1sb25nLWVub3VnaC0zMmJ5dGVz}
+  # Do not fallback to a static shared secret in source code.
+  secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:900000}
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
 
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  mail:
+    from: ${MAIL_FROM:${spring.mail.username}}

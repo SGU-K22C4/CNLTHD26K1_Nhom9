@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { cartService } from '../services/cartService'
 import { productService } from '../../product/services/productService'
+import { useAuth } from '../../auth/hooks/useAuth'
 
 const CartContext = createContext(null)
 
@@ -15,6 +16,7 @@ export const useCartContext = () => {
 }
 
 export function CartProvider({ children }) {
+  const { user } = useAuth()
   const [items, setItems] = useState([])
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [drawerAnchor, setDrawerAnchor] = useState({ top: 96, right: 16 })
@@ -29,27 +31,27 @@ export function CartProvider({ children }) {
     products.forEach((product) => {
       const fallbackImage = product.image || product.images?.[0] || ''
 
-      ;(product.variants || []).forEach((variant) => {
-        const variantImage = variant?.images?.find((img) => img.primary)?.imageUrl
-          || variant?.images?.[0]?.imageUrl
-          || fallbackImage
+        ; (product.variants || []).forEach((variant) => {
+          const variantImage = variant?.images?.find((img) => img.primary)?.imageUrl
+            || variant?.images?.[0]?.imageUrl
+            || fallbackImage
 
-        ;(variant.sizes || []).forEach((sizeObj) => {
-          if (!sizeObj?.id) return
-          index.set(sizeObj.id, {
-            id: sizeObj.id,
-            variantSizeId: sizeObj.id,
-            productId: product.id,
-            name: product.name || 'Unknown product',
-            color: variant.colorName || '',
-            size: sizeObj.sizeName || '',
-            price: Number(variant.price) || 0,
-            image: variantImage,
-            imageUrl: variantImage,
-            slug: product.slug || '',
-          })
+            ; (variant.sizes || []).forEach((sizeObj) => {
+              if (!sizeObj?.id) return
+              index.set(sizeObj.id, {
+                id: sizeObj.id,
+                variantSizeId: sizeObj.id,
+                productId: product.id,
+                name: product.name || 'Unknown product',
+                color: variant.colorName || '',
+                size: sizeObj.sizeName || '',
+                price: Number(variant.price) || 0,
+                image: variantImage,
+                imageUrl: variantImage,
+                slug: product.slug || '',
+              })
+            })
         })
-      })
     })
 
     productVariantIndexRef.current = index
@@ -93,6 +95,10 @@ export function CartProvider({ children }) {
     let mounted = true
 
     const loadInitialCart = async () => {
+      if (!user) {
+        if (mounted) setItems([])
+        return
+      }
       try {
         const raw = await cartService.getCart()
         const hydrated = await hydrateCartItems(raw)
@@ -108,7 +114,21 @@ export function CartProvider({ children }) {
     return () => {
       mounted = false
     }
-  }, [hydrateCartItems])
+  }, [hydrateCartItems, user])
+
+  // === Clear cart on logout, re-sync on login ===
+  useEffect(() => {
+    if (!user) {
+      // User just logged out → clear cart state immediately
+      setItems([])
+      productVariantIndexRef.current = null
+    } else {
+      // User just logged in → re-sync cart from backend
+      syncCart().catch((err) => {
+        console.warn('Failed to sync cart after login:', err)
+      })
+    }
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Drawer controls ─────────────────────────────────────────────────────── */
   const openDrawer = useCallback((event) => {

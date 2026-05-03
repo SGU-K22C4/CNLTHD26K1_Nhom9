@@ -3,8 +3,8 @@ FROM maven:3.9.6-eclipse-temurin-21 AS build
 WORKDIR /app
 
 COPY pom.xml .
-COPY api-gateway/pom.xml api-gateway/pom.xml
 COPY common/pom.xml common/pom.xml
+COPY services/config-service/pom.xml services/config-service/pom.xml
 COPY services/user-service/pom.xml services/user-service/pom.xml
 COPY services/product-service/pom.xml services/product-service/pom.xml
 COPY common/src common/src
@@ -24,4 +24,4 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/services/cart-service/target/*.jar app.jar
 EXPOSE 8083
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

@@ -26,8 +26,7 @@ docker/.env
 .env
 .env.*
 !.env.example
-!ecommerce-frontend/.env.development
-
+!ecommerce-frontend/.env.developmentk8s/secrets.yaml
 # ── Docker volumes & backups ──────────────────────────────────────────────────
 docker/mysql/data/
 docker/redis/data/
@@ -41,3 +40,4 @@ __pycache__/
 # ── Misc ──────────────────────────────────────────────────────────────────────
 *.swp
 *.swo
+docker/.env

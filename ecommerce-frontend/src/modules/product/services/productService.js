@@ -2,8 +2,8 @@ import axios from 'axios'
 import { API_CONFIG } from '../../../config/api.config'
 
 const api = axios.create({
-  baseURL: API_CONFIG.baseURL,
-  timeout: API_CONFIG.timeout,
+  baseURL: API_CONFIG.BASE_URL,
+  timeout: API_CONFIG.TIMEOUT,
 })
 
 const COLOR_TO_HEX = {
@@ -90,6 +90,19 @@ export function normalizeProduct(product) {
   const now = Date.now()
   const isNew = createdAt ? now - createdAt.getTime() <= 1000 * 60 * 60 * 24 * 30 : false
 
+  // Stock calculation
+  const allSizes = variants.flatMap((v) => v.sizes || [])
+  const totalStock = allSizes.reduce((sum, s) => sum + (s.quantity || 0), 0)
+  const inStock = totalStock > 0
+
+  // Per-size stock: { "M": 10, "L": 0, ... }
+  const stockBySize = {}
+  for (const s of allSizes) {
+    if (s.sizeName) {
+      stockBySize[s.sizeName] = (stockBySize[s.sizeName] || 0) + (s.quantity || 0)
+    }
+  }
+
   return {
     id: product.id,
     name: product.name,
@@ -101,6 +114,9 @@ export function normalizeProduct(product) {
     variants,
     price: prices.length ? Math.min(...prices) : 0,
     isNew,
+    inStock,
+    totalStock,
+    stockBySize,
     image: images[0] || '',
     images,
     colors: colors.map(toColorHex),

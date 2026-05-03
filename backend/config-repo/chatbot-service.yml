@@ -6,5 +6,16 @@ spring:
     mongodb:
       uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/fashion_chatbot_db}
 
-openai:
-  api-key: ${OPENAI_API_KEY:sk-your-openai-api-key}
+openrouter:
+  api-key: ${OPENROUTER_API_KEY:}
+  model: ${OPENROUTER_MODEL:openrouter/free}
+  fallback-model: ${OPENROUTER_FALLBACK_MODEL:openrouter/free}
+  base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}
+  max-tokens: ${OPENROUTER_MAX_TOKENS:400}
+  site-url: ${OPENROUTER_SITE_URL:http://localhost:8087}
+  app-name: ${OPENROUTER_APP_NAME:fashion-chatbot-service}
+
+chatbot:
+  product-service-url: ${PRODUCT_SERVICE_URL:http://localhost:8080}
+  promotion-service-url: ${PROMOTION_SERVICE_URL:http://localhost:8080}
+  order-service-url: ${ORDER_SERVICE_URL:http://localhost:8080}

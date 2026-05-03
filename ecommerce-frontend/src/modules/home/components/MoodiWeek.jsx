@@ -5,13 +5,13 @@ import "swiper/css/pagination";
 import "swiper/css";
 
 // Giữ lại các biến ảnh mảng import tĩnh của bạn
-import mon from "../../../../public/assets/images/hero-desktop.webp"; // <-- Điều chỉnh lại path ảnh
-import tue from "../../../../public/assets/images/hero-desktop.webp";
-import wed from "../../../../public/assets/images/hero-desktop.webp";
-import thu from "../../../../public/assets/images/hero-desktop.webp";
-import fri from "../../../../public/assets/images/hero-desktop.webp";
-import sat from "../../../../public/assets/images/hero-desktop.webp";
-import sun from "../../../../public/assets/images/hero-desktop.webp";
+import mon from "/assets/images/hero-desktop.webp?url"; // <-- Điều chỉnh lại path ảnh
+import tue from "/assets/images/hero-desktop.webp?url";
+import wed from "/assets/images/hero-desktop.webp?url";
+import thu from "/assets/images/hero-desktop.webp?url";
+import fri from "/assets/images/hero-desktop.webp?url";
+import sat from "/assets/images/hero-desktop.webp?url";
+import sun from "/assets/images/hero-desktop.webp?url";
 
 const ImageWeek = [
   { imageSrc: mon, imageWeek: "Monday" },

@@ -15,10 +15,12 @@ public class MailService {
 
     private final JavaMailSender mailSender;
 
-    @Value("${spring.mail.username}")
+    // Brevo SMTP login is not always a valid sender address.
+    // Prefer MAIL_FROM (verified sender/domain), fallback to SMTP username for compatibility.
+    @Value("${app.mail.from:${spring.mail.username}}")
     private String fromEmail;
 
-    @Value("${app.frontend-url}")
+    @Value("${app.frontend-url:${FRONTEND_URL:http://localhost:5173}}")
     private String frontendUrl;
 
     @Async

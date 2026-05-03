@@ -44,6 +44,14 @@ public class Order {
     @Builder.Default
     private BigDecimal discount = BigDecimal.ZERO;
 
+    @Column(name = "loyalty_discount", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal loyaltyDiscount = BigDecimal.ZERO;
+
+    @Column(name = "used_points")
+    @Builder.Default
+    private Integer usedPoints = 0;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal total;
 
@@ -65,6 +73,13 @@ public class Order {
     private PaymentStatus paymentStatus = PaymentStatus.PENDING;
 
     private String note;
+
+    /**
+     * Saga latch: tracks inventory reservation result independently of order status.
+     * null = result not yet received, true = reserved successfully, false = reservation failed.
+     */
+    @Column(name = "inventory_reserved")
+    private Boolean inventoryReserved;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default

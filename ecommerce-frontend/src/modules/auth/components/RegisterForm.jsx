@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import Input from '../../../shared/components/ui/Input';
+import AddressFields from '../../../shared/components/ui/AddressFields';
 import VerifyEmailModal from './VerifyEmailModal';
 import { useProvinces } from '../../../shared/hooks/useProvinces';
 import { authService } from '../services/authService';
@@ -120,7 +121,15 @@ export default function RegisterForm({ onSuccess }) {
         isOpen={!!verifyEmail}
         email={verifyEmail}
         onClose={() => setVerifyEmail('')}
-        onResend={() => console.log('Resend email to', verifyEmail)}
+        onResend={async () => {
+          try {
+            await authService.resendVerification(verifyEmail);
+            alert('Email xác thực đã được gửi lại thành công! Vui lòng kiểm tra hộp thư.');
+          } catch (err) {
+            const msg = err.response?.data?.message || 'Gửi lại email thất bại.';
+            alert(msg);
+          }
+        }}
       />
 
       <div className="w-full max-w-[500px] mx-auto flex flex-col gap-6 px-4 py-8 sm:px-0">
@@ -222,35 +231,19 @@ export default function RegisterForm({ onSuccess }) {
           {/* ADDRESS SECTION */}
           <div className="text-sm text-gray-700 font-semibold border-t pt-4 mt-2">Delivery Address</div>
 
-          <Input
-            type="text"
-            placeholder="Street Address (e.g. 460/4 Nơ Trang Long)"
-            error={errors.street?.message}
-            {...register('street', { required: 'Street address is required' })}
+          <AddressFields
+            streetInputProps={register('street', { required: 'Street address is required' })}
+            streetError={errors.street?.message}
+            citySelectProps={register('cityCode', { required: 'City is required' })}
+            cityError={errors.cityCode?.message}
+            wardSelectProps={{
+              ...register('wardCode', { required: 'Ward is required' }),
+              disabled: !wards.length,
+            }}
+            wardError={errors.wardCode?.message}
+            provinces={provinces}
+            wards={wards}
           />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="flex flex-col">
-              <select
-                className={`w-full px-4 border ${errors.cityCode ? 'border-red-500' : 'border-transparent'} h-[46px] bg-[#F9F9F9] rounded focus:bg-white focus:border-[#5A6D57] focus:outline-none transition-colors text-sm`}
-                {...register('cityCode', { required: 'City is required' })}
-              >
-                <option value="">City / Province</option>
-                {provinces.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
-              </select>
-            </div>
-
-            <div className="flex flex-col">
-              <select
-                className={`w-full px-4 border ${errors.wardCode ? 'border-red-500' : 'border-transparent'} h-[46px] bg-[#F9F9F9] rounded focus:bg-white focus:border-[#5A6D57] focus:outline-none transition-colors text-sm`}
-                {...register('wardCode', { required: 'Ward is required' })}
-                disabled={!wards.length}
-              >
-                <option value="">Ward</option>
-                {wards.map(w => <option key={w.code} value={w.code}>{w.name}</option>)}
-              </select>
-            </div>
-          </div>
 
           <label className="flex items-center gap-2 cursor-pointer mt-1">
             <input type="checkbox" {...register('isDefault')} className="w-4 h-4 accent-[#5A6D57] rounded" />

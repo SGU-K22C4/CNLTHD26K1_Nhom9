@@ -15,6 +15,8 @@ public interface ProductRepository extends JpaRepository<Product, String> {
 
         Page<Product> findByVisibleTrue(Pageable pageable);
 
+        Page<Product> findByVisibleTrueOrderByCreatedAtDesc(Pageable pageable);
+
         Page<Product> findByCategoryIdAndVisibleTrue(String categoryId, Pageable pageable);
 
     @Query("""

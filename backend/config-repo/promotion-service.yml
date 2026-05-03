@@ -3,9 +3,9 @@ server:
 
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/fashion_promotion_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3307/fashion_promotion_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:rootpassword}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -23,3 +23,8 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+
+loyalty:
+  point-to-vnd: ${LOYALTY_POINT_TO_VND:100}
+  order-point-percent: ${LOYALTY_ORDER_POINT_PERCENT:0.01}
+  review-bonus-points: ${LOYALTY_REVIEW_BONUS_POINTS:10}

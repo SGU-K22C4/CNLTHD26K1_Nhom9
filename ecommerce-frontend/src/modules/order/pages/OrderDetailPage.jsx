@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { orderService } from '../services/orderService'
 import { formatCurrency, formatDateTime } from '../../../shared/utils/format'
+import PaymentResultBanner from '../components/PaymentResultBanner'
 
 /* ─── Status map ─── */
 const STATUS_MAP = {
@@ -120,6 +121,9 @@ export default function OrderDetailPage() {
   const status = STATUS_MAP[order.status] || STATUS_MAP.PENDING
   const paymentStatus = PAYMENT_STATUS_MAP[order.paymentStatus] || PAYMENT_STATUS_MAP.PENDING
   const StatusIcon = status.icon
+  const isPaidOrder = order.paymentStatus === 'PAID' && order.status !== 'CANCELLED'
+  const isFailedOrder = order.paymentStatus === 'FAILED' || order.status === 'CANCELLED'
+  const isProcessingPaymentResult = !isPaidOrder && !isFailedOrder
 
   return (
     <div className="font-[Montserrat] bg-[#FAFBF9] min-h-[70vh] print:bg-white">
@@ -148,19 +152,32 @@ export default function OrderDetailPage() {
 
       <div className="max-w-[900px] mx-auto px-4 sm:px-6 py-8 sm:py-12 print-container">
 
-        {/* ─── Success Banner (only when from payment) ─── */}
-        {isFromPayment && (
-          <div className="animate-scale-in mb-8 bg-gradient-to-r from-[#D1FAE5] to-[#E8F5E1] border border-[#86EFAC] rounded-xl p-6 flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-[#10B981] flex items-center justify-center shrink-0">
-              <CheckCircle2 size={28} className="text-white" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-[#065F46]">Đặt hàng thành công!</h2>
-              <p className="text-sm text-[#047857] mt-1">
-                Cảm ơn bạn đã mua sắm tại Modimal. Đơn hàng của bạn đang được xử lý.
-              </p>
-            </div>
-          </div>
+        {/* ─── Payment Result Banner (only when returning from payment) ─── */}
+        {isFromPayment && isPaidOrder && (
+          <PaymentResultBanner
+            variant="success"
+            title="Đặt hàng thành công!"
+            message="Cảm ơn bạn đã mua sắm tại Modimal. Đơn hàng của bạn đang được xử lý."
+            className="mb-8"
+          />
+        )}
+
+        {isFromPayment && isFailedOrder && (
+          <PaymentResultBanner
+            variant="failed"
+            title="Thanh toán chưa hoàn tất"
+            message={`Đơn hàng đang ở trạng thái ${status.label.toLowerCase()} / ${paymentStatus.label.toLowerCase()}. Vui lòng kiểm tra lịch sử giao dịch hoặc liên hệ hỗ trợ.`}
+            className="mb-8"
+          />
+        )}
+
+        {isFromPayment && isProcessingPaymentResult && (
+          <PaymentResultBanner
+            variant="processing"
+            title="Đang xác nhận thanh toán"
+            message="Kết quả thanh toán đang được đồng bộ qua hệ thống. Vui lòng tải lại trang sau ít phút để xem trạng thái mới nhất."
+            className="mb-8"
+          />
         )}
 
         {/* ─── Header ─── */}
@@ -416,6 +433,19 @@ export default function OrderDetailPage() {
                       )}
                     </span>
                     <span className="font-medium">-{formatCurrency(order.discount)}</span>
+                  </div>
+                )}
+                {order.loyaltyDiscount > 0 && (
+                  <div className="flex justify-between text-sm text-[#0f766e]">
+                    <span className="flex items-center gap-1">
+                      Điểm tích lũy
+                      {order.usedPoints > 0 && (
+                        <span className="text-[10px] bg-[#CCFBF1] text-[#115E59] px-1.5 py-0.5 rounded font-medium">
+                          {order.usedPoints} điểm
+                        </span>
+                      )}
+                    </span>
+                    <span className="font-medium">-{formatCurrency(order.loyaltyDiscount)}</span>
                   </div>
                 )}
                 <div className="pt-3 border-t-2 border-[#5A6D57]">

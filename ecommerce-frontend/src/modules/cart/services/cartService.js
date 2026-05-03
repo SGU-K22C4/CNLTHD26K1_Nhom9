@@ -1,27 +1,12 @@
 import api from '@/shared/utils/api'
+import { buildUserHeaders } from '@/shared/utils/userHeaders'
 
 /**
  * Cart Service — gọi API Gateway → cart-service (Redis)
  *
- * Hiện tại dùng guest user ID (UUID) lưu trong localStorage.
- * Khi có JWT auth, API Gateway sẽ tự lấy userId từ token.
+ * Luôn gửi X-User-Id để backend cart-service định danh user ổn định
+ * cho cả guest và logged-in flow.
  */
-
-function getGuestUserId() {
-  let id = localStorage.getItem('guestUserId')
-  if (!id) {
-    id = crypto.randomUUID()
-    localStorage.setItem('guestUserId', id)
-  }
-  return id
-}
-
-function userHeaders() {
-  const token = localStorage.getItem('accessToken')
-  // Nếu đã đăng nhập thì không cần gửi X-User-Id (JWT filter sẽ set)
-  if (token) return {}
-  return { 'X-User-Id': getGuestUserId() }
-}
 
 function unwrapData(response, fallback) {
   if (response == null) return fallback
@@ -35,7 +20,7 @@ export const cartService = {
    * GET /api/v1/cart → [{ variantSizeId, quantity }]
    */
   getCart: async () => {
-    const res = await api.get('/api/v1/cart', { headers: userHeaders() })
+    const res = await api.get('/api/v1/cart', { headers: buildUserHeaders() })
     return unwrapData(res, [])
   },
 
@@ -44,7 +29,7 @@ export const cartService = {
    * POST /api/v1/cart/items
    */
   addItem: async (variantSizeId, quantity = 1) => {
-    const res = await api.post('/api/v1/cart/items', { variantSizeId, quantity }, { headers: userHeaders() })
+    const res = await api.post('/api/v1/cart/items', { variantSizeId, quantity }, { headers: buildUserHeaders() })
     return unwrapData(res, [])
   },
 
@@ -53,7 +38,7 @@ export const cartService = {
    * PATCH /api/v1/cart/items/:variantSizeId
    */
   updateQuantity: async (variantSizeId, quantity) => {
-    const res = await api.patch(`/api/v1/cart/items/${variantSizeId}`, { quantity }, { headers: userHeaders() })
+    const res = await api.patch(`/api/v1/cart/items/${variantSizeId}`, { quantity }, { headers: buildUserHeaders() })
     return unwrapData(res, [])
   },
 
@@ -62,7 +47,7 @@ export const cartService = {
    * DELETE /api/v1/cart/items/:variantSizeId
    */
   removeItem: async (variantSizeId) => {
-    const res = await api.delete(`/api/v1/cart/items/${variantSizeId}`, { headers: userHeaders() })
+    const res = await api.delete(`/api/v1/cart/items/${variantSizeId}`, { headers: buildUserHeaders() })
     return unwrapData(res, [])
   },
 
@@ -71,7 +56,7 @@ export const cartService = {
    * DELETE /api/v1/cart
    */
   clearCart: async () => {
-    await api.delete('/api/v1/cart', { headers: userHeaders() })
+    await api.delete('/api/v1/cart', { headers: buildUserHeaders() })
   },
 
   /**
@@ -79,7 +64,7 @@ export const cartService = {
    * GET /api/v1/cart/count → number
    */
   getCount: async () => {
-    const res = await api.get('/api/v1/cart/count', { headers: userHeaders() })
+    const res = await api.get('/api/v1/cart/count', { headers: buildUserHeaders() })
     return unwrapData(res, 0)
   },
 }

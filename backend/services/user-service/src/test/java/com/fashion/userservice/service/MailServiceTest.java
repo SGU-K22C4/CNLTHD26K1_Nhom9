@@ -28,22 +28,18 @@ class MailServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Tiêm các giá trị cấu hình từ application.yml
         ReflectionTestUtils.setField(mailService, "fromEmail", "noreply@fashion.com");
         ReflectionTestUtils.setField(mailService, "frontendUrl", "http://fashion-store.com");
     }
 
     @Test
-    @DisplayName("Gửi mail Reset Password - Phải chứa đúng link và email nhận")
+    @DisplayName("Gui mail Reset Password - Phai chua dung link va email nhan")
     void sendPasswordResetEmail_ShouldSendCorrectMessage() {
-        // Arrange
         String toEmail = "user@gmail.com";
         String token = "reset-token-123";
 
-        // Act
         mailService.sendPasswordResetEmail(toEmail, token);
 
-        // Assert
         ArgumentCaptor<SimpleMailMessage> messageCaptor = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(mailSender, times(1)).send(messageCaptor.capture());
 
@@ -54,17 +50,14 @@ class MailServiceTest {
     }
 
     @Test
-    @DisplayName("Gửi mail xác thực Email - Phải chứa link verify")
+    @DisplayName("Gui mail xac thuc Email - Phai chua link verify")
     void sendVerificationEmail_ShouldSendCorrectMessage() {
-        // Arrange
         String toEmail = "newuser@gmail.com";
         String firstName = "John";
         String token = "verify-token-456";
 
-        // Act
         mailService.sendVerificationEmail(toEmail, firstName, token);
 
-        // Assert
         ArgumentCaptor<SimpleMailMessage> messageCaptor = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(mailSender).send(messageCaptor.capture());
 
@@ -75,14 +68,10 @@ class MailServiceTest {
     }
 
     @Test
-    @DisplayName("Xử lý lỗi khi mail server gặp sự cố")
+    @DisplayName("Xu ly loi khi mail server gap su co")
     void sendWelcomeEmail_ShouldHandleExceptionGracefully() {
-        // Arrange
         doThrow(new RuntimeException("SMTP Server Down")).when(mailSender).send(any(SimpleMailMessage.class));
 
-        // Act & Assert
-        // Vì hàm này void và có try-catch nên không throw exception ra ngoài,
-        // chúng ta kiểm tra xem nó có log lỗi (thông qua việc verify code chạy qua catch)
         assertDoesNotThrow(() -> mailService.sendWelcomeEmail("test@gmail.com", "John"));
         verify(mailSender, times(1)).send(any(SimpleMailMessage.class));
     }

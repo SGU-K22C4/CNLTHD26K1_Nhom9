@@ -4,12 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
-import lombok.NoArgsConstructor;    // Thiếu dòng này
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 @Data
-@NoArgsConstructor // Cần cho Jackson/Spring
-@AllArgsConstructor // Thêm cái này
 public class ChangePasswordRequest {
 
     @NotBlank

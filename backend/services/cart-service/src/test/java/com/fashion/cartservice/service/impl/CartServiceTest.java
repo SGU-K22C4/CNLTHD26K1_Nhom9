@@ -2,10 +2,8 @@ package com.fashion.cartservice.service;
 
 import com.fashion.cartservice.dto.response.CartItemResponse;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.HashOperations;
@@ -16,20 +14,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class CartServiceTest {
 
     @Mock
-    private RedisTemplate<String, Object> redisTemplate;
-
-    @Mock
     private HashOperations<String, Object, Object> hashOperations;
 
-    @InjectMocks
+    private TrackingRedisTemplate redisTemplate;
     private CartService cartService;
 
     private final String userId = "user123";
@@ -38,106 +35,116 @@ class CartServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Vì CartService gọi redisTemplate.opsForHash() nhiều lần, ta mock nó trả về hashOperations giả
-        lenient().when(redisTemplate.opsForHash()).thenReturn(hashOperations);
+        redisTemplate = new TrackingRedisTemplate(hashOperations);
+        cartService = new CartService(redisTemplate);
     }
 
     @Test
-    @DisplayName("Test lấy giỏ hàng thành công")
-    void getCart_Success() {
-        // Arrange
-        Map<Object, Object> mockEntries = Map.of(variantId, "2");
-        when(hashOperations.entries(cartKey)).thenReturn(mockEntries);
+    void should_ReturnCartItems_When_CartContainsEntries() {
+        when(hashOperations.entries(cartKey)).thenReturn(Map.of(variantId, "2"));
 
-        // Act
         List<CartItemResponse> result = cartService.getCart(userId);
 
-        // Assert
         assertEquals(1, result.size());
         assertEquals(variantId, result.get(0).getVariantSizeId());
         assertEquals(2, result.get(0).getQuantity());
     }
 
     @Test
-    @DisplayName("Test thêm sản phẩm vào giỏ (Increment)")
-    void addItem_Success() {
-        // Arrange
-        // Khi addItem gọi getCart ở cuối, trả về list có 1 item
+    void should_AddItemAndRefreshTtl_When_AddingItemToCart() {
         when(hashOperations.entries(cartKey)).thenReturn(Map.of(variantId, "5"));
 
-        // Act
         List<CartItemResponse> result = cartService.addItem(userId, variantId, 5);
 
-        // Assert
-        verify(hashOperations).increment(cartKey, variantId, 5); // Quan trọng nhất: check lệnh tăng số lượng
-        verify(redisTemplate).expire(eq(cartKey), anyLong(), eq(TimeUnit.SECONDS)); // Check lệnh gia hạn TTL
-        assertEquals(1, result.size());
+        verify(hashOperations).increment(cartKey, variantId, 5);
+        assertEquals(cartKey, redisTemplate.lastExpireKey);
+        assertEquals(604800L, redisTemplate.lastExpireTimeout);
+        assertEquals(TimeUnit.SECONDS, redisTemplate.lastExpireUnit);
         assertEquals(5, result.get(0).getQuantity());
     }
 
     @Test
-    @DisplayName("Test cập nhật số lượng khi item có tồn tại")
-    void updateQuantity_Success() {
-        // Arrange
-        when(hashOperations.get(cartKey, variantId)).thenReturn("2"); // Giả lập item đang có trong giỏ
+    void should_UpdateQuantityAndRefreshTtl_When_ItemExistsInCart() {
+        when(hashOperations.get(cartKey, variantId)).thenReturn("2");
         when(hashOperations.entries(cartKey)).thenReturn(Map.of(variantId, "10"));
 
-        // Act
         List<CartItemResponse> result = cartService.updateQuantity(userId, variantId, 10);
 
-        // Assert
-        verify(hashOperations).put(cartKey, variantId, "10"); // Check lệnh đặt giá trị mới
+        verify(hashOperations).put(cartKey, variantId, "10");
+        assertEquals(cartKey, redisTemplate.lastExpireKey);
         assertEquals(10, result.get(0).getQuantity());
     }
 
     @Test
-    @DisplayName("Test cập nhật số lượng khi item KHÔNG tồn tại - Phải ném lỗi")
-    void updateQuantity_NotFound() {
-        // Arrange
+    void should_ThrowIllegalArgumentException_When_UpdatingMissingCartItem() {
         when(hashOperations.get(cartKey, variantId)).thenReturn(null);
 
-        // Act & Assert
-        assertThrows(IllegalArgumentException.class, () -> 
-            cartService.updateQuantity(userId, variantId, 10)
-        );
+        assertThrows(IllegalArgumentException.class, () -> cartService.updateQuantity(userId, variantId, 10));
     }
 
     @Test
-    @DisplayName("Test xóa một item khỏi giỏ")
-    void removeItem_Success() {
-        // Arrange
-        when(hashOperations.delete(cartKey, variantId)).thenReturn(1L); // Trả về 1 nghĩa là đã xóa
+    void should_RemoveItemAndReturnUpdatedCart_When_ItemExists() {
+        when(hashOperations.delete(cartKey, variantId)).thenReturn(1L);
         when(hashOperations.entries(cartKey)).thenReturn(Collections.emptyMap());
 
-        // Act
         List<CartItemResponse> result = cartService.removeItem(userId, variantId);
 
-        // Assert
         verify(hashOperations).delete(cartKey, variantId);
+        assertEquals(cartKey, redisTemplate.lastExpireKey);
         assertTrue(result.isEmpty());
     }
 
     @Test
-    @DisplayName("Test đếm tổng số lượng item (Sum các value)")
-    void getItemCount_Success() {
-        // Arrange
-        List<Object> mockValues = List.of("2", "3", "5"); // Giỏ hàng có 3 loại hàng, tổng là 10 món
-        when(hashOperations.values(cartKey)).thenReturn(mockValues);
+    void should_ThrowIllegalArgumentException_When_RemovingMissingCartItem() {
+        when(hashOperations.delete(cartKey, variantId)).thenReturn(0L);
 
-        // Act
+        assertThrows(IllegalArgumentException.class, () -> cartService.removeItem(userId, variantId));
+    }
+
+    @Test
+    void should_ReturnTotalItemCount_When_CartContainsMultipleEntries() {
+        when(hashOperations.values(cartKey)).thenReturn(List.of("2", "3", "5"));
+
         int count = cartService.getItemCount(userId);
 
-        // Assert
         assertEquals(10, count);
     }
 
     @Test
-    @DisplayName("Test xóa sạch giỏ hàng")
-    void clearCart_Success() {
-        // Act
+    void should_DeleteCartKey_When_ClearingCart() {
         cartService.clearCart(userId);
 
-        // Assert
-        verify(redisTemplate).delete(cartKey);
+        assertEquals(cartKey, redisTemplate.lastDeletedKey);
+    }
+
+    private static class TrackingRedisTemplate extends RedisTemplate<String, Object> {
+        private final HashOperations<String, Object, Object> hashOperations;
+        private String lastExpireKey;
+        private long lastExpireTimeout;
+        private TimeUnit lastExpireUnit;
+        private String lastDeletedKey;
+
+        TrackingRedisTemplate(HashOperations<String, Object, Object> hashOperations) {
+            this.hashOperations = hashOperations;
+        }
+
+        @Override
+        public HashOperations<String, Object, Object> opsForHash() {
+            return hashOperations;
+        }
+
+        @Override
+        public Boolean expire(String key, long timeout, TimeUnit unit) {
+            this.lastExpireKey = key;
+            this.lastExpireTimeout = timeout;
+            this.lastExpireUnit = unit;
+            return true;
+        }
+
+        @Override
+        public Boolean delete(String key) {
+            this.lastDeletedKey = key;
+            return true;
+        }
     }
 }

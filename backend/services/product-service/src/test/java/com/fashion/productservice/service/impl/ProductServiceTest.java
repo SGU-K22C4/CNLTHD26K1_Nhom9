@@ -4,27 +4,29 @@ import com.fashion.productservice.dto.request.ProductRequest;
 import com.fashion.productservice.dto.response.ProductResponse;
 import com.fashion.productservice.entity.Category;
 import com.fashion.productservice.entity.Product;
+import com.fashion.productservice.mapper.ProductMapper;
 import com.fashion.productservice.repository.CategoryRepository;
 import com.fashion.productservice.repository.ProductRepository;
-import com.fashion.productservice.mapper.ProductMapper;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import java.util.List;
-import java.util.Optional;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
-import java.util.Optional;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
@@ -33,125 +35,109 @@ class ProductServiceTest {
     private ProductRepository productRepository;
 
     @Mock
+    private CategoryRepository categoryRepository;
+
+    @Mock
     private ProductMapper productMapper;
 
     @InjectMocks
     private ProductServiceImpl productService;
 
-@Test
-@DisplayName("Test lấy sản phẩm theo ID thành công")
-void testGetById_Success() {
-    String productId = "P123";
-    Product mockProduct = Product.builder().id(productId).name("Áo thun").build();
-    
-    // Thay vì dùng 'new', ta dùng mock để tạo đối tượng giả
-    ProductResponse mockResponse = mock(ProductResponse.class);
-    lenient().when(mockResponse.getId()).thenReturn(productId);
-    lenient().when(mockResponse.getName()).thenReturn("Áo thun");
-
-    lenient().when(productRepository.findById(productId)).thenReturn(Optional.of(mockProduct));
-    lenient().when(productMapper.toResponse(mockProduct)).thenReturn(mockResponse);
-
-    ProductResponse result = productService.getById(productId);
-
-    assertNotNull(result);
-    assertEquals("Áo thun", result.getName());
-}
-
     @Test
-    @DisplayName("Test lỗi không tìm thấy sản phẩm")
-    void testGetById_NotFound() {
-        String productId = "UNKNOWN";
-        lenient().when(productRepository.findById(productId)).thenReturn(Optional.empty());
-
-        assertThrows(RuntimeException.class, () -> productService.getById(productId));
-    }
-@Test
-    @DisplayName("Test tạo sản phẩm mới thành công")
-    void testCreate_Success() {
-        // 1. Arrange (Chuẩn bị)
-        ProductRequest request = new ProductRequest();
-        request.setName("Quần Jean");
-        request.setCategoryId("CAT01");
-        request.setVariants(new ArrayList<>()); // Giả sử không có variant cho đơn giản
-
-        Category mockCategory = Category.builder().id("CAT01").name("Thời trang").build();
-        Product savedProduct = Product.builder().id("NEW_ID").name("Quần Jean").build();
-        ProductResponse mockResponse = ProductResponse.builder().id("NEW_ID").name("Quần Jean").build();
-
-        when(categoryRepository.findById("CAT01")).thenReturn(Optional.of(mockCategory));
-        when(productRepository.save(any(Product.class))).thenReturn(savedProduct);
-        when(productMapper.toResponse(any(Product.class))).thenReturn(mockResponse);
-
-        // 2. Act (Thực thi)
-        ProductResponse result = productService.create(request);
-
-        // 3. Assert (Kiểm chứng)
-        assertNotNull(result);
-        assertEquals("Quần Jean", result.getName());
-        verify(productRepository).save(any(Product.class)); // Xác nhận có gọi lệnh save
-    }
-
-    @Test
-    @DisplayName("Test cập nhật sản phẩm thành công")
-    void testUpdate_Success() {
-        // 1. Arrange
+    void should_ReturnMappedResponse_When_ProductExists() {
         String productId = "P123";
-        ProductRequest updateRequest = new ProductRequest();
-        updateRequest.setName("Tên mới");
-        updateRequest.setCategoryId("CAT01");
+        Product product = Product.builder().id(productId).name("Ao thun").build();
+        ProductResponse expectedResponse = ProductResponse.builder().id(productId).name("Ao thun").build();
+
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(productMapper.toResponse(product)).thenReturn(expectedResponse);
+
+        ProductResponse actualResponse = productService.getById(productId);
+
+        assertEquals(expectedResponse.getId(), actualResponse.getId());
+        assertEquals(expectedResponse.getName(), actualResponse.getName());
+    }
+
+    @Test
+    void should_ThrowRuntimeException_When_ProductDoesNotExist() {
+        String productId = "UNKNOWN";
+        when(productRepository.findById(productId)).thenReturn(Optional.empty());
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> productService.getById(productId));
+
+        assertEquals("Product not found: " + productId, exception.getMessage());
+    }
+
+    @Test
+    void should_CreateProduct_When_CategoryExists() {
+        ProductRequest request = new ProductRequest();
+        request.setName("Quan Jean");
+        request.setCategoryId("CAT01");
+        request.setVariants(new ArrayList<>());
+
+        Category category = Category.builder().id("CAT01").name("Thoi trang").build();
+        Product savedProduct = Product.builder().id("NEW_ID").name("Quan Jean").build();
+        ProductResponse expectedResponse = ProductResponse.builder().id("NEW_ID").name("Quan Jean").build();
+
+        when(categoryRepository.findById("CAT01")).thenReturn(Optional.of(category));
+        when(productRepository.save(any(Product.class))).thenReturn(savedProduct);
+        when(productMapper.toResponse(savedProduct)).thenReturn(expectedResponse);
+
+        ProductResponse actualResponse = productService.create(request);
+
+        assertEquals(expectedResponse.getId(), actualResponse.getId());
+        assertEquals(expectedResponse.getName(), actualResponse.getName());
+        verify(productRepository).save(any(Product.class));
+    }
+
+    @Test
+    void should_UpdateProduct_When_ProductAndCategoryExist() {
+        String productId = "P123";
+        ProductRequest request = new ProductRequest();
+        request.setName("Ten moi");
+        request.setCategoryId("CAT01");
 
         Product existingProduct = Product.builder()
                 .id(productId)
-                .name("Tên cũ")
-                .variants(new ArrayList<>()) // Cần list thực để tránh lỗi khi .clear()
+                .name("Ten cu")
+                .variants(new ArrayList<>())
                 .build();
-        
-        Category mockCategory = Category.builder().id("CAT01").build();
+        Category category = Category.builder().id("CAT01").build();
+        ProductResponse expectedResponse = ProductResponse.builder().id(productId).name("Ten moi").build();
 
         when(productRepository.findById(productId)).thenReturn(Optional.of(existingProduct));
-        when(categoryRepository.findById("CAT01")).thenReturn(Optional.of(mockCategory));
-        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(productMapper.toResponse(any(Product.class))).thenReturn(ProductResponse.builder().name("Tên mới").build());
+        when(categoryRepository.findById("CAT01")).thenReturn(Optional.of(category));
+        when(productRepository.save(existingProduct)).thenReturn(existingProduct);
+        when(productMapper.toResponse(existingProduct)).thenReturn(expectedResponse);
 
-        // 2. Act
-        ProductResponse result = productService.update(productId, updateRequest);
+        ProductResponse actualResponse = productService.update(productId, request);
 
-        // 3. Assert
-        assertEquals("Tên mới", result.getName());
+        assertEquals(expectedResponse.getName(), actualResponse.getName());
         verify(productRepository).save(existingProduct);
     }
 
     @Test
-    @DisplayName("Test lấy danh sách sản phẩm có phân trang và filter")
-    void testGetAll_Success() {
-        // 1. Arrange
+    void should_ReturnPagedProducts_When_SearchFiltersProvided() {
         Pageable pageable = PageRequest.of(0, 12);
-        Page<Product> mockPage = new PageImpl<>(List.of(new Product()));
+        Product product = Product.builder().id("P1").build();
+        ProductResponse mappedResponse = ProductResponse.builder().id("P1").build();
+        Page<Product> productPage = new PageImpl<>(List.of(product));
 
-        when(productRepository.search(eq("CAT01"), eq("Áo"), any(), any(), eq(pageable)))
-                .thenReturn(mockPage);
-        when(productMapper.toResponse(any())).thenReturn(ProductResponse.builder().build());
+        when(productRepository.search(eq("CAT01"), eq("Ao"), any(), any(), eq(pageable))).thenReturn(productPage);
+        when(productMapper.toResponse(product)).thenReturn(mappedResponse);
 
-        // 2. Act
-        Page<ProductResponse> result = productService.getAll("CAT01", "Áo", null, null, pageable);
+        Page<ProductResponse> result = productService.getAll("CAT01", "Ao", null, null, pageable);
 
-        // 3. Assert
-        assertNotNull(result);
         assertEquals(1, result.getTotalElements());
-        verify(productRepository).search(any(), any(), any(), any(), any());
+        assertEquals("P1", result.getContent().get(0).getId());
     }
 
     @Test
-    @DisplayName("Test xóa sản phẩm")
-    void testDelete_Success() {
-        // 1. Arrange
+    void should_DeleteProductById_When_DeleteIsRequested() {
         String productId = "P123";
 
-        // 2. Act
         productService.delete(productId);
 
-        // 3. Assert
-        verify(productRepository, times(1)).deleteById(productId);
+        verify(productRepository).deleteById(productId);
     }
 }

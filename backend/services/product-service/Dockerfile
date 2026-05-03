@@ -16,16 +16,12 @@ COPY services/chatbot-service/pom.xml services/chatbot-service/pom.xml
 COPY services/product-service/pom.xml services/product-service/pom.xml
 RUN mvn -pl common -pl services/product-service -am dependency:resolve -q 2>/dev/null || true
 
-COPY common/ common/
-COPY services/product-service/ services/product-service/
-RUN mvn clean install -pl common,services/product-service -am -DskipTests -Dmaven.test.skip=true
+COPY services/product-service/src services/product-service/src
+RUN mvn -pl common -pl services/product-service -am clean package -DskipTests -q
 
 # ── Run stage ────────────────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-
-# Copy file jar từ Stage Build sang
 COPY --from=build /app/services/product-service/target/*.jar app.jar
-
 EXPOSE 8082
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

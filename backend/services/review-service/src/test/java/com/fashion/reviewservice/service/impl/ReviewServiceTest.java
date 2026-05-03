@@ -8,147 +8,160 @@ import com.fashion.reviewservice.dto.response.ReviewResponse;
 import com.fashion.reviewservice.dto.response.ReviewStatsResponse;
 import com.fashion.reviewservice.entity.Review;
 import com.fashion.reviewservice.repository.ReviewRepository;
-import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ReviewServiceTest {
 
-    @Mock private ReviewRepository reviewRepository;
-    @Mock private OrderServiceClient orderServiceClient;
-    @Mock private LoyaltyServiceClient loyaltyServiceClient;
+    @Mock
+    private ReviewRepository reviewRepository;
 
-    @InjectMocks
+    private StubOrderServiceClient orderServiceClient;
+    private StubLoyaltyServiceClient loyaltyServiceClient;
     private ReviewService reviewService;
 
+    @BeforeEach
+    void setUp() {
+        orderServiceClient = new StubOrderServiceClient();
+        loyaltyServiceClient = new StubLoyaltyServiceClient();
+        reviewService = new ReviewService(reviewRepository, orderServiceClient, loyaltyServiceClient);
+    }
+
     @Test
-    @DisplayName("Tạo Review - Thành công và tặng điểm thưởng")
-    void createReview_Success() {
-        // Arrange
+    void should_CreateReviewAndAwardPoints_When_OrderIsDeliveredAndProductBelongsToOrder() {
         String userId = "user-123";
         CreateReviewRequest request = new CreateReviewRequest("1001", "PROD-A", 5, "Good", "Love it", List.of("img1.jpg"));
 
-        OrderSummary.OrderItemSummary item = new OrderSummary.OrderItemSummary();
-        item.setProductId("PROD-A");
-        OrderSummary order = new OrderSummary();
-        order.setStatus("DELIVERED");
-        order.setItems(List.of(item));
-
-        when(orderServiceClient.findOrderForUser("1001", userId)).thenReturn(Optional.of(order));
-        when(reviewRepository.existsByUserIdAndOrderIdAndProductId(any(), any(), any())).thenReturn(false);
-        when(reviewRepository.save(any(Review.class))).thenAnswer(i -> {
-            Review r = i.getArgument(0);
-            r.setId("mongo-id");
-            return r;
+        orderServiceClient.nextOrder = Optional.of(deliveredOrderWithProduct("PROD-A"));
+        when(reviewRepository.existsByUserIdAndOrderIdAndProductId(userId, "1001", "PROD-A")).thenReturn(false);
+        when(reviewRepository.save(any(Review.class))).thenAnswer(invocation -> {
+            Review review = invocation.getArgument(0);
+            review.setId("mongo-id");
+            return review;
         });
 
-        // Act
         ReviewResponse response = reviewService.create(userId, request);
 
-        // Assert
-        assertNotNull(response);
         assertEquals(5, response.getStar());
-        verify(loyaltyServiceClient).earnReviewPoints(eq(userId), anyString());
-        verify(reviewRepository, times(1)).save(any());
+        assertEquals("PROD-A", response.getProductId());
+        assertEquals(userId, loyaltyServiceClient.lastUserId);
+        assertEquals(response.getReviewId(), loyaltyServiceClient.lastReviewId);
+        verify(reviewRepository).save(any(Review.class));
     }
 
     @Test
-    @DisplayName("Tạo Review - Thất bại do đơn hàng chưa giao (Not DELIVERED)")
-    void createReview_Fail_OrderNotDelivered() {
-        // Arrange
+    void should_ThrowIllegalArgumentException_When_OrderIsNotDelivered() {
         String userId = "user-123";
         CreateReviewRequest request = new CreateReviewRequest("1001", "PROD-A", 5, "Title", "Content", null);
-        
+
         OrderSummary order = new OrderSummary();
-        order.setStatus("SHIPPING"); // Chưa hoàn thành
+        order.setStatus("SHIPPING");
+        orderServiceClient.nextOrder = Optional.of(order);
 
-        when(orderServiceClient.findOrderForUser("1001", userId)).thenReturn(Optional.of(order));
-
-        // Act & Assert
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, 
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
                 () -> reviewService.create(userId, request));
-        assertTrue(ex.getMessage().contains("DELIVERED"));
+
+        assertTrue(exception.getMessage().contains("DELIVERED"));
     }
 
     @Test
-    @DisplayName("Tạo Review - Thất bại do sản phẩm không có trong đơn hàng")
-    void createReview_Fail_ProductNotInOrder() {
-        // Arrange
+    void should_ThrowIllegalArgumentException_When_ProductDoesNotBelongToOrder() {
         String userId = "user-123";
         CreateReviewRequest request = new CreateReviewRequest("1001", "PROD-B", 5, "Title", "Content", null);
-        
-        OrderSummary.OrderItemSummary item = new OrderSummary.OrderItemSummary();
-        item.setProductId("PROD-A"); // Đơn hàng chỉ có PROD-A
-        OrderSummary order = new OrderSummary();
-        order.setStatus("DELIVERED");
-        order.setItems(List.of(item));
+        orderServiceClient.nextOrder = Optional.of(deliveredOrderWithProduct("PROD-A"));
 
-        when(orderServiceClient.findOrderForUser("1001", userId)).thenReturn(Optional.of(order));
-
-        // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> reviewService.create(userId, request));
     }
 
     @Test
-    @DisplayName("Tính toán thống kê - Kiểm tra trung bình sao và phân phối")
-    void getStats_ShouldCalculateCorrectly() {
-        // Arrange
+    void should_CalculateStats_When_ProductHasVisibleReviews() {
         String productId = "PROD-1";
         List<Review> reviews = List.of(
-            Review.builder().star(5).build(),
-            Review.builder().star(5).build(),
-            Review.builder().star(2).build()
+                Review.builder().star(5).build(),
+                Review.builder().star(5).build(),
+                Review.builder().star(2).build()
         );
         when(reviewRepository.findByProductIdAndVisibleTrue(productId)).thenReturn(reviews);
 
-        // Act
         ReviewStatsResponse stats = reviewService.getStats(productId);
 
-        // Assert
-        assertEquals(3, stats.getTotalReviews());
-        assertEquals(4.0, stats.getAverageRating()); // (5+5+2)/3 = 4.0
-        assertEquals(2, stats.getStarDistribution().get(5));
-        assertEquals(1, stats.getStarDistribution().get(2));
-        assertEquals(0, stats.getStarDistribution().get(1));
+        assertEquals(3L, stats.getTotalReviews());
+        assertEquals(4.0, stats.getAverageRating());
+        assertEquals(2L, stats.getStarDistribution().get(5));
+        assertEquals(1L, stats.getStarDistribution().get(2));
+        assertEquals(0L, stats.getStarDistribution().get(1));
     }
 
     @Test
-    @DisplayName("Rollback Review - Khi tặng điểm thưởng bị lỗi")
-    void createReview_Rollback_WhenLoyaltyFails() {
-        // Arrange
+    void should_RollbackSavedReview_When_AwardingPointsFails() {
         String userId = "user-123";
-        CreateReviewRequest request = new CreateReviewRequest("1001", "PROD-A", 5, "T", "C", null);
-        
+        CreateReviewRequest request = new CreateReviewRequest("1001", "PROD-A", 5, "T", "Content", null);
+        Review savedReview = Review.builder().id("mongo-id").reviewId("rev-123").build();
+
+        orderServiceClient.nextOrder = Optional.of(deliveredOrderWithProduct("PROD-A"));
+        when(reviewRepository.existsByUserIdAndOrderIdAndProductId(userId, "1001", "PROD-A")).thenReturn(false);
+        when(reviewRepository.save(any(Review.class))).thenReturn(savedReview);
+        loyaltyServiceClient.exceptionToThrow = new RuntimeException("Loyalty Service Down");
+
+        assertThrows(RuntimeException.class, () -> reviewService.create(userId, request));
+
+        verify(reviewRepository).deleteById("mongo-id");
+    }
+
+    private OrderSummary deliveredOrderWithProduct(String productId) {
         OrderSummary.OrderItemSummary item = new OrderSummary.OrderItemSummary();
-        item.setProductId("PROD-A");
+        item.setProductId(productId);
+
         OrderSummary order = new OrderSummary();
         order.setStatus("DELIVERED");
         order.setItems(List.of(item));
+        return order;
+    }
 
-        Review savedReview = Review.builder().id("mongo-id").reviewId("rev-123").build();
+    private static class StubOrderServiceClient extends OrderServiceClient {
+        private Optional<OrderSummary> nextOrder = Optional.empty();
 
-        when(orderServiceClient.findOrderForUser(any(), any())).thenReturn(Optional.of(order));
-        when(reviewRepository.save(any())).thenReturn(savedReview);
-        
-        // Giả lập lỗi từ Promotion Service
-        doThrow(new RuntimeException("Loyalty Service Down"))
-            .when(loyaltyServiceClient).earnReviewPoints(any(), any());
+        StubOrderServiceClient() {
+            super(null);
+        }
 
-        // Act & Assert
-        assertThrows(RuntimeException.class, () -> reviewService.create(userId, request));
-        
-        // Quan trọng: Kiểm tra xem có gọi lệnh xóa để rollback không
-        verify(reviewRepository).deleteById("mongo-id");
+        @Override
+        public Optional<OrderSummary> findOrderForUser(String orderId, String userId) {
+            return nextOrder;
+        }
+    }
+
+    private static class StubLoyaltyServiceClient extends LoyaltyServiceClient {
+        private String lastUserId;
+        private String lastReviewId;
+        private RuntimeException exceptionToThrow;
+
+        StubLoyaltyServiceClient() {
+            super(null);
+        }
+
+        @Override
+        public void earnReviewPoints(String userId, String reviewId) {
+            lastUserId = userId;
+            lastReviewId = reviewId;
+            if (exceptionToThrow != null) {
+                throw exceptionToThrow;
+            }
+        }
     }
 }

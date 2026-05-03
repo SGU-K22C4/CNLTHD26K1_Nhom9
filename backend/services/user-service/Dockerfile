@@ -21,9 +21,8 @@ COPY services/user-service/pom.xml services/user-service/pom.xml
 RUN mvn -pl common -pl services/user-service -am dependency:resolve -q 2>/dev/null || true
 
 # 4) Copy source and build
-COPY common/ common/
 COPY services/user-service/src services/user-service/src
-RUN mvn clean install -pl common,services/user-service -am -DskipTests -Dmaven.test.skip=true
+RUN mvn -pl common -pl services/user-service -am clean package -DskipTests -q
 # ── Run stage ────────────────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app

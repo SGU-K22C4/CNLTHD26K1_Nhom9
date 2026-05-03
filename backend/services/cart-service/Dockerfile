@@ -16,9 +16,9 @@ COPY services/review-service/pom.xml services/review-service/pom.xml
 COPY services/chatbot-service/pom.xml services/chatbot-service/pom.xml
 RUN mvn -pl common -pl services/cart-service -am dependency:resolve -q 2>/dev/null || true
 
+COPY common/ common/
 COPY services/cart-service/src services/cart-service/src
-RUN mvn -pl common -pl services/cart-service -am clean package -DskipTests -q
-
+RUN mvn clean install -pl common,services/cart-service -am -DskipTests -Dmaven.test.skip=true
 # ── Run stage ────────────────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app

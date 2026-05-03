@@ -1,19 +1,9 @@
-import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { createContext, useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { cartService } from '../services/cartService'
 import { productService } from '../../product/services/productService'
 import { useAuth } from '../../auth/hooks/useAuth'
 
 const CartContext = createContext(null)
-
-/**
- * Custom hook to consume cart state.
- * Throws if used outside <CartProvider>.
- */
-export const useCartContext = () => {
-  const ctx = useContext(CartContext)
-  if (!ctx) throw new Error('useCartContext must be used inside <CartProvider>')
-  return ctx
-}
 
 export function CartProvider({ children }) {
   const { user } = useAuth()
@@ -118,17 +108,22 @@ export function CartProvider({ children }) {
 
   // === Clear cart on logout, re-sync on login ===
   useEffect(() => {
-    if (!user) {
-      // User just logged out → clear cart state immediately
-      setItems([])
-      productVariantIndexRef.current = null
-    } else {
-      // User just logged in → re-sync cart from backend
-      syncCart().catch((err) => {
-        console.warn('Failed to sync cart after login:', err)
-      })
+    const handleAuthChange = async () => {
+      if (!user) {
+        // User just logged out → clear cart state immediately
+        setItems([])
+        productVariantIndexRef.current = null
+      } else {
+        // User just logged in → re-sync cart from backend
+        try {
+          await syncCart()
+        } catch (err) {
+          console.warn('Failed to sync cart after login:', err)
+        }
+      }
     }
-  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+    handleAuthChange()
+  }, [user, syncCart])
 
   /* ── Drawer controls ─────────────────────────────────────────────────────── */
   const openDrawer = useCallback((event) => {

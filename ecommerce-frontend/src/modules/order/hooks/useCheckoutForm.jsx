@@ -39,45 +39,76 @@ export function useCheckoutForm() {
   /* ── Auto-fill from user profile ── */
   useEffect(() => {
     if (!user) return
-    // Fill from AuthContext immediately
-    setForm(prev => ({
-      ...prev,
-      email: prev.email || user.email || '',
-      firstName: prev.firstName || user.firstName || '',
-      lastName: prev.lastName || user.lastName || '',
-    }))
-    // Then fetch full profile for phone
-    Promise.all([userService.getProfile(), userService.getAddresses()])
-      .then(([profile, addresses]) => {
+
+    const initializeForm = async () => {
+      // Fill from AuthContext
+      setForm(prev => {
+        if (prev.email === (user.email || '') && prev.firstName === (user.firstName || '') && prev.lastName === (user.lastName || '')) {
+          return prev
+        }
+        return {
+          ...prev,
+          email: prev.email || user.email || '',
+          firstName: prev.firstName || user.firstName || '',
+          lastName: prev.lastName || user.lastName || '',
+        }
+      })
+
+      // Then fetch full profile for phone
+      try {
+        const [profile, addresses] = await Promise.all([userService.getProfile(), userService.getAddresses()])
         if (!profile) return
         const defaultAddress = (addresses || []).find((address) => address.isDefault) || (addresses || [])[0] || null
         setRegisteredAddress(defaultAddress)
-        setForm(prev => ({
-          ...prev,
-          email: prev.email || profile.email || '',
-          firstName: prev.firstName || profile.firstName || '',
-          lastName: prev.lastName || profile.lastName || '',
-          phone: prev.phone || profile.phoneNumber || '',
-        }))
-      })
-      .catch(err => console.warn('Could not load user profile for auto-fill:', err))
+        setForm(prev => {
+          if (prev.phone === (profile.phoneNumber || '')) return prev
+          return {
+            ...prev,
+            email: prev.email || profile.email || '',
+            firstName: prev.firstName || profile.firstName || '',
+            lastName: prev.lastName || profile.lastName || '',
+            phone: prev.phone || profile.phoneNumber || '',
+          }
+        })
+      } catch (err) {
+        console.warn('Could not load user profile for auto-fill:', err)
+      }
+    }
+
+    initializeForm()
   }, [user])
 
   /* ── Auto-fill registered address ── */
   useEffect(() => {
     if (!user || !useRegisteredAddress || !registeredAddress || provinces.length === 0) return
 
-    const matchedCity = provinces.find((province) => province.name === registeredAddress.city)
-    const matchedWard = matchedCity?.wards?.find((ward) => ward.name === registeredAddress.ward)
+    const autofillAddress = async () => {
+      const matchedCity = provinces.find((province) => province.name === registeredAddress.city)
+      const matchedWard = matchedCity?.wards?.find((ward) => ward.name === registeredAddress.ward)
 
-    setForm((prev) => ({
-      ...prev,
-      street: registeredAddress.street || '',
-      city: matchedCity?.name || registeredAddress.city || '',
-      cityCode: matchedCity?.code ? String(matchedCity.code) : '',
-      ward: matchedWard?.name || registeredAddress.ward || '',
-      wardCode: matchedWard?.code ? String(matchedWard.code) : '',
-    }))
+      setForm((prev) => {
+        const newStreet = registeredAddress.street || ''
+        const newCity = matchedCity?.name || registeredAddress.city || ''
+        const newCityCode = matchedCity?.code ? String(matchedCity.code) : ''
+        const newWard = matchedWard?.name || registeredAddress.ward || ''
+        const newWardCode = matchedWard?.code ? String(matchedWard.code) : ''
+
+        if (prev.street === newStreet && prev.cityCode === newCityCode && prev.wardCode === newWardCode) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          street: newStreet,
+          city: newCity,
+          cityCode: newCityCode,
+          ward: newWard,
+          wardCode: newWardCode,
+        }
+      })
+    }
+
+    autofillAddress()
   }, [user, useRegisteredAddress, registeredAddress, provinces])
 
   /* ── Handlers ── */

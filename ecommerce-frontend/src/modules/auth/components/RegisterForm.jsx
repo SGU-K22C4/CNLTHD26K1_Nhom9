@@ -41,7 +41,7 @@ const SocialButton = ({ children, label }) => (
 );
 
 /* ── Component ────────────────────────────────────────────── */
-export default function RegisterForm({ onSuccess }) {
+export default function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState('');
 

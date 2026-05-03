@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
@@ -77,24 +77,33 @@ export default function RegisterForm() {
 
   // Province API Custom Hook with Caching (Performance)
   const { provinces } = useProvinces(2);
-  const [wards, setWards] = useState([]);
 
-  const selectedCityCode = watch('cityCode');
+  // Track cityCode locally to derive wards via useMemo (no watch/useEffect)
+  const [cityCode, setCityCode] = useState('');
 
-  useEffect(() => {
-    setValue('wardCode', '');
-    if (selectedCityCode) {
-      const city = provinces.find(p => p.code == selectedCityCode);
-      setWards(city && city.wards ? city.wards : []);
-      setValue('city', city ? city.name : '');
-    } else {
-      setWards([]);
-      setValue('city', '');
-    }
-  }, [selectedCityCode, provinces, setValue]);
+  const wards = useMemo(() => {
+    if (!cityCode) return [];
+    const city = provinces.find(p => p.code == cityCode);
+    return city && city.wards ? city.wards : [];
+  }, [cityCode, provinces]);
+
+  // Custom onChange for city select: sync local state + reset ward
+  const cityRegistration = register('cityCode', { required: 'City is required' });
+  const citySelectProps = {
+    ...cityRegistration,
+    onChange: (e) => {
+      cityRegistration.onChange(e);
+      setCityCode(e.target.value);
+      setValue('wardCode', '');
+    },
+  };
 
   const onSubmit = async (data) => {
     try {
+      // Resolve city name from code (since we no longer use watch/useEffect to set it)
+      const selectedCity = provinces.find(p => p.code == data.cityCode);
+      if (selectedCity) data.city = selectedCity.name;
+
       if (data.wardCode && wards.length > 0) {
         const w = wards.find(w => w.code == data.wardCode);
         if (w) data.ward = w.name;
@@ -112,9 +121,9 @@ export default function RegisterForm() {
         ward: data.ward,
         isDefault: data.isDefault
       };
-      
+
       await authService.register(payload);
-      
+
       // Mở modal báo cho user check email
       setVerifyEmail(data.email);
     } catch (err) {
@@ -175,7 +184,7 @@ export default function RegisterForm() {
                 type="text"
                 placeholder="Phone Number"
                 error={errors.phone?.message}
-                {...register('phone', { 
+                {...register('phone', {
                   required: 'Phone number is required',
                   pattern: {
                     value: /^(84|0[3|5|7|8|9])+([0-9]{8})$/,
@@ -242,7 +251,7 @@ export default function RegisterForm() {
           <AddressFields
             streetInputProps={register('street', { required: 'Street address is required' })}
             streetError={errors.street?.message}
-            citySelectProps={register('cityCode', { required: 'City is required' })}
+            citySelectProps={citySelectProps}
             cityError={errors.cityCode?.message}
             wardSelectProps={{
               ...register('wardCode', { required: 'Ward is required' }),

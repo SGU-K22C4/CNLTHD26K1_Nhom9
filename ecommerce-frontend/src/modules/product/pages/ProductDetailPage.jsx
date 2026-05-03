@@ -7,7 +7,7 @@ import ColorSelector from '../components/ColorSelector'
 import ProductCard from '../components/ProductCard'
 import { formatCurrency } from '../../../shared/utils/format'
 import { useCartContext } from '../../cart/context/CartContext'
-import { useWishlistContext } from '../../wishlist/context/WishlistContext'
+import { useWishlistContext } from '../../wishlist/context/useWishlistContext'
 import ProductReviewSection from '../../review/components/ProductReviewSection'
 import { useAuth } from '../../auth/hooks/useAuth'
 

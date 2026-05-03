@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { formatCurrency } from '../../../shared/utils/format'
-import { useWishlistContext } from '../../wishlist/context/WishlistContext'
+import { useWishlistContext } from '../../wishlist/context/useWishlistContext'
 
 /* ── Wishlist heart icons (SVG, no MUI dependency) ───────── */
 function HeartOutline() {

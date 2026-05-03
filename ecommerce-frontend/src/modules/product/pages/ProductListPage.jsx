@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useReducer } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useProducts } from '../hooks/useProducts'
 import { useFilters } from '../hooks/useFilters'
@@ -14,9 +14,23 @@ const CATEGORY_LABELS = {
   'modiweek': 'Modiweek',
 }
 
-export default function ProductListPage() {
-  const [page, setPage] = useState(0)
+/**
+ * Reducer to manage page state with auto-reset when a "resetKey" changes.
+ * This avoids calling setState in useEffect (react-hooks/set-state-in-effect)
+ * and avoids accessing refs during render (react-hooks/refs).
+ */
+function pageReducer(state, action) {
+  switch (action.type) {
+    case 'SET_PAGE':
+      return { ...state, page: action.page }
+    case 'RESET_KEY_CHANGED':
+      return { page: 0, resetKey: action.resetKey }
+    default:
+      return state
+  }
+}
 
+export default function ProductListPage() {
   const { gender: genderSlug } = useParams()
   const [searchParams] = useSearchParams()
   const category = searchParams.get('category') || ''
@@ -41,6 +55,21 @@ export default function ProductListPage() {
   const { filters, setFilter, toggleArrayFilter, clearFilters, hasActiveFilters } = useFilters(
     category ? { collections: [CATEGORY_LABELS[category]] } : {}
   )
+
+  // Build a key that changes whenever the filter dependencies change
+  const resetKey = `${genderFilter}|${category}|${searchQuery}|${JSON.stringify(filters)}`
+
+  const [pageState, dispatchPage] = useReducer(pageReducer, { page: 0, resetKey })
+
+  // When resetKey changes, the page auto-resets to 0 via the reducer
+  const effectivePage = pageState.resetKey === resetKey ? pageState.page : 0
+  const setPage = (p) => dispatchPage({ type: 'SET_PAGE', page: typeof p === 'function' ? p(effectivePage) : p })
+
+  // If the key changed, dispatch the reset (will be processed on next render)
+  if (pageState.resetKey !== resetKey) {
+    dispatchPage({ type: 'RESET_KEY_CHANGED', resetKey })
+  }
+
   const {
     products,
     loading,
@@ -51,19 +80,9 @@ export default function ProductListPage() {
     availableFilters,
   } = useProducts({
     query: searchQuery,
-    filters: { ...filters, page, pageSize: 12 },
+    filters: { ...filters, page: effectivePage, pageSize: 12 },
     gender: genderFilter,
   })
-
-  useEffect(() => {
-    setPage(0)
-  }, [genderFilter, category, filters, searchQuery])
-
-  useEffect(() => {
-    if (page !== currentPage) {
-      setPage(currentPage)
-    }
-  }, [page, currentPage])
 
   const pageNumbers = useMemo(() => {
     const pages = []

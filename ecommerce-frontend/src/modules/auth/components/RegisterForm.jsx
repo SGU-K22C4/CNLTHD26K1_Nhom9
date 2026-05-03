@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
@@ -41,14 +41,13 @@ const SocialButton = ({ children, label }) => (
 );
 
 /* ── Component ────────────────────────────────────────────── */
-export default function RegisterForm({ onSuccess }) {
+export default function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState('');
 
   const {
     register,
     handleSubmit,
-    watch,
     setValue,
     formState: { errors, isSubmitting },
   } = useForm({
@@ -59,13 +58,22 @@ export default function RegisterForm({ onSuccess }) {
     }
   });
 
-  const gender = watch('gender');
-  const avatarUrl = watch('avatar');
+  // Track gender & avatar via local state instead of watch() to avoid
+  // react-hooks/incompatible-library warning
+  const [gender, setGender] = useState('0');
+  const avatarUrl = gender === '0' ? '/assets/images/avatarnam.png' : '/assets/images/avatarnu.png';
 
-  // Change avatar whenever gender changes
-  useEffect(() => {
-    setValue('avatar', gender === "0" ? '/assets/images/avatarnam.png' : '/assets/images/avatarnu.png');
-  }, [gender, setValue]);
+  // Wrap register for gender to also update local state + avatar
+  const genderRegistration = register('gender');
+  const genderProps = {
+    ...genderRegistration,
+    onChange: (e) => {
+      genderRegistration.onChange(e);
+      const newGender = e.target.value;
+      setGender(newGender);
+      setValue('avatar', newGender === '0' ? '/assets/images/avatarnam.png' : '/assets/images/avatarnu.png');
+    },
+  };
 
   // Province API Custom Hook with Caching (Performance)
   const { provinces } = useProvinces(2);
@@ -179,11 +187,11 @@ export default function RegisterForm({ onSuccess }) {
 
             <div className="flex items-center gap-4 bg-[#F9F9F9] border border-transparent rounded px-4 h-[46px]">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" value="0" {...register('gender')} className="accent-[#5A6D57]" />
+                <input type="radio" value="0" {...genderProps} className="accent-[#5A6D57]" />
                 <span className="text-sm text-gray-700">Male</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" value="1" {...register('gender')} className="accent-[#5A6D57]" />
+                <input type="radio" value="1" {...genderProps} className="accent-[#5A6D57]" />
                 <span className="text-sm text-gray-700">Female</span>
               </label>
             </div>

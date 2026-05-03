@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { wishlistService } from '../services/wishlistService'
 import { normalizeProduct } from '../../product/services/productService'
 import ProductCard from '../../product/components/ProductCard'
-import { useWishlistContext } from '../context/WishlistContext'
+import { useWishlistContext } from '../context/useWishlistContext'
 
 export default function WishlistPage() {
   const [wishlistProducts, setWishlistProducts] = useState([])
@@ -11,7 +11,6 @@ export default function WishlistPage() {
   const [error, setError] = useState('')
   const [page, setPage] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
-  const [totalElements, setTotalElements] = useState(0)
 
   const { wishlistIds } = useWishlistContext()
 
@@ -25,9 +24,8 @@ export default function WishlistPage() {
           const rawProducts = data.content || []
           setWishlistProducts(rawProducts.map(normalizeProduct))
           setTotalPages(data.totalPages || 0)
-          setTotalElements(data.totalElements || 0)
         }
-      } catch (err) {
+      } catch {
         if (mounted) setError('Could not load wishlist')
       } finally {
         if (mounted) setLoading(false)

@@ -1,13 +1,12 @@
 import { useEffect, useState, useContext } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { userService } from '../services/userService'
 import AuthContext from '../../auth/context/AuthContext'
-import { User, Mail, Phone, Lock, Edit2, Check, X, Shield, MapPin, Plus, Trash2 } from 'lucide-react'
+import { User, Mail, Phone, Lock, Edit2, Check, X, Shield, MapPin, Plus } from 'lucide-react'
 import AddressModal from '../components/AddressModal'
 
 export default function ProfilePage() {
-  const { user, login } = useContext(AuthContext)
-  const navigate = useNavigate()
+  const { user } = useContext(AuthContext)
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
@@ -55,7 +54,7 @@ export default function ProfilePage() {
             phoneNumber: profileData.phoneNumber || '',
           })
         }
-      } catch (err) {
+      } catch {
         if (mounted) setEditError('Không thể tải thông tin hồ sơ.')
       } finally {
         if (mounted) setLoading(false)
@@ -166,7 +165,7 @@ export default function ProfilePage() {
       try {
         await userService.deleteAddress(id)
         await loadAddresses()
-      } catch (err) {
+      } catch {
         alert('Tạm thời không thể xóa địa chỉ lúc này.')
       }
     }

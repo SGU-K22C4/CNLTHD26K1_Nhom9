@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useReducer, useRef, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useProducts } from '../hooks/useProducts'
 import { useFilters } from '../hooks/useFilters'
@@ -109,8 +109,21 @@ function ClearSvg() {
   )
 }
 
+/**
+ * Reducer to manage page state with auto-reset when a "resetKey" changes.
+ */
+function pageReducer(state, action) {
+  switch (action.type) {
+    case 'SET_PAGE':
+      return { ...state, page: action.page }
+    case 'RESET_KEY_CHANGED':
+      return { page: 0, resetKey: action.resetKey }
+    default:
+      return state
+  }
+}
+
 export default function SearchPage() {
-  const [page, setPage] = useState(0)
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const initialQuery = searchParams.get('q') || ''
@@ -121,13 +134,17 @@ export default function SearchPage() {
       ? 'FEMALE'
       : ''
 
-  const [inputValue, setInputValue] = useState(initialQuery)
+  // Track inputValue: use a key-based approach to reset when URL query changes
+  const [inputState, setInputState] = useState({ value: initialQuery, queryKey: initialQuery })
+  if (inputState.queryKey !== initialQuery) {
+    // React allows calling setState during render if the value is different (similar to getDerivedStateFromProps)
+    setInputState({ value: initialQuery, queryKey: initialQuery })
+  }
+  const inputValue = inputState.value
+  const setInputValue = (v) => setInputState(prev => ({ ...prev, value: v }))
+
   const [focused, setFocused] = useState(false)
   const inputRef = useRef(null)
-
-  useEffect(() => {
-    setInputValue(searchParams.get('q') || '')
-  }, [searchParams])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -146,6 +163,21 @@ export default function SearchPage() {
   }
 
   const { filters, setFilter, toggleArrayFilter, clearFilters, hasActiveFilters } = useFilters()
+
+  // Build a key that changes whenever the filter dependencies change
+  const resetKey = `${initialQuery}|${genderFilter}|${JSON.stringify(filters)}`
+
+  const [pageState, dispatchPage] = useReducer(pageReducer, { page: 0, resetKey })
+
+  // When resetKey changes, the page auto-resets to 0 via the reducer
+  const effectivePage = pageState.resetKey === resetKey ? pageState.page : 0
+  const setPage = (p) => dispatchPage({ type: 'SET_PAGE', page: typeof p === 'function' ? p(effectivePage) : p })
+
+  // If the key changed, dispatch the reset (will be processed on next render)
+  if (pageState.resetKey !== resetKey) {
+    dispatchPage({ type: 'RESET_KEY_CHANGED', resetKey })
+  }
+
   const {
     products,
     loading,
@@ -155,15 +187,9 @@ export default function SearchPage() {
     currentPage,
   } = useProducts({
     query: initialQuery,
-    filters: { ...filters, page, pageSize: 12 },
+    filters: { ...filters, page: effectivePage, pageSize: 12 },
     gender: genderFilter,
   })
-
-  useEffect(() => { setPage(0) }, [initialQuery, genderFilter, filters])
-
-  useEffect(() => {
-    if (page !== currentPage) setPage(currentPage)
-  }, [page, currentPage])
 
   const pageNumbers = useMemo(() => {
     const pages = []

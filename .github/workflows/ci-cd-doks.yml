@@ -302,5 +302,20 @@ jobs:
           )
 
           for deployment in "${deployments[@]}"; do
-            kubectl -n "$K8S_NAMESPACE" rollout status "deployment/$deployment" --timeout=300s
+            if ! kubectl -n "$K8S_NAMESPACE" rollout status "deployment/$deployment" --timeout=600s; then
+              echo "::error::Rollout failed for deployment/$deployment"
+              kubectl -n "$K8S_NAMESPACE" describe "deployment/$deployment" || true
+              kubectl -n "$K8S_NAMESPACE" get pods -l "app=$deployment" -o wide || true
+
+              for pod in $(kubectl -n "$K8S_NAMESPACE" get pods -l "app=$deployment" -o jsonpath='{.items[*].metadata.name}'); do
+                echo "--- describe pod/$pod ---"
+                kubectl -n "$K8S_NAMESPACE" describe "pod/$pod" || true
+                echo "--- logs pod/$pod (current) ---"
+                kubectl -n "$K8S_NAMESPACE" logs "$pod" --tail=200 || true
+                echo "--- logs pod/$pod (previous) ---"
+                kubectl -n "$K8S_NAMESPACE" logs "$pod" --previous --tail=200 || true
+              done
+
+              exit 1
+            fi
           done

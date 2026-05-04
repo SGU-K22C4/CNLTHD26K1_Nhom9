@@ -35,6 +35,15 @@ public interface FashionAgent {
             2. Chính sách, FAQ, hướng dẫn → gọi searchKnowledge
             3. Tư vấn size → gọi consultSize
             4. Gợi ý outfit → gọi suggestOutfit
+            5. Nếu user muốn tư vấn chung mà không nêu rõ từ khóa → gọi browseProducts
+            6. Nếu user hỏi "shop có bán gì", "có những loại nào", "áo/quần/váy loại gì" → gọi listProductTypes (có thể truyền groupHint)
+
+                  ## TRƯỜNG HỢP TÊN SẢN PHẨM CỤ THỂ:
+                  - Nếu user hỏi "có mẫu X không", "mẫu X còn hàng không", hoặc cần kiểm tra TÊN sản phẩm cụ thể,
+                     ưu tiên gọi searchProductsStrict để KHÔNG rút gọn từ khóa.
+
+                  ## CÁ NHÂN HÓA:
+                  - Nếu có ngữ cảnh cá nhân (màu/size/phong cách/ngân sách), ưu tiên gợi ý phù hợp với ngữ cảnh đó.
 
             ## QUY TẮC XÁC MINH (BƯỚC CUỐI TRƯỚC KHI TRẢ LỜI):
             1. KIỂM TRA CHÉO giá tiền trong câu trả lời với dữ liệu JSON gốc từ Tool.

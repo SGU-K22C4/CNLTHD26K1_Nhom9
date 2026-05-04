@@ -15,6 +15,7 @@ import com.fashion.chatbotservice.service.ChatAnalyticsService;
 import com.fashion.chatbotservice.service.IntentClassifierService;
 import com.fashion.chatbotservice.service.ProfileEnrichmentService;
 import com.fashion.chatbotservice.service.SizeAdvisorService;
+import com.fashion.chatbotservice.util.VietnameseNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -50,6 +52,13 @@ public class ChatbotServiceImpl implements ChatbotService {
     private final ChatAnalyticsService chatAnalyticsService;
     private final SizeAdvisorService sizeAdvisorService;
     private final WebClient webClient;
+
+        private static final Set<String> GENERIC_DESCRIPTORS = Set.of(
+            "trang", "den", "do", "xanh", "hong", "vang", "nau", "be", "kem", "xam", "ghi", "bac",
+            "navy", "gray", "black", "white", "red", "blue", "pink",
+            "nam", "nu", "unisex", "cotton", "kaki", "jean", "denim",
+            "tay", "dai", "short", "oversize", "form", "slim", "regular"
+        );
 
     @Value("${chatbot.use-agent:true}")
     private boolean useAgent;
@@ -85,6 +94,7 @@ public class ChatbotServiceImpl implements ChatbotService {
         // Enrich profile từ message + purchase history
         profileEnrichmentService.enrichFromMessage(session.getPreferenceProfile(), request.getMessage());
         profileEnrichmentService.enrichFromPurchaseHistory(session.getPreferenceProfile(), userId);
+        updateBudgetFromMessage(session.getPreferenceProfile(), request.getMessage());
 
         // === Task 2: Out-of-Domain Short-Circuit ===
         // Classify intent BEFORE calling LLM to block off-topic/injection queries
@@ -106,10 +116,32 @@ public class ChatbotServiceImpl implements ChatbotService {
             return oodResponse;
         }
 
-        // Execute agent hoặc heuristic fallback
-        ChatResponse response;
         ToolResultCollector collector = new ToolResultCollector();
 
+        // === Deictic reference handling ("áo này", "mẫu này") ===
+        ChatResponse deicticResponse = handleDeicticReference(sessionId, request.getMessage(), session, collector);
+        if (deicticResponse != null) {
+            persistMessages(session, request.getMessage(), deicticResponse);
+
+            long totalLatency = System.currentTimeMillis() - startTime;
+            chatAnalyticsService.record(traceId, sessionId, userId,
+                    request.getMessage(), deicticResponse, collector, totalLatency);
+            return deicticResponse;
+        }
+
+        // === Explicit product check handling (strict search) ===
+        ChatResponse explicitProductResponse = handleExplicitProductLookup(sessionId, request.getMessage(), session, collector);
+        if (explicitProductResponse != null) {
+            persistMessages(session, request.getMessage(), explicitProductResponse);
+
+            long totalLatency = System.currentTimeMillis() - startTime;
+            chatAnalyticsService.record(traceId, sessionId, userId,
+                    request.getMessage(), explicitProductResponse, collector, totalLatency);
+            return explicitProductResponse;
+        }
+
+        // Execute agent hoặc heuristic fallback
+        ChatResponse response;
         if (useAgent) {
             response = executeAgent(sessionId, request.getMessage(), session, collector);
         } else {
@@ -155,12 +187,23 @@ public class ChatbotServiceImpl implements ChatbotService {
                                        ChatSession session, ToolResultCollector collector) {
         try {
             fashionTools.setCollector(collector);
+            fashionTools.setPreferenceProfile(session.getPreferenceProfile());
 
             // === Task 3: Inject active cart context into the message ===
             String cartContext = fetchActiveCartContext(session.getUserId());
-            String enrichedMessage = cartContext.isBlank()
+            String profileContext = buildProfileContext(session.getPreferenceProfile());
+
+            StringBuilder contextBuilder = new StringBuilder();
+            if (!profileContext.isBlank()) {
+                contextBuilder.append("[Ngữ cảnh cá nhân] ").append(profileContext).append("\n");
+            }
+            if (!cartContext.isBlank()) {
+                contextBuilder.append("[Ngữ cảnh giỏ hàng] ").append(cartContext).append("\n");
+            }
+
+            String enrichedMessage = contextBuilder.isEmpty()
                     ? message
-                    : "[Ngữ cảnh giỏ hàng] " + cartContext + "\n\n" + message;
+                    : contextBuilder.append("\n").append(message).toString();
 
             String llmReply = fashionAgent.chat(sessionId, enrichedMessage);
             ChatResponse agentResponse = ResponseAssembler.build(sessionId, llmReply, collector, session.getPreferenceProfile());
@@ -233,8 +276,9 @@ public class ChatbotServiceImpl implements ChatbotService {
                 if (garmentKeyword != null && !garmentKeyword.isBlank()) {
                     try {
                         fashionTools.setCollector(collector);
+                        fashionTools.setPreferenceProfile(profile);
                         Double maxPrice = parseBudget(profile.getBudget());
-                        fashionTools.searchProducts(garmentKeyword, null, maxPrice != null ? maxPrice.longValue() : null, null);
+                        fashionTools.searchProducts(garmentKeyword, null, maxPrice != null ? maxPrice.longValue() : null, null, null);
                     } catch (Exception ex) {
                         log.debug("Auto product search after size advice skipped: {}", ex.getMessage());
                     } finally {
@@ -256,6 +300,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                 // Gọi Knowledge Base để trả lời câu hỏi chính sách, FAQ
                 try {
                     fashionTools.setCollector(collector);
+                    fashionTools.setPreferenceProfile(profile);
                     String knowledgeResult = fashionTools.searchKnowledge(message);
                     yield knowledgeResult;
                 } catch (Exception ex) {
@@ -270,6 +315,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                 // Gọi Tool thật để lấy khuyến mãi đang hiệu lực
                 try {
                     fashionTools.setCollector(collector);
+                    fashionTools.setPreferenceProfile(profile);
                     String toolResult = fashionTools.getActivePromotions();
                     yield toolResult;
                 } catch (Exception ex) {
@@ -284,6 +330,13 @@ public class ChatbotServiceImpl implements ChatbotService {
                 // Gọi Tool thật để tìm sản phẩm — áp dụng budget từ message HOẶC Personalization panel
                 try {
                     String searchKeyword = extractProductSearchKeyword(message);
+                    if (shouldListProductTypes(message, searchKeyword)) {
+                        fashionTools.setCollector(collector);
+                        fashionTools.setPreferenceProfile(profile);
+                        String groupHint = deriveProductTypeGroupHint(searchKeyword, message);
+                        String typeResult = fashionTools.listProductTypes(groupHint);
+                        yield typeResult;
+                    }
                     // Ưu tiên parse giá từ chính câu message (VD: "quần jean từ 300 đến 500k")
                     Double[] priceRange = parsePriceRangeFromMessage(message);
                     Double minPrice = priceRange[0];
@@ -295,10 +348,23 @@ public class ChatbotServiceImpl implements ChatbotService {
                     boolean hasPriceFilter = (minPrice != null || maxPrice != null);
 
                     fashionTools.setCollector(collector);
+                    fashionTools.setPreferenceProfile(profile);
+                    String sizeFilter = extractSizeFilter(message);
+
+                    if (shouldBrowseProducts(message)) {
+                        String browseResult = fashionTools.browseProducts(
+                                minPrice != null ? minPrice.longValue() : null,
+                                maxPrice != null ? maxPrice.longValue() : null,
+                                null,
+                                sizeFilter);
+                        yield browseResult;
+                    }
+
                     String toolResult = fashionTools.searchProducts(searchKeyword,
                             minPrice != null ? minPrice.longValue() : null,
                             maxPrice != null ? maxPrice.longValue() : null,
-                            null);
+                            null,
+                            sizeFilter);
 
                     // Nếu có filter giá mà không tìm thấy → retry KHÔNG có giá để gợi ý sản phẩm gần nhất
                     if (collector.getProducts().isEmpty() && hasPriceFilter) {
@@ -306,7 +372,8 @@ public class ChatbotServiceImpl implements ChatbotService {
                                 minPrice, maxPrice, searchKeyword);
                         fashionTools.clearCollector();
                         fashionTools.setCollector(collector);
-                        String fallbackResult = fashionTools.searchProducts(searchKeyword, null, null, null);
+                        fashionTools.setPreferenceProfile(profile);
+                        String fallbackResult = fashionTools.searchProducts(searchKeyword, null, null, null, sizeFilter);
 
                         if (!collector.getProducts().isEmpty()) {
                             String priceNote = formatPriceRange(minPrice, maxPrice);
@@ -338,7 +405,8 @@ public class ChatbotServiceImpl implements ChatbotService {
                 // Gợi ý outfit + tự động tìm sản phẩm theo mùa
                 try {
                     fashionTools.setCollector(collector);
-                    String outfitResult = fashionTools.suggestOutfit(
+                    fashionTools.setPreferenceProfile(profile);
+                        String outfitResult = fashionTools.suggestOutfit(
                             extractOccasion(message), extractStyle(message));
                     yield outfitResult;
                 } catch (Exception ex) {
@@ -354,6 +422,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                 if (orderNumber != null) {
                     try {
                         fashionTools.setCollector(collector);
+                        fashionTools.setPreferenceProfile(profile);
                         String orderResult = fashionTools.checkOrderByNumber(orderNumber);
                         yield orderResult;
                     } catch (Exception ex) {
@@ -394,7 +463,8 @@ public class ChatbotServiceImpl implements ChatbotService {
                 if (keyword.length() >= 2) {
                     try {
                         fashionTools.setCollector(collector);
-                        String searchResult = fashionTools.searchProducts(keyword, null, null, null);
+                        fashionTools.setPreferenceProfile(profile);
+                        String searchResult = fashionTools.searchProducts(keyword, null, null, null, null);
                         if (!collector.getProducts().isEmpty()) {
                             yield searchResult;
                         }
@@ -423,6 +493,381 @@ public class ChatbotServiceImpl implements ChatbotService {
                 .profile(session.getPreferenceProfile())
                 .createdAt(Instant.now())
                 .build();
+    }
+
+    // ========== EXPLICIT PRODUCT CHECK / DEICTIC HANDLING ==========
+
+    private ChatResponse handleDeicticReference(String sessionId,
+                                                String message,
+                                                ChatSession session,
+                                                ToolResultCollector collector) {
+        if (!isDeicticReference(message)) return null;
+
+        List<ChatSession.ProductSuggestionSnapshot> recent = getLastSuggestedProducts(session);
+        if (recent.isEmpty()) {
+            return ChatResponse.builder()
+                    .sessionId(sessionId)
+                    .intent(IntentClassifierService.SEARCH_PRODUCT)
+                    .confidence(0.82d)
+                    .reply("Bạn đang nói đến mẫu nào ạ? Bạn cho mình biết tên hoặc mô tả thêm để mình kiểm tra chính xác nhé!")
+                    .suggestions(List.of())
+                    .promotions(List.of())
+                    .profile(session.getPreferenceProfile())
+                    .createdAt(Instant.now())
+                    .build();
+        }
+
+        List<ChatResponse.ProductSuggestion> suggestions = mapSnapshots(recent);
+        collector.addProducts(suggestions);
+
+        if (suggestions.size() == 1) {
+            ChatResponse.ProductSuggestion s = suggestions.get(0);
+            String reply = buildSingleDeicticReply(s);
+            return ChatResponse.builder()
+                    .sessionId(sessionId)
+                    .intent(IntentClassifierService.SEARCH_PRODUCT)
+                    .confidence(0.9d)
+                    .reply(reply)
+                    .suggestions(List.of(s))
+                    .promotions(List.of())
+                    .profile(session.getPreferenceProfile())
+                    .createdAt(Instant.now())
+                    .build();
+        }
+
+        String nameList = suggestions.stream()
+                .limit(3)
+                .map(ChatResponse.ProductSuggestion::getName)
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("mẫu gần đây");
+        String moreNote = suggestions.size() > 3 ? "..." : "";
+
+        return ChatResponse.builder()
+                .sessionId(sessionId)
+                .intent(IntentClassifierService.SEARCH_PRODUCT)
+                .confidence(0.86d)
+                .reply("Bạn đang nói đến mẫu nào trong danh sách gần đây: " + nameList + moreNote
+                        + "? Bạn cho mình biết tên mẫu để mình kiểm tra chính xác nhé!")
+                .suggestions(suggestions)
+                .promotions(List.of())
+                .profile(session.getPreferenceProfile())
+                .createdAt(Instant.now())
+                .build();
+    }
+
+    private ChatResponse handleExplicitProductLookup(String sessionId,
+                                                     String message,
+                                                     ChatSession session,
+                                                     ToolResultCollector collector) {
+        if (!isExplicitProductCheck(message)) return null;
+
+        String searchKeyword = extractProductSearchKeyword(message);
+        if (searchKeyword.isBlank()) {
+            return ChatResponse.builder()
+                    .sessionId(sessionId)
+                    .intent(IntentClassifierService.SEARCH_PRODUCT)
+                    .confidence(0.84d)
+                    .reply("Bạn cho mình biết rõ tên/mẫu sản phẩm cần kiểm tra nhé. Ví dụ: 'Áo sơ mi Oxford'.")
+                    .suggestions(List.of())
+                    .promotions(List.of())
+                    .profile(session.getPreferenceProfile())
+                    .createdAt(Instant.now())
+                    .build();
+        }
+
+        if (isGenericGarmentKeyword(searchKeyword)) {
+            return null;
+        }
+
+        Double[] priceRange = parsePriceRangeFromMessage(message);
+        Double minPrice = priceRange[0];
+        Double maxPrice = priceRange[1];
+        boolean wantsSimilar = wantsSimilarSuggestion(message);
+
+        try {
+            fashionTools.setCollector(collector);
+            fashionTools.setPreferenceProfile(session.getPreferenceProfile());
+
+            String strictResult = fashionTools.searchProductsStrict(
+                    searchKeyword,
+                    minPrice != null ? minPrice.longValue() : null,
+                    maxPrice != null ? maxPrice.longValue() : null,
+                    null,
+                    extractSizeFilter(message));
+
+            if (!collector.getProducts().isEmpty()) {
+                return ChatResponse.builder()
+                        .sessionId(sessionId)
+                        .intent(IntentClassifierService.SEARCH_PRODUCT)
+                        .confidence(0.92d)
+                        .reply(strictResult)
+                        .suggestions(collector.getProducts())
+                        .promotions(List.of())
+                        .profile(session.getPreferenceProfile())
+                        .createdAt(Instant.now())
+                        .build();
+            }
+        } catch (Exception ex) {
+            log.warn("Strict product lookup failed: {}", ex.getMessage());
+        } finally {
+            fashionTools.clearCollector();
+        }
+
+        String priceNote = formatPriceRange(minPrice, maxPrice);
+        String notFoundReply = priceNote.isBlank()
+                ? "Hiện chưa có sản phẩm \"" + searchKeyword + "\" trong hệ thống."
+                : "Hiện chưa có sản phẩm \"" + searchKeyword + "\" trong khoảng giá " + priceNote + ".";
+
+        if (!wantsSimilar) {
+            return ChatResponse.builder()
+                    .sessionId(sessionId)
+                    .intent(IntentClassifierService.SEARCH_PRODUCT)
+                    .confidence(0.86d)
+                    .reply(notFoundReply + " Bạn muốn mình gợi ý mẫu tương tự không ạ?")
+                    .suggestions(List.of())
+                    .promotions(List.of())
+                    .profile(session.getPreferenceProfile())
+                    .createdAt(Instant.now())
+                    .build();
+        }
+
+        String relaxedKeyword = extractGarmentKeyword(message);
+        if (relaxedKeyword == null || relaxedKeyword.isBlank()) {
+            relaxedKeyword = searchKeyword;
+        }
+
+        ToolResultCollector relaxedCollector = new ToolResultCollector();
+        try {
+            fashionTools.setCollector(relaxedCollector);
+            fashionTools.setPreferenceProfile(session.getPreferenceProfile());
+            fashionTools.searchProducts(relaxedKeyword, null, null, null, extractSizeFilter(message));
+        } catch (Exception ex) {
+            log.warn("Relaxed product lookup failed: {}", ex.getMessage());
+        } finally {
+            fashionTools.clearCollector();
+        }
+
+        if (!relaxedCollector.getProducts().isEmpty()) {
+            collector.addProducts(relaxedCollector.getProducts());
+            return ChatResponse.builder()
+                    .sessionId(sessionId)
+                    .intent(IntentClassifierService.SEARCH_PRODUCT)
+                    .confidence(0.88d)
+                    .reply(notFoundReply + " Mình gợi ý một số mẫu tương tự để bạn tham khảo nhé:")
+                    .suggestions(relaxedCollector.getProducts())
+                    .promotions(List.of())
+                    .profile(session.getPreferenceProfile())
+                    .createdAt(Instant.now())
+                    .build();
+        }
+
+        return ChatResponse.builder()
+                .sessionId(sessionId)
+                .intent(IntentClassifierService.SEARCH_PRODUCT)
+                .confidence(0.84d)
+                .reply(notFoundReply + " Bạn muốn mình tìm theo loại đồ khác không ạ?")
+                .suggestions(List.of())
+                .promotions(List.of())
+                .profile(session.getPreferenceProfile())
+                .createdAt(Instant.now())
+                .build();
+    }
+
+    private List<ChatSession.ProductSuggestionSnapshot> getLastSuggestedProducts(ChatSession session) {
+        if (session == null || session.getMessages() == null || session.getMessages().isEmpty()) {
+            return List.of();
+        }
+        List<ChatSession.ChatMessage> messages = session.getMessages();
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ChatSession.ChatMessage msg = messages.get(i);
+            if (msg == null || msg.getSender() != ChatSession.Sender.BOT) continue;
+            if (msg.getSuggestions() != null && !msg.getSuggestions().isEmpty()) {
+                return msg.getSuggestions();
+            }
+        }
+        return List.of();
+    }
+
+    private List<ChatResponse.ProductSuggestion> mapSnapshots(List<ChatSession.ProductSuggestionSnapshot> snapshots) {
+        List<ChatResponse.ProductSuggestion> results = new ArrayList<>();
+        for (ChatSession.ProductSuggestionSnapshot snapshot : snapshots) {
+            if (snapshot == null) continue;
+            results.add(ChatResponse.ProductSuggestion.builder()
+                    .productId(snapshot.getProductId())
+                    .name(snapshot.getName())
+                    .category(snapshot.getCategory())
+                    .imageUrl(snapshot.getImageUrl())
+                    .link(snapshot.getLink())
+                    .price(snapshot.getPrice())
+                    .availableSizes(snapshot.getAvailableSizes() != null ? snapshot.getAvailableSizes() : List.of())
+                    .availableColors(snapshot.getAvailableColors() != null ? snapshot.getAvailableColors() : List.of())
+                    .reason("Từ lịch sử gợi ý gần nhất")
+                    .build());
+        }
+        return results;
+    }
+
+    private String buildSingleDeicticReply(ChatResponse.ProductSuggestion suggestion) {
+        StringBuilder reply = new StringBuilder();
+        reply.append("Bạn đang hỏi mẫu \"").append(suggestion.getName()).append("\" đúng không ạ? ");
+
+        if (suggestion.getAvailableSizes() != null && !suggestion.getAvailableSizes().isEmpty()) {
+            reply.append("Mẫu này hiện có size ")
+                    .append(String.join(", ", suggestion.getAvailableSizes()))
+                    .append(". ");
+        }
+
+        if (suggestion.getAvailableColors() != null && !suggestion.getAvailableColors().isEmpty()) {
+            reply.append("Màu sắc có sẵn: ")
+                    .append(String.join(", ", suggestion.getAvailableColors()))
+                    .append(". ");
+        }
+
+        if (suggestion.getPrice() != null && !suggestion.getPrice().isBlank()) {
+            reply.append("Giá hiện tại: ").append(suggestion.getPrice()).append(". ");
+        }
+
+        reply.append("Bạn muốn mình gợi ý thêm mẫu tương tự không ạ?");
+        return reply.toString();
+    }
+
+    private boolean isDeicticReference(String message) {
+        if (message == null || message.isBlank()) return false;
+        String normalized = VietnameseNormalizer.normalize(message);
+        return normalized.contains("cai nay")
+            || normalized.contains("mau nay")
+            || normalized.contains("san pham nay")
+            || normalized.contains("sp nay")
+            || normalized.contains("mon nay")
+            || normalized.matches(".*\\b(ao|quan|vay|dam)\\s+nay\\b.*");
+    }
+
+    private boolean isExplicitProductCheck(String message) {
+        if (message == null || message.isBlank()) return false;
+        String normalized = VietnameseNormalizer.normalize(message);
+
+        boolean hasCheckPhrase = normalized.contains("co khong")
+                || normalized.contains("con khong")
+                || normalized.contains("co hang")
+                || normalized.contains("con hang")
+                || normalized.contains("ton kho")
+                || normalized.contains("het hang")
+                || normalized.contains("co ban");
+
+        boolean hasSpecificCue = normalized.contains("mau ")
+                || normalized.contains("san pham ")
+                || normalized.contains("sp ")
+                || normalized.contains("ten ");
+
+        boolean hasQuote = message.contains("\"") || message.contains("'");
+
+        return hasCheckPhrase || hasSpecificCue || hasQuote;
+    }
+
+    private boolean wantsSimilarSuggestion(String message) {
+        if (message == null || message.isBlank()) return false;
+        String normalized = VietnameseNormalizer.normalize(message);
+        return normalized.contains("tuong tu")
+                || normalized.contains("gan giong")
+                || normalized.contains("thay the")
+                || normalized.contains("goi y")
+                || normalized.contains("mau khac")
+                || normalized.contains("san pham khac");
+    }
+
+    private boolean isGenericGarmentKeyword(String keyword) {
+        if (keyword == null || keyword.isBlank()) return false;
+        String normalized = VietnameseNormalizer.normalize(keyword);
+        String[] baseGarments = {
+                "ao", "ao thun", "ao so mi", "ao khoac", "ao polo", "ao hoodie", "ao len",
+                "quan", "quan jean", "quan tay", "quan short", "quan dai",
+                "vay", "dam", "chan vay", "ao dai", "giay", "tui", "non"
+        };
+
+        for (String garment : baseGarments) {
+            if (normalized.equals(garment)) return true;
+            if (normalized.startsWith(garment + " ")) {
+                String rest = normalized.substring(garment.length()).trim();
+                if (rest.isBlank()) return true;
+                String[] tokens = rest.split("\\s+");
+                boolean descriptorOnly = true;
+                for (String token : tokens) {
+                    if (!GENERIC_DESCRIPTORS.contains(token)) {
+                        descriptorOnly = false;
+                        break;
+                    }
+                }
+                if (descriptorOnly) return true;
+            }
+        }
+        return false;
+    }
+
+    private String buildProfileContext(ChatSession.PreferenceProfile profile) {
+        if (profile == null) return "";
+        List<String> parts = new ArrayList<>();
+
+        if (profile.getPreferredSizes() != null && !profile.getPreferredSizes().isEmpty()) {
+            parts.add("Size hay mặc: " + String.join(", ", profile.getPreferredSizes()));
+        }
+        if (profile.getPreferredColors() != null && !profile.getPreferredColors().isEmpty()) {
+            parts.add("Màu yêu thích: " + String.join(", ", profile.getPreferredColors()));
+        }
+        if (profile.getPreferredCategories() != null && !profile.getPreferredCategories().isEmpty()) {
+            parts.add("Loại đồ quan tâm: " + String.join(", ", profile.getPreferredCategories()));
+        }
+        if (profile.getStyle() != null && !profile.getStyle().isBlank()) {
+            parts.add("Phong cách: " + profile.getStyle());
+        }
+        if (profile.getPreferredTone() != null && !profile.getPreferredTone().isBlank()) {
+            parts.add("Cách xưng hô: " + profile.getPreferredTone());
+        }
+        if (profile.getBudget() != null && !profile.getBudget().isBlank()) {
+            parts.add("Ngân sách: " + profile.getBudget());
+        }
+        if (profile.getFocusTags() != null && !profile.getFocusTags().isEmpty()) {
+            parts.add("Ưu tiên: " + String.join(", ", profile.getFocusTags()));
+        }
+
+        String measurement = buildMeasurementContext(profile);
+        if (!measurement.isBlank()) {
+            parts.add(measurement);
+        }
+
+        return String.join("; ", parts).trim();
+    }
+
+    private String buildMeasurementContext(ChatSession.PreferenceProfile profile) {
+        List<String> items = new ArrayList<>();
+        if (profile.getLastHeightCm() != null) items.add("cao " + profile.getLastHeightCm() + "cm");
+        if (profile.getLastWeightKg() != null) items.add("nặng " + profile.getLastWeightKg() + "kg");
+        if (profile.getLastChestCm() != null) items.add("ngực " + profile.getLastChestCm() + "cm");
+        if (profile.getLastWaistCm() != null) items.add("eo " + profile.getLastWaistCm() + "cm");
+        if (profile.getLastHipCm() != null) items.add("hông " + profile.getLastHipCm() + "cm");
+        return items.isEmpty() ? "" : "Số đo gần nhất: " + String.join(", ", items);
+    }
+
+    private void updateBudgetFromMessage(ChatSession.PreferenceProfile profile, String message) {
+        if (profile == null || message == null || message.isBlank()) return;
+        String normalized = VietnameseNormalizer.normalize(message);
+        if (!hasPriceSignal(normalized)) return;
+        Double[] priceRange = parsePriceRangeFromMessage(message);
+        Double maxPrice = priceRange[1];
+        if (maxPrice == null) return;
+        profile.setBudget(String.valueOf(maxPrice.longValue()));
+    }
+
+    private boolean hasPriceSignal(String normalizedMessage) {
+        if (normalizedMessage == null || normalizedMessage.isBlank()) return false;
+        return normalizedMessage.contains("gia")
+                || normalizedMessage.contains("ngan sach")
+                || normalizedMessage.contains("budget")
+                || normalizedMessage.contains("duoi")
+                || normalizedMessage.contains("tren")
+                || normalizedMessage.contains("khoang")
+                || normalizedMessage.contains("trieu")
+                || normalizedMessage.contains("vnd")
+            || normalizedMessage.contains("dong");
     }
 
     // ========== PRICE PARSING HELPERS ==========
@@ -491,6 +936,9 @@ public class ChatbotServiceImpl implements ChatbotService {
 
         if (convertedPrices.isEmpty()) return new Double[]{null, null};
 
+        boolean hasLowerBound = normalized.contains("tren") || normalized.matches(".*\\btu\\b.*");
+        boolean hasUpperBound = normalized.contains("duoi") || normalized.matches(".*\\b(den|toi)\\b.*");
+
         // Range: "từ 300 đến 500k" → [300,000, 500,000]
         if (convertedPrices.size() >= 2 && hasRange) {
             // If two numbers found and one has a unit, apply the same unit to the other
@@ -506,9 +954,19 @@ public class ChatbotServiceImpl implements ChatbotService {
             return new Double[]{min, max};
         }
 
-        // Single price: "dưới 500k" → [null, 500,000]
-        Double maxPrice = convertedPrices.stream().max(Double::compareTo).orElse(null);
-        return new Double[]{null, maxPrice};
+        // Single price: "trên 2 triệu" → [2,000,000, null]
+        Double singlePrice = convertedPrices.stream().max(Double::compareTo).orElse(null);
+        if (singlePrice == null) return new Double[]{null, null};
+
+        if (hasLowerBound && !hasUpperBound) {
+            return new Double[]{singlePrice, null};
+        }
+        if (hasUpperBound && !hasLowerBound) {
+            return new Double[]{null, singlePrice};
+        }
+
+        // Default to upper bound if intent is unclear
+        return new Double[]{null, singlePrice};
     }
 
     /**
@@ -552,22 +1010,72 @@ public class ChatbotServiceImpl implements ChatbotService {
      */
     private String extractProductSearchKeyword(String message) {
         if (message == null) return "";
-        // Normalize diacritics first so we only need non-accent stop words
-        String normalized = java.text.Normalizer.normalize(message.toLowerCase(), java.text.Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "")
-                .replace('\u0111', 'd');
+
+        String quoted = extractQuotedKeyword(message);
+        if (!quoted.isBlank()) return quoted;
+
+        String normalized = VietnameseNormalizer.normalize(message);
+        String garment = mapToCanonicalGarment(normalized);
+        if (!garment.isBlank()) return garment;
+
         // Strip numbers and punctuation FIRST (trước khi xóa stop words)
         String cleaned = normalized
                 .replaceAll("[0-9]", " ")
                 .replaceAll("[^a-z\\s]", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
+
         // Strip non-accent stop words
         cleaned = cleaned
-                .replaceAll("\\b(tim|cho|minh|mua|xem|cua|hang|co|ban|nao|giup|voi|toi|ban|thoi|nhe|nha|vay|thi|con|nua|duoc|khong|la|cai|mot|xin|gi|gia|tu|den|toi|duoi|tren|khoang|nhe|dong|trieu|nghin|k|tr)\\b", "")
+                .replaceAll("\\b(tu|van|tu van|tim|cho|minh|mua|xem|cua|hang|co|ban|nao|giup|voi|toi|thoi|nhe|nha|vay|thi|con|nua|duoc|khong|la|cai|mot|so|mot so|vai|xin|gi|gia|ve|tu van|tu van ve|tu van cho|minh|dong|trieu|nghin|k|tr)\\b", "")
                 .replaceAll("\\s+", " ")
                 .trim();
+
+        String fallbackGarment = mapToCanonicalGarment(cleaned);
+        if (!fallbackGarment.isBlank()) return fallbackGarment;
+
         return cleaned.isEmpty() ? message : cleaned;
+    }
+
+    private String extractQuotedKeyword(String message) {
+        if (message == null) return "";
+        Matcher matcher = Pattern.compile("[\"']([^\"']+)[\"']").matcher(message);
+        String best = "";
+        while (matcher.find()) {
+            String candidate = matcher.group(1).trim();
+            if (candidate.length() > best.length()) {
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    private String mapToCanonicalGarment(String normalized) {
+        if (normalized == null || normalized.isBlank()) return "";
+
+        String n = normalized;
+        if (n.contains("ao khoac") || n.contains("jacket") || n.contains("blazer") || n.contains("coat")) return "áo khoác";
+        if (n.contains("ao thun") || n.contains("t-shirt") || n.contains("tee")) return "áo thun";
+        if (n.contains("ao so mi") || n.contains("shirt")) return "áo sơ mi";
+        if (n.contains("ao polo")) return "áo polo";
+        if (n.contains("ao hoodie") || n.contains("hoodie")) return "áo hoodie";
+        if (n.contains("ao len") || n.contains("sweater")) return "áo len";
+
+        if (n.contains("quan jean") || n.contains("jeans") || n.contains("denim")) return "quần jean";
+        if (n.contains("quan tay")) return "quần tây";
+        if (n.contains("quan short") || n.contains("short")) return "quần short";
+        if (n.contains("quan dai")) return "quần dài";
+
+        if (n.contains("chan vay") || n.contains("skirt")) return "chân váy";
+        if (n.contains("dam") || n.contains("dress")) return "đầm";
+        if (n.contains("vay")) return "váy";
+        if (n.contains("ao dai")) return "áo dài";
+
+        if (n.contains("giay") || n.contains("shoes")) return "giày";
+        if (n.contains("tui") || n.contains("bag")) return "túi";
+        if (n.contains("non") || n.contains("hat") || n.contains("cap")) return "nón";
+
+        return "";
     }
 
     /**
@@ -612,6 +1120,63 @@ public class ChatbotServiceImpl implements ChatbotService {
         if (n.contains("thanh lich") || n.contains("sang trong")) return "thanh_lich";
         if (n.contains("casual") || n.contains("thoai mai")) return "casual";
         if (n.contains("sporty") || n.contains("the thao")) return "sporty";
+        return null;
+    }
+
+    private String extractSizeFilter(String message) {
+        if (message == null || message.isBlank()) return null;
+        String normalized = VietnameseNormalizer.normalize(message);
+        Matcher matcher = Pattern.compile("\\bsize\\s*[:=]?\\s*(xs|s|m|l|xl|xxl|\\d{2})\\b")
+                .matcher(normalized);
+        if (matcher.find()) {
+            return matcher.group(1).toUpperCase();
+        }
+        return null;
+    }
+
+    private boolean shouldBrowseProducts(String message) {
+        if (message == null || message.isBlank()) return false;
+        String normalized = VietnameseNormalizer.normalize(message);
+        return normalized.contains("tu van")
+                || normalized.contains("goi y")
+                || normalized.contains("recommend")
+                || normalized.contains("tu van mua sam")
+                || normalized.contains("tham khao")
+                || normalized.contains("nhieu mau")
+                || normalized.contains("da dang");
+    }
+
+    private boolean shouldListProductTypes(String message, String searchKeyword) {
+        if (message == null || message.isBlank()) return false;
+        String normalized = VietnameseNormalizer.normalize(message);
+        boolean askingCatalog = normalized.contains("co nhung loai")
+                || normalized.contains("loai nao")
+                || normalized.contains("shop ban gi")
+                || normalized.contains("san pham gi")
+                || normalized.contains("co gi")
+                || normalized.contains("danh muc")
+                || normalized.contains("ban gi");
+        boolean genericKeyword = searchKeyword == null || searchKeyword.isBlank() || isGenericGarmentKeyword(searchKeyword);
+        boolean hasConstraints = hasPriceSignal(normalized)
+                || extractSizeFilter(message) != null
+                || normalized.contains("mau");
+
+        return askingCatalog || (genericKeyword && shouldBrowseProducts(message) && !hasConstraints);
+    }
+
+    private String deriveProductTypeGroupHint(String searchKeyword, String message) {
+        String normalized = VietnameseNormalizer.normalize(searchKeyword);
+        if (normalized.isBlank() && message != null) {
+            normalized = VietnameseNormalizer.normalize(message);
+        }
+        if (normalized.contains("ao")) return "áo";
+        if (normalized.contains("quan")) return "quần";
+        if (normalized.contains("vay") || normalized.contains("dam") || normalized.contains("chan vay")) {
+            return "váy";
+        }
+        if (normalized.contains("giay") || normalized.contains("tui") || normalized.contains("non")) {
+            return "phụ kiện";
+        }
         return null;
     }
 
@@ -660,6 +1225,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                 productSnapshots.add(ChatSession.ProductSuggestionSnapshot.builder()
                         .productId(s.getProductId())
                         .name(s.getName())
+                            .category(s.getCategory())
                         .price(s.getPrice())
                         .imageUrl(s.getImageUrl())
                         .link(s.getLink())

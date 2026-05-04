@@ -12,17 +12,21 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 /**
  * Cart-service exception handler.
  * Inherits common handlers from BaseExceptionHandler and adds
- * cart-specific handlers for Redis and missing header errors.
+ * cart-specific handlers for Redis plus custom malformed-request messages.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler extends BaseExceptionHandler {
 
     /**
-     * Missing required header (X-User-Id).
+     * Keep the actual exception mapping in the base class so Spring only sees
+     * one handler for MissingRequestHeaderException during startup.
      */
-    @ExceptionHandler(MissingRequestHeaderException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMissingHeader(MissingRequestHeaderException ex) {
-        return buildError(HttpStatus.BAD_REQUEST, "Missing required header: " + ex.getHeaderName());
+    @Override
+    protected String resolveMalformedRequestMessage(Exception ex) {
+        if (ex instanceof MissingRequestHeaderException missingHeaderException) {
+            return "Missing required header: " + missingHeaderException.getHeaderName();
+        }
+        return super.resolveMalformedRequestMessage(ex);
     }
 
     /**

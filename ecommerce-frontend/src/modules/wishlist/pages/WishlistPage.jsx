@@ -5,6 +5,42 @@ import { normalizeProduct } from '../../product/services/productService'
 import ProductCard from '../../product/components/ProductCard'
 import { useWishlistContext } from '../context/useWishlistContext'
 
+function buildPaginationItems(totalPages, currentPage, maxVisible = 5) {
+  if (totalPages <= maxVisible) {
+    return Array.from({ length: totalPages }, (_, index) => index)
+  }
+
+  const halfWindow = Math.floor(maxVisible / 2)
+  let start = Math.max(0, currentPage - halfWindow)
+  let end = start + maxVisible - 1
+
+  if (end >= totalPages) {
+    end = totalPages - 1
+    start = end - maxVisible + 1
+  }
+
+  const items = []
+  if (start > 0) {
+    items.push(0)
+    if (start > 1) {
+      items.push('ellipsis-start')
+    }
+  }
+
+  for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
+    items.push(pageNumber)
+  }
+
+  if (end < totalPages - 1) {
+    if (end < totalPages - 2) {
+      items.push('ellipsis-end')
+    }
+    items.push(totalPages - 1)
+  }
+
+  return items
+}
+
 export default function WishlistPage() {
   const [wishlistProducts, setWishlistProducts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -35,11 +71,7 @@ export default function WishlistPage() {
     return () => { mounted = false }
   }, [page])
 
-  const pageNumbers = useMemo(() => {
-    const pages = []
-    for (let i = 0; i < totalPages; i += 1) pages.push(i)
-    return pages
-  }, [totalPages])
+  const pageItems = useMemo(() => buildPaginationItems(totalPages, page), [page, totalPages])
 
   // Filter out products that were un-wishlisted in the current session
   const visibleProducts = wishlistProducts.filter(product => wishlistIds.has(product.id))
@@ -86,19 +118,25 @@ export default function WishlistPage() {
                 >
                   Prev
                 </button>
-                {pageNumbers.map((pageNum) => (
-                  <button
-                    key={pageNum}
-                    type="button"
-                    onClick={() => setPage(pageNum)}
-                    className={`min-w-9 h-9 px-2 border text-[12px] transition-colors ${
-                      pageNum === page
-                        ? 'border-[#202020] bg-[#202020] text-white'
-                        : 'border-[#D7D7D7] text-[#202020] hover:border-[#202020]'
-                    }`}
-                  >
-                    {pageNum + 1}
-                  </button>
+                {pageItems.map((pageItem) => (
+                  typeof pageItem === 'number' ? (
+                    <button
+                      key={pageItem}
+                      type="button"
+                      onClick={() => setPage(pageItem)}
+                      className={`min-w-9 h-9 px-2 border text-[12px] transition-colors ${
+                        pageItem === page
+                          ? 'border-[#202020] bg-[#202020] text-white'
+                          : 'border-[#D7D7D7] text-[#202020] hover:border-[#202020]'
+                      }`}
+                    >
+                      {pageItem + 1}
+                    </button>
+                  ) : (
+                    <span key={pageItem} className="min-w-9 h-9 px-2 flex items-center justify-center text-[12px] text-[#888]">
+                      ...
+                    </span>
+                  )
                 ))}
                 <button
                   type="button"

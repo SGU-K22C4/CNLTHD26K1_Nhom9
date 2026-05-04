@@ -6,9 +6,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import java.util.stream.Collectors;
 
@@ -56,7 +56,7 @@ public abstract class BaseExceptionHandler {
     })
     public ResponseEntity<ApiResponse<Void>> handleMalformedRequest(Exception ex) {
         log.warn("Malformed request: {}", ex.getMessage());
-        return buildError(HttpStatus.BAD_REQUEST, ex.getMessage());
+        return buildError(HttpStatus.BAD_REQUEST, resolveMalformedRequestMessage(ex));
     }
 
     /**
@@ -92,5 +92,13 @@ public abstract class BaseExceptionHandler {
      */
     protected ResponseEntity<ApiResponse<Void>> buildError(HttpStatus status, String message) {
         return ResponseEntity.status(status).body(ApiResponse.error(message));
+    }
+
+    /**
+     * Hook for service-specific malformed request messages without adding
+     * another @ExceptionHandler that would duplicate the base mapping.
+     */
+    protected String resolveMalformedRequestMessage(Exception ex) {
+        return ex.getMessage();
     }
 }

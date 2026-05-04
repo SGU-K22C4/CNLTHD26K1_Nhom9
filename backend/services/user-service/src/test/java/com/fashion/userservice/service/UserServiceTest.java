@@ -2,6 +2,7 @@ package com.fashion.userservice.service;
 
 import com.fashion.userservice.dto.request.AddressRequest;
 import com.fashion.userservice.dto.request.ChangePasswordRequest;
+import com.fashion.userservice.dto.request.UpdateProfileRequest;
 import com.fashion.userservice.dto.response.AddressResponse;
 import com.fashion.userservice.dto.response.UserProfileResponse;
 import com.fashion.userservice.entity.Address;
@@ -50,15 +51,40 @@ class UserServiceTest {
         User user = User.builder()
                 .id("user-1")
                 .email("test@gmail.com")
-                .fullName("Fashion User")
+                .fullName("Nguyen Van A")
                 .role(User.Role.CUSTOMER)
                 .build();
         when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
 
         UserProfileResponse response = userService.getProfile("user-1");
 
-        assertEquals("Fashion User", response.getFirstName());
+        assertEquals("A", response.getFirstName());
+        assertEquals("Nguyen Van", response.getLastName());
         verify(userRepository).findById("user-1");
+    }
+
+    @Test
+    void should_UpdateProfile_When_RequestUsesFrontendFieldNames() {
+        User user = User.builder()
+                .id("user-1")
+                .fullName("Old Name")
+                .phone("0900000000")
+                .role(User.Role.CUSTOMER)
+                .build();
+        UpdateProfileRequest request = new UpdateProfileRequest();
+        request.setFirstName("An");
+        request.setLastName("Tran Thi");
+        request.setPhone("0912345678");
+
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
+
+        UserProfileResponse response = userService.updateProfile("user-1", request);
+
+        assertEquals("Tran Thi An", user.getFullName());
+        assertEquals("0912345678", user.getPhone());
+        assertEquals("An", response.getFirstName());
+        assertEquals("Tran Thi", response.getLastName());
+        verify(userRepository).save(user);
     }
 
     @Test

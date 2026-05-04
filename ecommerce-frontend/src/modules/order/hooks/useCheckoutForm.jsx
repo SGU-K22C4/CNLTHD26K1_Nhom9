@@ -19,6 +19,30 @@ const INITIAL_FORM = {
   note: '',
 }
 
+function buildFullName(firstName, lastName) {
+  return [lastName, firstName]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .join(' ')
+}
+
+function splitFullName(fullName) {
+  const normalizedName = String(fullName || '').trim().replace(/\s+/g, ' ')
+  if (!normalizedName) {
+    return { firstName: '', lastName: '' }
+  }
+
+  const lastSpaceIndex = normalizedName.lastIndexOf(' ')
+  if (lastSpaceIndex < 0) {
+    return { firstName: normalizedName, lastName: '' }
+  }
+
+  return {
+    firstName: normalizedName.slice(lastSpaceIndex + 1),
+    lastName: normalizedName.slice(0, lastSpaceIndex),
+  }
+}
+
 /**
  * Custom hook for checkout form state, validation, and address helpers.
  * Extracts form logic from CheckoutPage for better separation of concerns.
@@ -43,13 +67,16 @@ export function useCheckoutForm() {
     const initializeForm = async () => {
       // Fill from AuthContext
       setForm(prev => {
-        if (prev.email === (user.email || '') && prev.firstName === (user.firstName || '') && prev.lastName === (user.lastName || '')) {
+        const combinedUserName = buildFullName(user.firstName, user.lastName)
+        if (prev.email === (user.email || '') && prev.firstName === combinedUserName && prev.lastName === (user.lastName || '')) {
           return prev
         }
         return {
           ...prev,
           email: prev.email || user.email || '',
-          firstName: prev.firstName || user.firstName || '',
+          // Checkout UI currently renders a single full-name input, so combine
+          // profile fields here instead of dropping the family name.
+          firstName: prev.firstName || combinedUserName,
           lastName: prev.lastName || user.lastName || '',
         }
       })
@@ -61,11 +88,19 @@ export function useCheckoutForm() {
         const defaultAddress = (addresses || []).find((address) => address.isDefault) || (addresses || [])[0] || null
         setRegisteredAddress(defaultAddress)
         setForm(prev => {
-          if (prev.phone === (profile.phoneNumber || '')) return prev
+          const combinedProfileName = buildFullName(profile.firstName, profile.lastName)
+          if (
+            prev.phone === (profile.phoneNumber || '') &&
+            prev.email === (profile.email || '') &&
+            prev.firstName === combinedProfileName &&
+            prev.lastName === (profile.lastName || '')
+          ) {
+            return prev
+          }
           return {
             ...prev,
             email: prev.email || profile.email || '',
-            firstName: prev.firstName || profile.firstName || '',
+            firstName: prev.firstName || combinedProfileName,
             lastName: prev.lastName || profile.lastName || '',
             phone: prev.phone || profile.phoneNumber || '',
           }
@@ -85,6 +120,7 @@ export function useCheckoutForm() {
     const autofillAddress = async () => {
       const matchedCity = provinces.find((province) => province.name === registeredAddress.city)
       const matchedWard = matchedCity?.wards?.find((ward) => ward.name === registeredAddress.ward)
+      const nameParts = splitFullName(registeredAddress.fullName)
 
       setForm((prev) => {
         const newStreet = registeredAddress.street || ''
@@ -92,13 +128,26 @@ export function useCheckoutForm() {
         const newCityCode = matchedCity?.code ? String(matchedCity.code) : ''
         const newWard = matchedWard?.name || registeredAddress.ward || ''
         const newWardCode = matchedWard?.code ? String(matchedWard.code) : ''
+        const newPhone = registeredAddress.phoneNumber || prev.phone || ''
+        const newFirstName = registeredAddress.fullName || buildFullName(nameParts.firstName, nameParts.lastName) || prev.firstName || ''
+        const newLastName = nameParts.lastName || prev.lastName || ''
 
-        if (prev.street === newStreet && prev.cityCode === newCityCode && prev.wardCode === newWardCode) {
+        if (
+          prev.street === newStreet &&
+          prev.cityCode === newCityCode &&
+          prev.wardCode === newWardCode &&
+          prev.phone === newPhone &&
+          prev.firstName === newFirstName &&
+          prev.lastName === newLastName
+        ) {
           return prev
         }
 
         return {
           ...prev,
+          firstName: newFirstName,
+          lastName: newLastName,
+          phone: newPhone,
           street: newStreet,
           city: newCity,
           cityCode: newCityCode,
@@ -138,8 +187,7 @@ export function useCheckoutForm() {
     if (!form.email.trim()) newErrors.email = 'Vui lòng nhập email'
     else if (!/^\S+@\S+\.\S+$/.test(form.email)) newErrors.email = 'Email không hợp lệ'
 
-    if (!form.firstName.trim()) newErrors.firstName = 'Vui lòng nhập họ'
-    if (!form.lastName.trim()) newErrors.lastName = 'Vui lòng nhập tên'
+    if (!form.firstName.trim()) newErrors.firstName = 'Vui lòng nhập họ và tên'
 
     if (!form.phone.trim()) newErrors.phone = 'Vui lòng nhập số điện thoại'
     else if (!/(84|0[3|5|7|8|9])+([0-9]{8})\b/.test(form.phone)) newErrors.phone = 'Số điện thoại không hợp lệ'

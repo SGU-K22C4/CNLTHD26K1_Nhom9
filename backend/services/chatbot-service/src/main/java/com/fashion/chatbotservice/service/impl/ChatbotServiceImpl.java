@@ -91,6 +91,21 @@ public class ChatbotServiceImpl implements ChatbotService {
         ChatSession session = findOrCreateSession(sessionId, userId);
         mergePreferences(session, request.getPreferences());
 
+        // ============ COLD START DETECTION ============
+        // Nếu đây là câu đầu tiên trong phiên (session.messages == null hoặc rỗng) → đây là Cold Start
+        boolean isColdStart = (request.getColdStart() != null && request.getColdStart()) 
+                || session.getMessages() == null 
+                || session.getMessages().isEmpty();
+
+        // Nếu Cold Start + yêu cầu là generic (chỉ nói "áo", "quần", "váy") → hỏi chi tiết loại sản phẩm trước
+        if (isColdStart) {
+            ChatResponse coldStartResponse = handleColdStart(sessionId, request.getMessage(), session);
+            if (coldStartResponse != null) {
+                persistMessages(session, request.getMessage(), coldStartResponse);
+                return coldStartResponse;
+            }
+        }
+
         // Enrich profile từ message + purchase history + wishlist + user profile
         profileEnrichmentService.enrichFromMessage(session.getPreferenceProfile(), request.getMessage());
         profileEnrichmentService.enrichFromPurchaseHistory(session.getPreferenceProfile(), userId);
@@ -497,6 +512,73 @@ public class ChatbotServiceImpl implements ChatbotService {
                 .build();
     }
 
+    /**
+     * Handle Cold Start (khởi động lạnh):
+     * - Nếu user nói generic ("áo", "quần", "váy") → hỏi chi tiết loại sản phẩm
+     * - Nếu user nói specific ("áo thun", "quần jean") → không cần hỏi, xử lý bình thường
+     * - Returns ChatResponse nếu Cold Start cần hỏi thêm, null nếu có thể xử lý bình thường
+     */
+    private ChatResponse handleColdStart(String sessionId, String message, ChatSession session) {
+        if (message == null || message.isBlank()) return null;
+
+        String searchKeyword = extractProductSearchKeyword(message);
+        
+        // Nếu search keyword không phải generic (đã đủ cụ thể), không cần hỏi thêm
+        if (!isGenericGarmentKeyword(searchKeyword)) {
+            return null; // Xử lý bình thường
+        }
+
+        // Đây là generic keyword → hỏi chi tiết
+        String garmentCategory = mapToCanonicalGarment(VietnameseNormalizer.normalize(searchKeyword));
+        if (garmentCategory.isBlank()) {
+            return null; // Không phải loại đồ, xử lý bình thường
+        }
+
+        String suggestions = buildProductTypeOptions(garmentCategory);
+        String reply = "Dạ, bạn muốn " + garmentCategory + " gì ạ? " + suggestions;
+
+        log.info("Cold start: asking for product type clarification for: {}", garmentCategory);
+        
+        return ChatResponse.builder()
+                .sessionId(sessionId)
+                .intent("COLD_START_CLARIFY")
+                .confidence(0.95d)
+                .reply(reply)
+                .suggestions(List.of())
+                .promotions(List.of())
+                .profile(session.getPreferenceProfile())
+                .createdAt(Instant.now())
+                .build();
+    }
+
+    /**
+     * Build product type options cho user chọn.
+     * VD: garment="áo" → "áo thun, áo sơ mi, áo khoác, áo polo, áo hoodie, hay loại khác?"
+     */
+    private String buildProductTypeOptions(String garmentCategory) {
+        String normalized = normalizeText(garmentCategory);
+
+        if (normalized.contains("ao")) {
+            return "áo thun, áo sơ mi, áo khoác, áo polo, áo hoodie, hay loại khác? 👕";
+        } else if (normalized.contains("quan")) {
+            return "quần jean, quần tây, quần short, hay quần dài? 👖";
+        } else if (normalized.contains("vay") || normalized.contains("dam") || normalized.contains("chan vay")) {
+            return "váy xòe, váy bút chì, chân váy, hay đầm liền thân? 👗";
+        } else if (normalized.contains("giay")) {
+            return "giày thể thao, giày lười, giày cao gót, hay loại khác?👟";
+        } else if (normalized.contains("tui")) {
+            return "túi tote, túi xách, túi đeo chéo, hay túi gữ? 👜";
+        } else if (normalized.contains("non") || normalized.contains("mu")) {
+            return "nón lưỡi, nón xô, mũ len, hay mũ beret? 🧢";
+        }
+
+        return "";
+    }
+
+    private String normalizeText(String value) {
+        return VietnameseNormalizer.normalize(value == null ? "" : value);
+    }
+
     // ========== EXPLICIT PRODUCT CHECK / DEICTIC HANDLING ==========
 
     private ChatResponse handleDeicticReference(String sessionId,
@@ -803,6 +885,35 @@ public class ChatbotServiceImpl implements ChatbotService {
             }
         }
         return false;
+    }
+
+    /**
+     * Xây dựng context từ các yêu cầu Cold Start mà user đã làm rõ.
+     * VD: User nói "áo" → chatbot hỏi "áo gì?" → user trả "áo thun"
+     * → Profile lưu clarifiedProductTypes = {"áo thun"} → dùng trong câu tiếp theo
+     */
+    private String buildClarificationContext(ChatSession.PreferenceProfile profile) {
+        if (profile == null || profile.getClarifiedProductTypes() == null || profile.getClarifiedProductTypes().isEmpty()) {
+            return "";
+        }
+        
+        List<String> types = new ArrayList<>(profile.getClarifiedProductTypes());
+        String recent = types.get(types.size() - 1); // Lấy loại sản phẩm được làm rõ gần nhất
+        
+        if (recent == null || recent.isBlank()) {
+            return "";
+        }
+        
+        Instant queryTime = profile.getLastProductQueryTime();
+        if (queryTime != null) {
+            long elapsedMinutes = java.time.temporal.ChronoUnit.MINUTES.between(queryTime, Instant.now());
+            // Nếu đã quá 10 phút, không dùng context cũ nữa (user có thể muốn hỏi cái khác)
+            if (elapsedMinutes > 10) {
+                return "";
+            }
+        }
+        
+        return "Bạn đang tìm " + recent + ". ";
     }
 
     private String buildProfileContext(ChatSession.PreferenceProfile profile) {
@@ -1273,6 +1384,51 @@ public class ChatbotServiceImpl implements ChatbotService {
 
         // === Task 4: Persist profile for long-term memory ===
         profileEnrichmentService.persistProfileAsync(session.getUserId(), session.getPreferenceProfile());
+        
+        // === Update Cold Start clarifications if needed ===
+        // Nếu intent là COLD_START_CLARIFY, lưu loại sản phẩm được làm rõ vào profile
+        if ("COLD_START_CLARIFY".equals(response.getIntent())) {
+            ChatSession.PreferenceProfile profile = session.getPreferenceProfile();
+            String userText = userMessage.toLowerCase();
+            String clarifiedType = extractProductTypeFromClarification(userText);
+            if (clarifiedType != null && !clarifiedType.isBlank()) {
+                profile.getClarifiedProductTypes().add(clarifiedType);
+                profile.setLastProductCategoryQueried(clarifiedType);
+                profile.setLastProductQueryTime(Instant.now());
+                log.info("Saved clarified product type: {} for user {}", clarifiedType, session.getUserId());
+            }
+        }
+    }
+
+    /**
+     * Extract product type từ câu trả lời của user khi được hỏi trong Cold Start.
+     * VD: "áo thun" → "áo thun", "thun" → "áo thun"
+     */
+    private String extractProductTypeFromClarification(String userText) {
+        if (userText == null || userText.isBlank()) return null;
+        
+        String normalized = VietnameseNormalizer.normalize(userText);
+        
+        // Matching các loại sản phẩm phổ biến
+        if (normalized.contains("ao thun")) return "áo thun";
+        if (normalized.contains("ao so mi")) return "áo sơ mi";
+        if (normalized.contains("ao khoac")) return "áo khoác";
+        if (normalized.contains("ao polo")) return "áo polo";
+        if (normalized.contains("ao hoodie")) return "áo hoodie";
+        if (normalized.contains("ao len")) return "áo len";
+        
+        if (normalized.contains("quan jean")) return "quần jean";
+        if (normalized.contains("quan tay")) return "quần tây";
+        if (normalized.contains("quan short")) return "quần short";
+        if (normalized.contains("quan dai")) return "quần dài";
+        
+        if (normalized.contains("vay")) return "váy";
+        if (normalized.contains("dam")) return "đầm";
+        if (normalized.contains("chan vay")) return "chân váy";
+        if (normalized.contains("giay")) return "giày";
+        if (normalized.contains("tui")) return "túi";
+        
+        return null;
     }
 
     private ChatSession findOrCreateSession(String sessionId, String userId) {

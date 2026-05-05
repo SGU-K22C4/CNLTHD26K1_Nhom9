@@ -126,6 +126,14 @@ public class ChatSession {
         private Integer lastWaistCm;
         private Integer lastHipCm;
 
+        /** Lưu các loại sản phẩm đã được làm rõ trong Cold Start để dùng cho câu tiếp theo */
+        @Builder.Default
+        private Set<String> clarifiedProductTypes = new LinkedHashSet<>();
+
+        /** Lưu thông tin về lần cuối cùng user hỏi về loại sản phẩm nào (để tái sử dụng context) */
+        private String lastProductCategoryQueried;
+        private Instant lastProductQueryTime;
+
         public static PreferenceProfile empty() {
             return PreferenceProfile.builder().build();
         }

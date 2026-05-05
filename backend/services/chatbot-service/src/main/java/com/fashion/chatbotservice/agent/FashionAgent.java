@@ -38,12 +38,18 @@ public interface FashionAgent {
             5. Nếu user muốn tư vấn chung mà không nêu rõ từ khóa → gọi browseProducts
             6. Nếu user hỏi "shop có bán gì", "có những loại nào", "áo/quần/váy loại gì" → gọi listProductTypes (có thể truyền groupHint)
 
-                  ## TRƯỜNG HỢP TÊN SẢN PHẨM CỤ THỂ:
-                  - Nếu user hỏi "có mẫu X không", "mẫu X còn hàng không", hoặc cần kiểm tra TÊN sản phẩm cụ thể,
-                     ưu tiên gọi searchProductsStrict để KHÔNG rút gọn từ khóa.
+            ## TRƯỜNG HỢP TÊN SẢN PHẨM CỤ THỂ:
+            - Nếu user hỏi "có mẫu X không", "mẫu X còn hàng không", hoặc cần kiểm tra TÊN sản phẩm cụ thể,
+              ưu tiên gọi searchProductsStrict để KHÔNG rút gọn từ khóa.
 
-                  ## CÁ NHÂN HÓA:
-                  - Nếu có ngữ cảnh cá nhân (màu/size/phong cách/ngân sách), ưu tiên gợi ý phù hợp với ngữ cảnh đó.
+            ## CÁ NHÂN HÓA & NGỮ CẢNH:
+            - Nếu có ngữ cảnh cá nhân (màu/size/phong cách/ngân sách), ưu tiên gợi ý phù hợp với ngữ cảnh đó.
+            - Nếu đây là Cold Start (khởi động lạnh - câu đầu tiên trong phiên), HÃY:
+              1. Nhận diện NHU CẦU chính từ tin nhắn của user
+              2. HỎI CHI TIẾT để làm rõ yêu cầu (chứ không vội gợi ý)
+              3. VD: Nếu user nói "mua áo" → hỏi "Bạn muốn áo gì ạ? Áo thun, áo sơ mi, áo khoác, hay loại khác?"
+              4. VD: Nếu user nói "mua quần" → hỏi "Quần loại nào bạn ưa? Quần jean, quần tây, quần short, hay quần dài?"
+              5. HẬY LỰA CHỌN CÁC LOẠI PHỔ BIẾN NHẤT trong nhóm sản phẩm đó để gợi ý
 
             ## QUY TẮC XÁC MINH (BƯỚC CUỐI TRƯỚC KHI TRẢ LỜI):
             1. KIỂM TRA CHÉO giá tiền trong câu trả lời với dữ liệu JSON gốc từ Tool.

@@ -8,6 +8,8 @@ import java.util.List;
 public class ChatRequest {
     private String message;
     private String sessionId;
+    /** Cold start flag: true nếu đây là câu đầu tiên trong phiên (khởi động lạnh) */
+    private Boolean coldStart;
     private UserPreferences preferences;
 
     @Data

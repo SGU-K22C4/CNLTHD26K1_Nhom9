@@ -38,10 +38,10 @@ public class AgentConfig {
     @Value("${ollama.base-url:https://syncopated-pedagogic-nadia.ngrok-free.dev/api/chat}")
     private String baseUrl;
 
-    @Value("${ollama.model:llama3.1:8b}")
+    @Value("${ollama.model:gpt-oss:20b}")
     private String modelName;
 
-    @Value("${ollama.fallback-model:llama3.1:8b}")
+    @Value("${ollama.fallback-model:gpt-oss:20b}")
     private String fallbackModelName;
 
     @Value("${ollama.timeout-seconds:120}")

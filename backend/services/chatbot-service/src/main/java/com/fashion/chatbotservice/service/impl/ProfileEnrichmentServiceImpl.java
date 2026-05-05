@@ -38,6 +38,12 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
     @Value("${chatbot.order-service-url:http://localhost:8080}")
     private String orderServiceUrl;
 
+    @Value("${chatbot.product-service-url:http://localhost:8080}")
+    private String productServiceUrl;
+
+    @Value("${chatbot.user-service-url:http://localhost:8080}")
+    private String userServiceUrl;
+
     @Override
     public void enrichFromMessage(ChatSession.PreferenceProfile profile, String message) {
         if (profile == null || message == null) return;
@@ -97,6 +103,66 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
         }
     }
 
+    @Override
+    @SuppressWarnings("unchecked")
+    public void enrichFromWishlist(ChatSession.PreferenceProfile profile, String userId) {
+        if (profile == null || userId == null || userId.startsWith("guest-")) return;
+
+        if (!profile.getPreferredCategories().isEmpty()
+                && !profile.getPreferredColors().isEmpty()
+                && !profile.getPreferredSizes().isEmpty()) {
+            return;
+        }
+
+        try {
+            Map<String, Object> pageData = webClient.get()
+                    .uri(productServiceUrl + "/api/v1/wishlists?page=0&size=20")
+                    .headers(headers -> headers.add("X-User-Id", userId))
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+
+            if (pageData == null) return;
+
+            Object content = pageData.get("content");
+            if (!(content instanceof List<?> products)) return;
+
+            for (Object productObj : products) {
+                if (!(productObj instanceof Map<?, ?> product)) continue;
+                hydrateFromProductPayload(profile, product);
+            }
+        } catch (Exception ex) {
+            log.warn("Unable to hydrate profile from wishlist: {}", ex.getMessage());
+        }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public void enrichFromUserProfile(ChatSession.PreferenceProfile profile, String userId) {
+        if (profile == null || userId == null || userId.startsWith("guest-")) return;
+
+        try {
+            Map<String, Object> payload = webClient.get()
+                    .uri(userServiceUrl + "/api/v1/users/me")
+                    .headers(headers -> headers.add("X-User-Id", userId))
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+
+            if (payload == null) return;
+
+            String firstName = stringValue(payload.get("firstName"));
+            String lastName = stringValue(payload.get("lastName"));
+            if (!firstName.isBlank() || !lastName.isBlank()) {
+                profile.setPreferredTone("Professional");
+            }
+        } catch (Exception ex) {
+            log.debug("User profile enrichment skipped: {}", ex.getMessage());
+        }
+    }
+
     private void extractSizePreference(ChatSession.PreferenceProfile profile, String normalized) {
         Matcher sizeMatcher = SIZE_PATTERN.matcher(normalized);
         if (sizeMatcher.find()) {
@@ -134,6 +200,34 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
         }
         if (normalized.contains("fit") || normalized.contains("silhouette")) {
             profile.getFocusTags().add("Silhouette & Fit");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void hydrateFromProductPayload(ChatSession.PreferenceProfile profile, Map<?, ?> product) {
+        String categoryName = stringValue(product.get("categoryName"));
+        if (!categoryName.isBlank()) {
+            profile.getPreferredCategories().add(categoryName);
+        }
+
+        Object variants = product.get("variants");
+        if (!(variants instanceof List<?> variantList)) return;
+
+        for (Object variantObj : variantList) {
+            if (!(variantObj instanceof Map<?, ?> variant)) continue;
+            String color = stringValue(variant.get("colorName"));
+            if (!color.isBlank()) {
+                profile.getPreferredColors().add(color);
+            }
+            Object sizes = variant.get("sizes");
+            if (!(sizes instanceof List<?> sizeList)) continue;
+            for (Object sizeObj : sizeList) {
+                if (!(sizeObj instanceof Map<?, ?> sizeItem)) continue;
+                String sizeName = stringValue(sizeItem.get("sizeName"));
+                if (!sizeName.isBlank()) {
+                    profile.getPreferredSizes().add(sizeName.toUpperCase(Locale.ROOT));
+                }
+            }
         }
     }
 

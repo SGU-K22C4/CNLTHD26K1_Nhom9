@@ -91,9 +91,11 @@ public class ChatbotServiceImpl implements ChatbotService {
         ChatSession session = findOrCreateSession(sessionId, userId);
         mergePreferences(session, request.getPreferences());
 
-        // Enrich profile từ message + purchase history
+        // Enrich profile từ message + purchase history + wishlist + user profile
         profileEnrichmentService.enrichFromMessage(session.getPreferenceProfile(), request.getMessage());
         profileEnrichmentService.enrichFromPurchaseHistory(session.getPreferenceProfile(), userId);
+        profileEnrichmentService.enrichFromWishlist(session.getPreferenceProfile(), userId);
+        profileEnrichmentService.enrichFromUserProfile(session.getPreferenceProfile(), userId);
         updateBudgetFromMessage(session.getPreferenceProfile(), request.getMessage());
 
         // === Task 2: Out-of-Domain Short-Circuit ===

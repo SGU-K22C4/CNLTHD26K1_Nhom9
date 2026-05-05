@@ -18,6 +18,16 @@ public interface ProfileEnrichmentService {
     void enrichFromPurchaseHistory(ChatSession.PreferenceProfile profile, String userId);
 
     /**
+     * Hydrate profile từ wishlist (gọi product-service).
+     */
+    void enrichFromWishlist(ChatSession.PreferenceProfile profile, String userId);
+
+    /**
+     * Hydrate profile từ user profile (gọi user-service).
+     */
+    void enrichFromUserProfile(ChatSession.PreferenceProfile profile, String userId);
+
+    /**
      * Persist profile vào MongoDB để nhớ sở thích user qua nhiều phiên chat.
      * Fire-and-forget: không block request chính.
      */

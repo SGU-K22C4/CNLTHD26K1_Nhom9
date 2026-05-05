@@ -341,6 +341,7 @@ public class FashionTools {
         try {
             List<ChatResponse.ProductSuggestion> suggestions = executeBrowse(minPrice, maxPrice, 12);
             suggestions = applyPersonalization(suggestions, preferenceProfile(), minPrice, maxPrice);
+            suggestions = applyColorFilter(suggestions, color);
             suggestions = applySizeFilter(suggestions, size);
             suggestions = diversifySuggestionsByCategory(suggestions, 12);
 
@@ -437,12 +438,16 @@ public class FashionTools {
             }
 
             suggestions = applyPersonalization(suggestions, preferenceProfile(), minPrice, maxPrice);
+            suggestions = applyColorFilter(suggestions, color);
             suggestions = applySizeFilter(suggestions, size);
             suggestions = diversifySuggestionsByCategory(suggestions, 12);
             if (collector() != null) collector().addProducts(suggestions);
 
             if (suggestions.isEmpty()) {
                 if (allowFallback) {
+                    if (color != null && !color.isBlank()) {
+                        return "Hiện chưa có sản phẩm màu " + color + " phù hợp với yêu cầu.";
+                    }
                     if (size != null && !size.isBlank()) {
                         return "Hiện chưa có sản phẩm phù hợp với size " + size + ". Bạn muốn mình gợi ý mẫu khác không ạ?";
                     }
@@ -451,6 +456,9 @@ public class FashionTools {
                 }
                 if (size != null && !size.isBlank()) {
                     return "Hiện chưa có sản phẩm khớp với từ khóa bạn cung cấp và size " + size + ".";
+                }
+                if (color != null && !color.isBlank()) {
+                    return "Hiện chưa có sản phẩm khớp với từ khóa bạn cung cấp và màu " + color + ".";
                 }
                 return "Hiện chưa có sản phẩm khớp với từ khóa bạn cung cấp trong hệ thống.";
             }
@@ -653,6 +661,19 @@ public class FashionTools {
                         .anyMatch(avail -> normalizeText(avail).equals(normalizedSize)))
                 .toList();
     }
+
+        private List<ChatResponse.ProductSuggestion> applyColorFilter(
+            List<ChatResponse.ProductSuggestion> suggestions,
+            String color) {
+        if (suggestions == null || suggestions.isEmpty() || color == null || color.isBlank()) {
+            return suggestions;
+        }
+        String normalizedColor = normalizeText(color);
+        return suggestions.stream()
+            .filter(s -> safeList(s.getAvailableColors()).stream()
+                .anyMatch(avail -> normalizeText(avail).contains(normalizedColor)))
+            .toList();
+        }
 
     @SuppressWarnings("unchecked")
     private List<ChatResponse.ProductSuggestion> executeBrowse(Long minPrice, Long maxPrice, int size) {

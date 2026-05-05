@@ -1,13 +1,6 @@
-import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import { WishlistContext } from './wishlistContextDef'
 import { wishlistService } from '../services/wishlistService'
-
-const WishlistContext = createContext(null)
-
-export const useWishlistContext = () => {
-  const ctx = useContext(WishlistContext)
-  if (!ctx) throw new Error('useWishlistContext must be used inside <WishlistProvider>')
-  return ctx
-}
 
 /* ── Confirm‑remove modal ───────────────────────────────────── */
 const OVERLAY_STYLE = {
@@ -118,28 +111,39 @@ function ConfirmModal({ onConfirm, onCancel }) {
   )
 }
 
-/* ── Provider ───────────────────────────────────────────────── */
+/* ── Helper: fetch wishlist IDs from API ─────────────────── */
+async function fetchWishlistIds() {
+  try {
+    const ids = await wishlistService.getWishlistIds()
+    return new Set(ids)
+  } catch (error) {
+    console.error('Failed to load wishlist:', error)
+    return null // signal that fetch failed, don't overwrite existing state
+  }
+}
+
+/* ── Provider (only component export from this file) ──────── */
 export function WishlistProvider({ children }) {
   const [wishlistIds, setWishlistIds] = useState(new Set())
   const [pendingRemoveId, setPendingRemoveId] = useState(null)
 
-  const syncWishlist = useCallback(async () => {
-    if (!localStorage.getItem('accessToken')) {
-      setWishlistIds(new Set())
-      return
-    }
-
-    try {
-      const ids = await wishlistService.getWishlistIds()
-      setWishlistIds(new Set(ids))
-    } catch (error) {
-      console.error('Failed to load wishlist:', error)
-    }
+  // Initial load: fetch wishlist IDs on mount.
+  // Using an inline async IIFE so that setState is called inside an async
+  // callback, not synchronously in the effect body.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const ids = await fetchWishlistIds()
+      if (!cancelled && ids) setWishlistIds(ids)
+    })()
+    return () => { cancelled = true }
   }, [])
 
-  useEffect(() => {
-    syncWishlist()
-  }, [syncWishlist])
+  // Re-sync helper for use in event handlers (not in effects)
+  const syncWishlist = useCallback(async () => {
+    const ids = await fetchWishlistIds()
+    if (ids) setWishlistIds(ids)
+  }, [])
 
   /* ── Add to wishlist (instant) ─────────────────────────── */
   const addToWishlist = useCallback(async (productId) => {

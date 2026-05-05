@@ -173,6 +173,13 @@ data:
                 config:
                   jwt_secret: "${JWT_SECRET}"
 
+      # ── Frontend (catch-all: every non-API request goes to React) ──
+      - name: frontend-service
+        url: http://frontend:80
+        routes:
+          - name: frontend-catch-all
+            paths: ["/"]
+            strip_path: false
 
 ---
 # ── Kong Entrypoint Wrapper Script ──────────────────────────────────────────
@@ -399,6 +406,8 @@ spec:
           ports:
             - containerPort: 8080
               name: proxy
+            - containerPort: 8443
+              name: proxy-ssl
             - containerPort: 8001
               name: admin
           env:
@@ -409,9 +418,13 @@ spec:
             - name: KONG_PROXY_ERROR_LOG
               value: /dev/stderr
             - name: KONG_PROXY_LISTEN
-              value: "0.0.0.0:8080"
+              value: "0.0.0.0:8080, 0.0.0.0:8443 ssl"
             - name: KONG_ADMIN_LISTEN
               value: "127.0.0.1:8001"
+            - name: KONG_SSL_CERT
+              value: /kong/tls/tls.crt
+            - name: KONG_SSL_CERT_KEY
+              value: /kong/tls/tls.key
             - name: KONG_PLUGINS
               value: "bundled,jwt-auth"
             - name: KONG_LUA_PACKAGE_PATH
@@ -435,6 +448,9 @@ spec:
               mountPath: /kong/scripts
             - name: kong-jwt-plugin
               mountPath: /kong/custom-plugins/kong/plugins/jwt-auth
+            - name: kong-tls
+              mountPath: /kong/tls
+              readOnly: true
           livenessProbe:
             exec:
               command: ["kong", "health"]
@@ -465,6 +481,9 @@ spec:
         - name: kong-jwt-plugin
           configMap:
             name: kong-jwt-auth-plugin
+        - name: kong-tls
+          secret:
+            secretName: cloudflare-origin-tls
 
 ---
 # ── Kong Service (Expose Gateway) ──────────────────────────────────────────
@@ -476,10 +495,16 @@ metadata:
   labels:
     app: kong
 spec:
-  type: LoadBalancer  # Or NodePort for Minikube
+  type: LoadBalancer
   selector:
     app: kong
   ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+    - name: https
+      port: 443
+      targetPort: 8443
     - name: proxy
       port: 8080
       targetPort: 8080

@@ -152,33 +152,47 @@ export default function SearchField({ onClose }) {
 
   /* Fetch suggestions khi debounced query thay đổi */
   useEffect(() => {
-    if (!debouncedQuery.trim()) {
-      setSuggestions([])
-      setLoadingSuggestions(false)
-      return
-    }
-
     let cancelled = false
-    setLoadingSuggestions(true)
-    setActiveIndex(-1)
 
-    productService
-      .getAll({ search: debouncedQuery.trim(), page: 0, size: 6 })
-      .then((res) => {
-        if (!cancelled) {
-          setSuggestions(res.items || [])
-          setLoadingSuggestions(false)
-        }
-      })
-      .catch(() => {
+    ;(async () => {
+      if (!debouncedQuery.trim()) {
         if (!cancelled) {
           setSuggestions([])
           setLoadingSuggestions(false)
         }
-      })
+        return
+      }
+
+      if (!cancelled) {
+        setLoadingSuggestions(true)
+        setActiveIndex(-1)
+      }
+
+      try {
+        const res = await productService.getAll({
+          search: debouncedQuery.trim(),
+          page: 0,
+          size: 6,
+        })
+        if (!cancelled) {
+          setSuggestions(res.items || [])
+          setLoadingSuggestions(false)
+        }
+      } catch {
+        if (!cancelled) {
+          setSuggestions([])
+          setLoadingSuggestions(false)
+        }
+      }
+    })()
 
     return () => { cancelled = true }
   }, [debouncedQuery])
+
+  const navigateToProduct = useCallback((id) => {
+    navigate(`/products/${id}`)
+    onClose?.()
+  }, [navigate, onClose])
 
   /* Keyboard navigation */
   const handleKeyDown = useCallback((e) => {
@@ -192,7 +206,7 @@ export default function SearchField({ onClose }) {
       e.preventDefault()
       navigateToProduct(suggestions[activeIndex].id)
     }
-  }, [suggestions, activeIndex])
+  }, [suggestions, activeIndex, navigateToProduct])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -208,10 +222,7 @@ export default function SearchField({ onClose }) {
     inputRef.current?.focus()
   }
 
-  const navigateToProduct = (id) => {
-    navigate(`/products/${id}`)
-    onClose?.()
-  }
+
 
   const handlePopularClick = (term) => {
     setQuery(term)

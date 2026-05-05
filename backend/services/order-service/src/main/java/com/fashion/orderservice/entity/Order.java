@@ -74,6 +74,13 @@ public class Order {
 
     private String note;
 
+    /**
+     * Saga latch: tracks inventory reservation result independently of order status.
+     * null = result not yet received, true = reserved successfully, false = reservation failed.
+     */
+    @Column(name = "inventory_reserved")
+    private Boolean inventoryReserved;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     @ToString.Exclude

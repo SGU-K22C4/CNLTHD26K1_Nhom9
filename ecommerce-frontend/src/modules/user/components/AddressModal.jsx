@@ -1,20 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import Modal from '@/shared/components/ui/Modal';
 import Input from '@/shared/components/ui/Input';
+import AddressFields from '@/shared/components/ui/AddressFields';
 import { useProvinces } from '@/shared/hooks/useProvinces';
 
 export default function AddressModal({ isOpen, onClose, onSave, initialData }) {
   const { provinces, loading } = useProvinces(2);
-  const [wards, setWards] = useState([]);
 
   const isEdit = !!initialData;
 
   const {
     register,
     handleSubmit,
-    watch,
-    setValue,
     reset,
     formState: { errors, isSubmitting },
   } = useForm({
@@ -28,61 +26,71 @@ export default function AddressModal({ isOpen, onClose, onSave, initialData }) {
     }
   });
 
-  // Watch for changes on the selected city
-  const selectedCityCode = watch('cityCode');
+  // Track selected city code via local state instead of watch() to avoid
+  // react-hooks/incompatible-library warning (watch cannot be safely memoized)
+  const [selectedCityCode, setSelectedCityCode] = useState('');
 
-  // When selectedCitycode changes, update the wards dropdown
-  useEffect(() => {
+  // Wrap register for cityCode to also update local state
+  const cityCodeRegistration = register('cityCode', { required: 'Vui lòng chọn Tỉnh/Thành' });
+  const cityCodeProps = {
+    ...cityCodeRegistration,
+    onChange: (e) => {
+      cityCodeRegistration.onChange(e);
+      setSelectedCityCode(e.target.value);
+    },
+  };
+
+  // Derive wards from selectedCityCode + provinces (no effect needed, pure computation)
+  const wards = useMemo(() => {
     if (selectedCityCode && !loading) {
       const city = provinces.find(p => p.code == selectedCityCode);
-      setWards(city && city.wards ? city.wards : []);
-      // Only clear wardCode if we are not initializing from initialData where ward already matches
-      // But it's safer to just let the user re-select if they change city.
-    } else {
-      setWards([]);
+      return city && city.wards ? city.wards : [];
     }
+    return [];
   }, [selectedCityCode, provinces, loading]);
 
-  // When initialData changes (Modal open for edit)
-  useEffect(() => {
-    if (isOpen) {
-      if (initialData) {
-        // Find city code by name
-        let matchedCityCode = '';
-        let matchedWardCode = '';
-        
-        if (!loading && provinces.length > 0) {
-          const city = provinces.find(p => p.name === initialData.city);
-          if (city) {
-            matchedCityCode = city.code;
-            const cityWards = city.wards || [];
-            const ward = cityWards.find(w => w.name === initialData.ward);
-            if (ward) {
-              matchedWardCode = ward.code;
-            }
-          }
-        }
+  // Track the last modal state to derive selectedCityCode at render time
+  // React allows calling setState during render when the value is different
+  // (getDerivedStateFromProps pattern). This avoids calling setState inside useEffect.
+  const [modalState, setModalState] = useState({ key: '', cityCode: '' });
+  const modalKey = `${isOpen}|${initialData?.id ?? 'new'}|${loading}|${provinces.length}`;
 
-        reset({
+  if (isOpen && modalState.key !== modalKey) {
+    let matchedCityCode = '';
+    let matchedWardCode = '';
+
+    if (initialData && !loading && provinces.length > 0) {
+      const city = provinces.find(p => p.name === initialData.city);
+      if (city) {
+        matchedCityCode = String(city.code);
+        const cityWards = city.wards || [];
+        const ward = cityWards.find(w => w.name === initialData.ward);
+        if (ward) matchedWardCode = String(ward.code);
+      }
+    }
+
+    const formValues = initialData
+      ? {
           fullName: initialData.fullName || '',
           phoneNumber: initialData.phoneNumber || '',
           street: initialData.street || '',
-          cityCode: matchedCityCode || '',
-          wardCode: matchedWardCode || '',
-          isDefault: initialData.isDefault || false
-        });
-      } else {
-        reset({
+          cityCode: matchedCityCode,
+          wardCode: matchedWardCode,
+          isDefault: initialData.isDefault || false,
+        }
+      : {
           fullName: '',
           phoneNumber: '',
           street: '',
           cityCode: '',
           wardCode: '',
-          isDefault: false
-        });
-      }
-    }
-  }, [initialData, isOpen, reset, provinces, loading]);
+          isDefault: false,
+        };
+
+    reset(formValues);
+    setSelectedCityCode(matchedCityCode);
+    setModalState({ key: modalKey, cityCode: matchedCityCode });
+  }
 
   const onSubmit = async (data) => {
     try {
@@ -133,37 +141,22 @@ export default function AddressModal({ isOpen, onClose, onSave, initialData }) {
             })}
           />
 
-          <Input
-            type="text"
-            placeholder="Địa chỉ cụ thể (Số nhà, tên đường...)"
-            error={errors.street?.message}
-            {...register('street', { required: 'Vui lòng nhập địa chỉ cụ thể' })}
+          <AddressFields
+            streetInputProps={register('street', { required: 'Vui lòng nhập địa chỉ cụ thể' })}
+            streetError={errors.street?.message}
+            citySelectProps={cityCodeProps}
+            cityError={errors.cityCode?.message}
+            wardSelectProps={{
+              ...register('wardCode', { required: 'Vui lòng chọn Quận/Huyện/Phường' }),
+              disabled: !wards.length,
+            }}
+            wardError={errors.wardCode?.message}
+            provinces={provinces}
+            wards={wards}
+            selectClassName="w-full px-4 border h-[46px] bg-[#F9F9F9] rounded focus:bg-white focus:border-[#5A6D57] transition-colors text-sm text-gray-700"
+            selectErrorClassName="border-red-500"
+            selectDefaultClassName="border-[#E5E7EB]"
           />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="flex flex-col">
-              <select
-                className={`w-full px-4 border ${errors.cityCode ? 'border-red-500' : 'border-[#E5E7EB]'} h-[46px] bg-[#F9F9F9] rounded focus:bg-white focus:border-[#5A6D57] transition-colors text-sm text-gray-700`}
-                {...register('cityCode', { required: 'Vui lòng chọn Tỉnh/Thành' })}
-              >
-                <option value="">Tỉnh/Thành phố</option>
-                {provinces.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
-              </select>
-              {errors.cityCode && <span className="text-xs text-red-500 mt-1">{errors.cityCode.message}</span>}
-            </div>
-
-            <div className="flex flex-col">
-              <select
-                className={`w-full px-4 border ${errors.wardCode ? 'border-red-500' : 'border-[#E5E7EB]'} h-[46px] bg-[#F9F9F9] rounded focus:bg-white focus:border-[#5A6D57] transition-colors text-sm text-gray-700`}
-                {...register('wardCode', { required: 'Vui lòng chọn Quận/Huyện/Phường' })}
-                disabled={!wards.length}
-              >
-                <option value="">Quận / Huyện / Phường</option>
-                {wards.map(w => <option key={w.code} value={w.code}>{w.name}</option>)}
-              </select>
-              {errors.wardCode && <span className="text-xs text-red-500 mt-1">{errors.wardCode.message}</span>}
-            </div>
-          </div>
 
           <label className="flex items-center gap-2 cursor-pointer mt-2">
             <input type="checkbox" {...register('isDefault')} className="w-4 h-4 accent-[#5A6D57]" />

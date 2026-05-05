@@ -24,8 +24,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -196,17 +198,21 @@ public class OrderServiceImpl implements OrderService {
             return new ArrayList<>();
         }
 
-        List<OrderItem> items = new ArrayList<>();
+        Set<String> validatedProductIds = new HashSet<>();
         for (OrderItemRequest itemReq : itemRequests) {
             String productId = itemReq.getProductId();
             if (productId == null || productId.isBlank()) {
                 throw new IllegalArgumentException("productId is required");
             }
 
-            // Validate product existence via REST call to Product Service
-            if (!productServiceClient.productExists(productId)) {
+            if (validatedProductIds.add(productId) && !productServiceClient.productExists(productId)) {
                 throw new IllegalArgumentException("Invalid productId: " + productId);
             }
+        }
+
+        List<OrderItem> items = new ArrayList<>();
+        for (OrderItemRequest itemReq : itemRequests) {
+            String productId = itemReq.getProductId();
 
             if (itemReq.getQuantity() <= 0) {
                 throw new IllegalArgumentException("quantity must be greater than 0");
@@ -272,14 +278,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private void publishOrderCreatedEvent(Order savedOrder) {
-        List<OrderItemEvent> itemEvents = savedOrder.getItems().stream()
-                .map(item -> OrderItemEvent.builder()
-                        .productId(item.getProductId())
-                        .color(item.getColor())
-                        .size(item.getSize())
-                        .quantity(item.getQuantity())
-                        .build())
-                .collect(Collectors.toList());
+        List<OrderItemEvent> itemEvents = toOrderItemEvents(savedOrder.getItems());
 
         sagaEventPublisher.publishOrderCreated(OrderCreatedEvent.builder()
                 .orderId(savedOrder.getId())
@@ -291,14 +290,7 @@ public class OrderServiceImpl implements OrderService {
 
     private void publishOrderCancelledEvent(Order order, String reason) {
         try {
-            List<OrderItemEvent> itemEvents = order.getItems().stream()
-                    .map(item -> OrderItemEvent.builder()
-                            .productId(item.getProductId())
-                            .color(item.getColor())
-                            .size(item.getSize())
-                            .quantity(item.getQuantity())
-                            .build())
-                    .collect(Collectors.toList());
+            List<OrderItemEvent> itemEvents = toOrderItemEvents(order.getItems());
 
             sagaEventPublisher.publishOrderCancelled(OrderCancelledEvent.builder()
                     .orderId(order.getId())
@@ -308,6 +300,17 @@ public class OrderServiceImpl implements OrderService {
         } catch (Exception e) {
             log.error("Failed to publish ORDER_CANCELLED for orderId={}", order.getId(), e);
         }
+    }
+
+    private List<OrderItemEvent> toOrderItemEvents(List<OrderItem> items) {
+        return items.stream()
+                .map(item -> OrderItemEvent.builder()
+                        .productId(item.getProductId())
+                        .color(item.getColor())
+                        .size(item.getSize())
+                        .quantity(item.getQuantity())
+                        .build())
+                .collect(Collectors.toList());
     }
 
     private Order initializeItems(Order order) {

@@ -51,10 +51,19 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: maven
 
-      - name: Build backend modules
+      - name: Build and test backend modules
         run: |
           mvn -v
-          mvn -f backend/pom.xml -B -DskipTests clean package
+          mvn -f backend/pom.xml -B clean verify
+
+      - name: Upload backend JaCoCo reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jacoco-reports
+          path: |
+            backend/services/*/target/site/jacoco/
+          if-no-files-found: warn
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -224,6 +233,8 @@ jobs:
           VNPAY_TMN_CODE: ${{ secrets.VNPAY_TMN_CODE }}
           VNPAY_HASH_SECRET: ${{ secrets.VNPAY_HASH_SECRET }}
           OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          KONG_TLS_CRT: ${{ secrets.KONG_TLS_CRT }}
+          KONG_TLS_KEY: ${{ secrets.KONG_TLS_KEY }}
         run: |
           if [ -z "$MYSQL_ROOT_PASSWORD" ]; then
             echo "::error::Missing GitHub secret MYSQL_ROOT_PASSWORD"
@@ -244,6 +255,19 @@ jobs:
             --from-literal=VNPAY_HASH_SECRET="$VNPAY_HASH_SECRET" \
             --from-literal=OLLAMA_API_KEY="$OLLAMA_API_KEY" \
             --dry-run=client -o yaml | kubectl apply -f -
+
+          # Recreate the origin TLS secret when certificate material is available in GitHub.
+          if [ -n "$KONG_TLS_CRT" ] && [ -n "$KONG_TLS_KEY" ]; then
+            printf '%s' "$KONG_TLS_CRT" > /tmp/kong-tls.crt
+            printf '%s' "$KONG_TLS_KEY" > /tmp/kong-tls.key
+
+            kubectl -n "$K8S_NAMESPACE" create secret tls cloudflare-origin-tls \
+              --cert=/tmp/kong-tls.crt \
+              --key=/tmp/kong-tls.key \
+              --dry-run=client -o yaml | kubectl apply -f -
+          else
+            echo "::warning::Skipping cloudflare-origin-tls sync because KONG_TLS_CRT/KONG_TLS_KEY are not configured."
+          fi
 
       - name: Apply Kubernetes manifests
         run: |
@@ -287,5 +311,20 @@ jobs:
           )
 
           for deployment in "${deployments[@]}"; do
-            kubectl -n "$K8S_NAMESPACE" rollout status "deployment/$deployment" --timeout=300s
+            if ! kubectl -n "$K8S_NAMESPACE" rollout status "deployment/$deployment" --timeout=600s; then
+              echo "::error::Rollout failed for deployment/$deployment"
+              kubectl -n "$K8S_NAMESPACE" describe "deployment/$deployment" || true
+              kubectl -n "$K8S_NAMESPACE" get pods -l "app=$deployment" -o wide || true
+
+              for pod in $(kubectl -n "$K8S_NAMESPACE" get pods -l "app=$deployment" -o jsonpath='{.items[*].metadata.name}'); do
+                echo "--- describe pod/$pod ---"
+                kubectl -n "$K8S_NAMESPACE" describe "pod/$pod" || true
+                echo "--- logs pod/$pod (current) ---"
+                kubectl -n "$K8S_NAMESPACE" logs "$pod" --tail=200 || true
+                echo "--- logs pod/$pod (previous) ---"
+                kubectl -n "$K8S_NAMESPACE" logs "$pod" --previous --tail=200 || true
+              done
+
+              exit 1
+            fi
           done

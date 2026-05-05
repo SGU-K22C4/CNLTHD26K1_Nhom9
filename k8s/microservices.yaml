@@ -253,6 +253,8 @@ spec:
           ports:
             - containerPort: 8083
           env:
+            - name: SERVER_PORT
+              value: "8083"
             - name: SPRING_DATA_REDIS_HOST
               valueFrom:
                 configMapKeyRef:
@@ -479,6 +481,8 @@ spec:
           ports:
             - containerPort: 8085
           env:
+            - name: SERVER_PORT
+              value: "8085"
             - name: SPRING_DATASOURCE_URL
               valueFrom:
                 configMapKeyRef:
@@ -776,7 +780,7 @@ metadata:
   labels:
     app: frontend
 spec:
-  type: LoadBalancer
+  type: ClusterIP  # Routed through Kong Gateway (single LoadBalancer entry point)
   selector:
     app: frontend
   ports:

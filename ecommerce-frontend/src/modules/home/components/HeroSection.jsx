@@ -30,6 +30,8 @@ function HeroSection() {
         }}
         width={1441}
         height={600}
+        quality={100}
+        priority
       />
       <Box
         sx={{
@@ -77,4 +79,3 @@ function HeroSection() {
 }
 
 export default HeroSection;
-

@@ -12,15 +12,15 @@ export default function VerifyEmailPage() {
   const hasFetched = useRef(false);
 
   useEffect(() => {
-    if (!token) {
-      setStatus('error');
-      return;
-    }
-
     if (hasFetched.current) return;
     hasFetched.current = true;
 
     const verifyToken = async () => {
+      if (!token) {
+        setStatus('error');
+        return;
+      }
+
       try {
         await axios.get(`${API_CONFIG.BASE_URL}/api/v1/auth/verify-email?token=${token}`);
         setStatus('success');

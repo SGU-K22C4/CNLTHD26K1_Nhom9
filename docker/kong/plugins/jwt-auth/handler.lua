@@ -101,10 +101,17 @@ function plugin:access(conf)
   -- 5. Verify signature using the shared secret
   local signing_input = header_b64 .. "." .. payload_b64
 
-  -- The secret is Base64-encoded (same as Spring Boot's Keys.hmacShaKeyFor(Base64.decode(secret)))
-  local secret_decoded = ngx_decode_base64(conf.jwt_secret)
+  -- The secret is decoded identically to Java's Base64.getDecoder().decode(secret).
+  -- Java's decoder is lenient about missing '=' padding, while nginx's
+  -- ngx.decode_base64 is strict. We add padding to match Java's behavior.
+  local padded_secret = conf.jwt_secret
+  local pad_remainder = #padded_secret % 4
+  if pad_remainder > 0 then
+    padded_secret = padded_secret .. string.rep("=", 4 - pad_remainder)
+  end
+  local secret_decoded = ngx_decode_base64(padded_secret)
   if not secret_decoded then
-    kong.log.err("Failed to Base64-decode jwt_secret. Check your configuration.")
+    kong.log.err("Failed to Base64-decode jwt_secret. Value length=", #conf.jwt_secret)
     return kong.response.exit(500, { message = "Internal server error" })
   end
 

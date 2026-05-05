@@ -104,7 +104,8 @@ function ContactForm({ form, onChange, onCheck, onSubmit, compact = false }) {
   )
 }
 
-function SupportCard({ icon: Icon, title, description, actionText }) {
+function SupportCard({ icon: IconComponent, title, description, actionText }) {
+  const Icon = IconComponent
   return (
     <article className="bg-[#EAEEEA] px-6 py-6 text-center">
       <Icon size={20} className="mx-auto mb-3 text-[#1F1F1F]" />

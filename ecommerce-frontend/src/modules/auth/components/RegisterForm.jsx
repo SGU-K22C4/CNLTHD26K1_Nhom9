@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import Input from '../../../shared/components/ui/Input';
+import AddressFields from '../../../shared/components/ui/AddressFields';
 import VerifyEmailModal from './VerifyEmailModal';
 import { useProvinces } from '../../../shared/hooks/useProvinces';
 import { authService } from '../services/authService';
@@ -40,14 +41,13 @@ const SocialButton = ({ children, label }) => (
 );
 
 /* ── Component ────────────────────────────────────────────── */
-export default function RegisterForm({ onSuccess }) {
+export default function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState('');
 
   const {
     register,
     handleSubmit,
-    watch,
     setValue,
     formState: { errors, isSubmitting },
   } = useForm({
@@ -58,34 +58,52 @@ export default function RegisterForm({ onSuccess }) {
     }
   });
 
-  const gender = watch('gender');
-  const avatarUrl = watch('avatar');
+  // Track gender & avatar via local state instead of watch() to avoid
+  // react-hooks/incompatible-library warning
+  const [gender, setGender] = useState('0');
+  const avatarUrl = gender === '0' ? '/assets/images/avatarnam.png' : '/assets/images/avatarnu.png';
 
-  // Change avatar whenever gender changes
-  useEffect(() => {
-    setValue('avatar', gender === "0" ? '/assets/images/avatarnam.png' : '/assets/images/avatarnu.png');
-  }, [gender, setValue]);
+  // Wrap register for gender to also update local state + avatar
+  const genderRegistration = register('gender');
+  const genderProps = {
+    ...genderRegistration,
+    onChange: (e) => {
+      genderRegistration.onChange(e);
+      const newGender = e.target.value;
+      setGender(newGender);
+      setValue('avatar', newGender === '0' ? '/assets/images/avatarnam.png' : '/assets/images/avatarnu.png');
+    },
+  };
 
   // Province API Custom Hook with Caching (Performance)
   const { provinces } = useProvinces(2);
-  const [wards, setWards] = useState([]);
 
-  const selectedCityCode = watch('cityCode');
+  // Track cityCode locally to derive wards via useMemo (no watch/useEffect)
+  const [cityCode, setCityCode] = useState('');
 
-  useEffect(() => {
-    setValue('wardCode', '');
-    if (selectedCityCode) {
-      const city = provinces.find(p => p.code == selectedCityCode);
-      setWards(city && city.wards ? city.wards : []);
-      setValue('city', city ? city.name : '');
-    } else {
-      setWards([]);
-      setValue('city', '');
-    }
-  }, [selectedCityCode, provinces, setValue]);
+  const wards = useMemo(() => {
+    if (!cityCode) return [];
+    const city = provinces.find(p => p.code == cityCode);
+    return city && city.wards ? city.wards : [];
+  }, [cityCode, provinces]);
+
+  // Custom onChange for city select: sync local state + reset ward
+  const cityRegistration = register('cityCode', { required: 'City is required' });
+  const citySelectProps = {
+    ...cityRegistration,
+    onChange: (e) => {
+      cityRegistration.onChange(e);
+      setCityCode(e.target.value);
+      setValue('wardCode', '');
+    },
+  };
 
   const onSubmit = async (data) => {
     try {
+      // Resolve city name from code (since we no longer use watch/useEffect to set it)
+      const selectedCity = provinces.find(p => p.code == data.cityCode);
+      if (selectedCity) data.city = selectedCity.name;
+
       if (data.wardCode && wards.length > 0) {
         const w = wards.find(w => w.code == data.wardCode);
         if (w) data.ward = w.name;
@@ -103,9 +121,9 @@ export default function RegisterForm({ onSuccess }) {
         ward: data.ward,
         isDefault: data.isDefault
       };
-      
+
       await authService.register(payload);
-      
+
       // Mở modal báo cho user check email
       setVerifyEmail(data.email);
     } catch (err) {
@@ -166,7 +184,7 @@ export default function RegisterForm({ onSuccess }) {
                 type="text"
                 placeholder="Phone Number"
                 error={errors.phone?.message}
-                {...register('phone', { 
+                {...register('phone', {
                   required: 'Phone number is required',
                   pattern: {
                     value: /^(84|0[3|5|7|8|9])+([0-9]{8})$/,
@@ -178,11 +196,11 @@ export default function RegisterForm({ onSuccess }) {
 
             <div className="flex items-center gap-4 bg-[#F9F9F9] border border-transparent rounded px-4 h-[46px]">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" value="0" {...register('gender')} className="accent-[#5A6D57]" />
+                <input type="radio" value="0" {...genderProps} className="accent-[#5A6D57]" />
                 <span className="text-sm text-gray-700">Male</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" value="1" {...register('gender')} className="accent-[#5A6D57]" />
+                <input type="radio" value="1" {...genderProps} className="accent-[#5A6D57]" />
                 <span className="text-sm text-gray-700">Female</span>
               </label>
             </div>
@@ -230,35 +248,19 @@ export default function RegisterForm({ onSuccess }) {
           {/* ADDRESS SECTION */}
           <div className="text-sm text-gray-700 font-semibold border-t pt-4 mt-2">Delivery Address</div>
 
-          <Input
-            type="text"
-            placeholder="Street Address (e.g. 460/4 Nơ Trang Long)"
-            error={errors.street?.message}
-            {...register('street', { required: 'Street address is required' })}
+          <AddressFields
+            streetInputProps={register('street', { required: 'Street address is required' })}
+            streetError={errors.street?.message}
+            citySelectProps={citySelectProps}
+            cityError={errors.cityCode?.message}
+            wardSelectProps={{
+              ...register('wardCode', { required: 'Ward is required' }),
+              disabled: !wards.length,
+            }}
+            wardError={errors.wardCode?.message}
+            provinces={provinces}
+            wards={wards}
           />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="flex flex-col">
-              <select
-                className={`w-full px-4 border ${errors.cityCode ? 'border-red-500' : 'border-transparent'} h-[46px] bg-[#F9F9F9] rounded focus:bg-white focus:border-[#5A6D57] focus:outline-none transition-colors text-sm`}
-                {...register('cityCode', { required: 'City is required' })}
-              >
-                <option value="">City / Province</option>
-                {provinces.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
-              </select>
-            </div>
-
-            <div className="flex flex-col">
-              <select
-                className={`w-full px-4 border ${errors.wardCode ? 'border-red-500' : 'border-transparent'} h-[46px] bg-[#F9F9F9] rounded focus:bg-white focus:border-[#5A6D57] focus:outline-none transition-colors text-sm`}
-                {...register('wardCode', { required: 'Ward is required' })}
-                disabled={!wards.length}
-              >
-                <option value="">Ward</option>
-                {wards.map(w => <option key={w.code} value={w.code}>{w.name}</option>)}
-              </select>
-            </div>
-          </div>
 
           <label className="flex items-center gap-2 cursor-pointer mt-1">
             <input type="checkbox" {...register('isDefault')} className="w-4 h-4 accent-[#5A6D57] rounded" />

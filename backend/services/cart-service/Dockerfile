@@ -18,7 +18,6 @@ RUN mvn -pl common -pl services/cart-service -am dependency:resolve -q 2>/dev/nu
 
 COPY services/cart-service/src services/cart-service/src
 RUN mvn -pl common -pl services/cart-service -am clean package -DskipTests -q
-
 # ── Run stage ────────────────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app

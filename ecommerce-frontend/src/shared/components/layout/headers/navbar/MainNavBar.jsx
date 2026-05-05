@@ -1,7 +1,7 @@
 import { AppBar, Toolbar, Box, IconButton, Button, Menu, MenuItem, Typography } from '@mui/material';
 import { Link } from 'react-router-dom';
 import LogoWebsite from './LogoWebsite';
-import { useCartContext } from '../../../../../modules/cart/context/CartContext';
+import { useCartContext } from '../../../../../modules/cart/hooks/useCartContext';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import DesktopMenu from './DesktopMenu';
 import LogoMobileWebsite from './LogoMobileWebsite';

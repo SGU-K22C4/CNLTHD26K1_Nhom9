@@ -23,7 +23,6 @@ RUN mvn -pl common -pl services/user-service -am dependency:resolve -q 2>/dev/nu
 # 4) Copy source and build
 COPY services/user-service/src services/user-service/src
 RUN mvn -pl common -pl services/user-service -am clean package -DskipTests -q
-
 # ── Run stage ────────────────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app

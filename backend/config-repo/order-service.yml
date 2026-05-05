@@ -33,6 +33,7 @@ vnpay:
 
 order:
   integration:
+    product-service-url: ${PRODUCT_SERVICE_URL:http://localhost:8082}
     promotion-service-url: ${PROMOTION_SERVICE_URL:http://localhost:8085}
 
 app:

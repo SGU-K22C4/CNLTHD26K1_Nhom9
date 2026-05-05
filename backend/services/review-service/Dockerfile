@@ -18,7 +18,6 @@ RUN mvn -pl common -pl services/review-service -am dependency:resolve -q 2>/dev/
 
 COPY services/review-service/src services/review-service/src
 RUN mvn -pl common -pl services/review-service -am clean package -DskipTests -q
-
 # ── Run stage ────────────────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app

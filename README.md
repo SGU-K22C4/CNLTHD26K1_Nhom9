@@ -27,7 +27,7 @@ React Frontend (Vite :5173)
   ├── /api/v1/reviews/**   → review-service   (:8086) → MongoDB: fashion_review_db
   └── /api/v1/chatbot/**   → chatbot-service  (:8087) → OpenAI API
 
-Infrastructure: MySQL 8.0 (:3307) | Redis 7.0 (:6379) | MongoDB 7.0 (:27017)
+Infrastructure: MySQL 8.0 (:3307) | Redis 7.0 (:6379) | MongoDB 7.0 (:27017) | Kafka UI (:8088) | Jaeger (:16686)
 ```
 
 ## 🚀 Quick Start (First Time Setup)
@@ -104,6 +104,8 @@ Open your browser: **[http://localhost:5173](http://localhost:5173)**
 | **Frontend**             | http://localhost:5173 | React + Vite                      |
 | **Kong Gateway (Proxy)** | http://localhost:8080 | All API traffic goes through here |
 | **Kong Admin API**       | http://localhost:8001 | Route inspection & debug          |
+| **Kafka UI**             | http://localhost:8088 | Topic/message inspection          |
+| **Jaeger UI**            | http://localhost:16686 | Distributed trace visualization   |
 | **User Service**         | http://localhost:8081 | Auth & user management            |
 | **Product Service**      | http://localhost:8082 | Products, categories, wishlists   |
 | **Cart Service**         | http://localhost:8083 | Redis-based shopping cart         |
@@ -169,6 +171,26 @@ Go to **Actions > CI-CD DOKS > Run workflow**:
 - optional `image_tag`: redeploy a specific existing tag
 
 > Note: `k8s/secrets.yaml` is now only for local/demo reference. CI/CD deploy uses GitHub Secrets as source of truth.
+
+## 🔭 Saga POC Observability (Kafka + Jaeger)
+
+POC scope currently enabled on:
+
+- `order-service` (Saga orchestrator + Kafka producer/consumer)
+- `product-service` (inventory saga consumer + Kafka producer)
+
+Quick verify flow:
+
+1. Start stack:
+
+```bash
+docker compose -f docker/docker-compose.yml up -d --build
+```
+
+2. Trigger one order flow (through frontend or API) so saga events are produced to Kafka.
+3. Open Kafka UI at http://localhost:8088 and confirm saga topics have new messages.
+4. Open Jaeger UI at http://localhost:16686, choose service `order-service` or `product-service`, and search traces from the last 15 minutes.
+5. Confirm trace contains both HTTP span and Kafka producer/consumer spans.
 
 ---
 

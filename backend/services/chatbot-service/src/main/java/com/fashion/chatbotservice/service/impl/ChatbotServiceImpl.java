@@ -7,7 +7,6 @@ import com.fashion.chatbotservice.agent.ToolResultCollector;
 import com.fashion.chatbotservice.dto.ChatRequest;
 import com.fashion.chatbotservice.dto.ChatResponse;
 import com.fashion.chatbotservice.dto.SessionResponse;
-import com.fashion.chatbotservice.exception.ChatSessionNotFoundException;
 import com.fashion.chatbotservice.model.ChatSession;
 import com.fashion.chatbotservice.repository.ChatSessionRepository;
 import com.fashion.chatbotservice.service.ChatbotService;
@@ -180,12 +179,18 @@ public class ChatbotServiceImpl implements ChatbotService {
     public SessionResponse getSession(String sessionId) {
         ChatSession session;
         try {
-            session = chatSessionRepository.findBySessionId(sessionId)
-                    .orElseThrow(() -> new ChatSessionNotFoundException("Không tìm thấy phiên chat"));
-        } catch (ChatSessionNotFoundException ex) {
-            throw ex;
+            session = chatSessionRepository.findBySessionId(sessionId).orElse(null);
         } catch (Exception ex) {
             throw new IllegalStateException("MongoDB chưa kết nối, chưa thể lấy lịch sử chat");
+        }
+
+        if (session == null) {
+            // Session may be generated on client side before first chat message is persisted.
+            // Return an empty payload to avoid noisy 404 errors on initial widget load.
+            return SessionResponse.builder()
+                    .sessionId(sessionId)
+                    .messages(List.of())
+                    .build();
         }
 
         return SessionResponse.builder()

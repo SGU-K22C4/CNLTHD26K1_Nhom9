@@ -1,9 +1,40 @@
 import { useNavigate } from 'react-router-dom'
 import { X, Minus, Plus } from 'lucide-react'
-import { useCartContext } from '../context/CartContext'
+import { useCartContext } from '../hooks/useCartContext'
 import { formatCurrency } from '../../../shared/utils/format'
 
 const TAX_RATE = 0.08
+
+/* ── Shared Order Summary block (used on mobile + desktop right column) ── */
+const OrderSummaryFooter = ({ totalItems, subtotal, tax, total, onNext }) => (
+  <div className="flex flex-col gap-4 pt-6 border-t border-[#dfdfdf]">
+    <div className="flex items-center justify-between text-[#404040] text-sm lg:text-base">
+      <span>Subtotal ({totalItems})</span>
+      <span>{formatCurrency(subtotal)}</span>
+    </div>
+    <div className="flex items-center justify-between text-[#404040] text-sm lg:text-base">
+      <span>Tax</span>
+      <span>{formatCurrency(tax)}</span>
+    </div>
+    <div className="flex items-center justify-between text-[#404040] text-sm lg:text-base">
+      <span>Shipping</span>
+      <span>Free</span>
+    </div>
+    <div className="flex items-center justify-between text-[#202020] font-bold text-sm lg:text-lg pt-2 border-t border-[#dfdfdf]">
+      <span>Order Totals:</span>
+      <span>{formatCurrency(total)}</span>
+    </div>
+    <p className="text-[11px] text-[#202020] font-semibold leading-relaxed mt-1">
+      The Total Amount You Pay Includes All Applicable Customs Duties &amp; Taxes. We Guarantee No Additional Charges On Delivery
+    </p>
+    <button
+      onClick={onNext}
+      className="w-full lg:w-auto lg:self-end bg-[#5A6D57] hover:bg-[#748C70] text-white text-sm font-[Montserrat] tracking-wide py-4 lg:px-14 lg:py-3 transition-colors mt-2"
+    >
+      Next
+    </button>
+  </div>
+)
 
 export default function CartPage() {
   const { items, removeItem, updateQuantity, subtotal, totalItems } = useCartContext()
@@ -12,36 +43,7 @@ export default function CartPage() {
   const tax   = subtotal * TAX_RATE
   const total = subtotal + tax
 
-  /* ── Shared Order Summary block (used on mobile + desktop right column) ── */
-  const OrderSummaryFooter = () => (
-    <div className="flex flex-col gap-4 pt-6 border-t border-[#dfdfdf]">
-      <div className="flex items-center justify-between text-[#404040] text-sm lg:text-base">
-        <span>Subtotal ({totalItems})</span>
-        <span>{formatCurrency(subtotal)}</span>
-      </div>
-      <div className="flex items-center justify-between text-[#404040] text-sm lg:text-base">
-        <span>Tax</span>
-        <span>{formatCurrency(tax)}</span>
-      </div>
-      <div className="flex items-center justify-between text-[#404040] text-sm lg:text-base">
-        <span>Shipping</span>
-        <span>Free</span>
-      </div>
-      <div className="flex items-center justify-between text-[#202020] font-bold text-sm lg:text-lg pt-2 border-t border-[#dfdfdf]">
-        <span>Order Totals:</span>
-        <span>{formatCurrency(total)}</span>
-      </div>
-      <p className="text-[11px] text-[#202020] font-semibold leading-relaxed mt-1">
-        The Total Amount You Pay Includes All Applicable Customs Duties &amp; Taxes. We Guarantee No Additional Charges On Delivery
-      </p>
-      <button
-        onClick={() => navigate('/checkout')}
-        className="w-full lg:w-auto lg:self-end bg-[#5A6D57] hover:bg-[#748C70] text-white text-sm font-[Montserrat] tracking-wide py-4 lg:px-14 lg:py-3 transition-colors mt-2"
-      >
-        Next
-      </button>
-    </div>
-  )
+  const handleNext = () => navigate('/checkout')
 
   return (
     <div className="min-h-screen bg-white font-[Montserrat]">
@@ -138,7 +140,13 @@ export default function CartPage() {
 
           {/* Mobile order summary footer */}
           <div className="mt-6">
-            <OrderSummaryFooter />
+            <OrderSummaryFooter 
+              totalItems={totalItems}
+              subtotal={subtotal}
+              tax={tax}
+              total={total}
+              onNext={handleNext}
+            />
           </div>
         </div>
 
@@ -216,7 +224,13 @@ export default function CartPage() {
               </div>
             ))}
             <div className="mt-8">
-              <OrderSummaryFooter />
+              <OrderSummaryFooter 
+                totalItems={totalItems}
+                subtotal={subtotal}
+                tax={tax}
+                total={total}
+                onNext={handleNext}
+              />
             </div>
           </div>
 

@@ -35,8 +35,8 @@ public class UserService {
     @Transactional
     public UserProfileResponse updateProfile(String userId, UpdateProfileRequest request) {
         User user = findUserById(userId);
-        user.setFullName(request.getFullName());
-        user.setPhone(request.getPhone());
+        user.setFullName(request.resolveFullName());
+        user.setPhone(request.resolvePhone());
         userRepository.save(user);
         return toProfileResponse(user);
     }
@@ -130,15 +130,37 @@ public class UserService {
     }
 
     private UserProfileResponse toProfileResponse(User user) {
+        String[] nameParts = splitFullName(user.getFullName());
         return UserProfileResponse.builder()
                 .id(user.getId())
                 .email(user.getEmail())
-                .firstName(user.getFullName())
-                .lastName("")
+                .firstName(nameParts[1])
+                .lastName(nameParts[0])
                 .phoneNumber(user.getPhone())
                 .avatarUrl(user.getAvatar())
                 .role(user.getRole().name())
                 .build();
+    }
+
+    /**
+     * The database stores a single full_name column, but the storefront profile
+     * screen edits first and last name separately.
+     */
+    private String[] splitFullName(String fullName) {
+        if (fullName == null || fullName.isBlank()) {
+            return new String[]{"", ""};
+        }
+
+        String normalizedName = fullName.trim().replaceAll("\\s+", " ");
+        int lastSpaceIndex = normalizedName.lastIndexOf(' ');
+        if (lastSpaceIndex < 0) {
+            return new String[]{"", normalizedName};
+        }
+
+        return new String[]{
+                normalizedName.substring(0, lastSpaceIndex),
+                normalizedName.substring(lastSpaceIndex + 1)
+        };
     }
 
     private AddressResponse toAddressResponse(Address address) {

@@ -1,5 +1,7 @@
 package com.fashion.reviewservice.client;
 
+import com.fashion.common.util.RestClientUtils;
+
 import com.fashion.reviewservice.client.dto.EarnReviewPointsRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,28 +42,10 @@ public class LoyaltyServiceClient {
                     Object.class
             );
         } catch (HttpClientErrorException ex) {
-            String message = extractMessage(ex.getResponseBodyAsString(), "Unable to grant points for review");
+            String message = RestClientUtils.extractMessage(ex.getResponseBodyAsString(), "Unable to grant points for review");
             throw new IllegalArgumentException(message);
         } catch (RestClientException ex) {
             throw new IllegalStateException("Unable to connect promotion-service to grant points");
         }
-    }
-
-    private String extractMessage(String body, String fallback) {
-        if (body == null || body.isBlank()) {
-            return fallback;
-        }
-
-        String marker = "\"message\":\"";
-        int start = body.indexOf(marker);
-        if (start < 0) {
-            return fallback;
-        }
-        start += marker.length();
-        int end = body.indexOf('"', start);
-        if (end <= start) {
-            return fallback;
-        }
-        return body.substring(start, end);
     }
 }

@@ -1,9 +1,20 @@
-import { createContext, useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { cartService } from '../services/cartService'
 import { productService } from '../../product/services/productService'
 import { useAuth } from '../../auth/hooks/useAuth'
 
 const CartContext = createContext(null)
+
+/**
+ * Custom hook to consume cart state.
+ * Throws if used outside <CartProvider>.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export const useCartContext = () => {
+  const ctx = useContext(CartContext)
+  if (!ctx) throw new Error('useCartContext must be used inside <CartProvider>')
+  return ctx
+}
 
 export function CartProvider({ children }) {
   const { user } = useAuth()
@@ -76,6 +87,11 @@ export function CartProvider({ children }) {
   }, [ensureProductVariantIndex])
 
   const syncCart = useCallback(async () => {
+    if (!localStorage.getItem('accessToken')) {
+      setItems([])
+      return
+    }
+
     const raw = await cartService.getCart()
     const hydrated = await hydrateCartItems(raw)
     setItems(hydrated)
@@ -85,10 +101,11 @@ export function CartProvider({ children }) {
     let mounted = true
 
     const loadInitialCart = async () => {
-      if (!user) {
+      if (!localStorage.getItem('accessToken')) {
         if (mounted) setItems([])
         return
       }
+
       try {
         const raw = await cartService.getCart()
         const hydrated = await hydrateCartItems(raw)
@@ -104,26 +121,24 @@ export function CartProvider({ children }) {
     return () => {
       mounted = false
     }
-  }, [hydrateCartItems, user])
+  }, [hydrateCartItems])
 
   // === Clear cart on logout, re-sync on login ===
   useEffect(() => {
-    const handleAuthChange = async () => {
-      if (!user) {
-        // User just logged out → clear cart state immediately
-        setItems([])
-        productVariantIndexRef.current = null
-      } else {
-        // User just logged in → re-sync cart from backend
-        try {
-          await syncCart()
-        } catch (err) {
-          console.warn('Failed to sync cart after login:', err)
-        }
-      }
+    const hasAccessToken = Boolean(localStorage.getItem('accessToken'))
+
+    if (!user || !hasAccessToken) {
+      // User just logged out → clear cart state immediately
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setItems([])
+      productVariantIndexRef.current = null
+    } else {
+      // User just logged in → re-sync cart from backend
+      syncCart().catch((err) => {
+        console.warn('Failed to sync cart after login:', err)
+      })
     }
-    handleAuthChange()
-  }, [user, syncCart])
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Drawer controls ─────────────────────────────────────────────────────── */
   const openDrawer = useCallback((event) => {

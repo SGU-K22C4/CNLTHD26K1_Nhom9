@@ -47,4 +47,16 @@ export const orderService = {
       headers: buildUserHeaders(),
     })
   },
+
+  /**
+   * Cancel a PENDING order (within 15-minute grace period).
+   * After 15 minutes, the order is auto-confirmed and can no longer be cancelled.
+   * @param {number|string} orderId
+   * @returns {Promise<Object>} The updated order
+   */
+  cancel: async (orderId) => {
+    return api.patch(`/api/v1/orders/${orderId}/cancel`, {}, {
+      headers: buildUserHeaders(),
+    })
+  },
 }

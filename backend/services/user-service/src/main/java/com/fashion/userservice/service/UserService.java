@@ -37,6 +37,9 @@ public class UserService {
         User user = findUserById(userId);
         user.setFullName(request.resolveFullName());
         user.setPhone(request.resolvePhone());
+        if (request.getGender() != null) {
+            user.setGender(request.getGender());
+        }
         userRepository.save(user);
         return toProfileResponse(user);
     }
@@ -139,6 +142,7 @@ public class UserService {
                 .phoneNumber(user.getPhone())
                 .avatarUrl(user.getAvatar())
                 .role(user.getRole().name())
+                .gender(user.getGender())
                 .build();
     }
 

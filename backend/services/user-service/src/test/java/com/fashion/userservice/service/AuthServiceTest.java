@@ -7,6 +7,7 @@ import com.fashion.userservice.dto.response.AuthResponse;
 import com.fashion.userservice.entity.RefreshToken;
 import com.fashion.userservice.entity.User;
 import com.fashion.userservice.exception.EmailAlreadyExistsException;
+import com.fashion.userservice.repository.AddressRepository;
 import com.fashion.userservice.repository.EmailVerificationTokenRepository;
 import com.fashion.userservice.repository.PasswordResetTokenRepository;
 import com.fashion.userservice.repository.RefreshTokenRepository;
@@ -39,6 +40,9 @@ class AuthServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private AddressRepository addressRepository;
 
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
@@ -76,6 +80,7 @@ class AuthServiceTest {
 
         authService = new AuthService(
                 userRepository,
+                addressRepository,
                 refreshTokenRepository,
                 emailVerificationTokenRepository,
                 passwordResetTokenRepository,

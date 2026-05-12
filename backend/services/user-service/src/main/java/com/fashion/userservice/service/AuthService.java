@@ -5,6 +5,7 @@ import com.fashion.userservice.dto.request.LoginRequest;
 import com.fashion.userservice.dto.request.RegisterRequest;
 import com.fashion.userservice.dto.request.ResetPasswordRequest;
 import com.fashion.userservice.dto.response.AuthResponse;
+import com.fashion.userservice.entity.Address;
 import com.fashion.userservice.entity.EmailVerificationToken;
 import com.fashion.userservice.entity.PasswordResetToken;
 import com.fashion.userservice.entity.RefreshToken;
@@ -13,6 +14,7 @@ import com.fashion.userservice.exception.EmailAlreadyExistsException;
 import com.fashion.userservice.exception.InvalidCredentialsException;
 import com.fashion.userservice.exception.ResourceNotFoundException;
 import com.fashion.userservice.exception.TokenExpiredException;
+import com.fashion.userservice.repository.AddressRepository;
 import com.fashion.userservice.repository.EmailVerificationTokenRepository;
 import com.fashion.userservice.repository.PasswordResetTokenRepository;
 import com.fashion.userservice.repository.RefreshTokenRepository;
@@ -39,6 +41,7 @@ public class AuthService {
     private static final Pattern BCRYPT_HASH_PATTERN = Pattern.compile("^\\$2[aby]\\$\\d{2}\\$[./A-Za-z0-9]{53}$");
 
     private final UserRepository userRepository;
+    private final AddressRepository addressRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
@@ -68,6 +71,20 @@ public class AuthService {
                 .build();
 
         userRepository.save(user);
+
+        // Save address if provided during registration
+        if (request.getStreet() != null && !request.getStreet().isBlank()) {
+            Address address = Address.builder()
+                    .user(user)
+                    .fullName(request.getFullName())
+                    .phoneNumber(request.getPhone())
+                    .street(request.getStreet())
+                    .city(request.getCity() != null ? request.getCity() : "")
+                    .ward(request.getWard() != null ? request.getWard() : "")
+                    .isDefault(request.getIsDefault() != null && request.getIsDefault())
+                    .build();
+            addressRepository.save(address);
+        }
 
         if (emailVerificationRequired) {
             String token = UUID.randomUUID().toString();

@@ -126,12 +126,13 @@ public class OrderServiceImpl implements OrderService {
 
     /**
      * Cancels a PENDING order:
-     * 1. Refunds loyalty points if any were used
-     * 2. Sets order status to CANCELLED
-     * 3. Publishes ORDER_CANCELLED event for VNPAY orders to restore inventory
-     *
-     * @throws IllegalArgumentException if loyalty refund fails due to bad data
-     * @throws IllegalStateException    if Loyalty Service is unavailable
+     * 1. Validates the order belongs to the user
+     * 2. Checks that the order is still PENDING (COD orders stay PENDING for
+     *    a 15-minute grace period before being auto-confirmed by a scheduled job)
+     * 3. Sets order status to CANCELLED
+     * 4. Publishes ORDER_CANCELLED event which triggers:
+     *    - Product Service: restores reserved inventory
+     *    - Promotion Service: refunds loyalty points (if any were used)
      */
     @Override
     @Transactional
@@ -140,18 +141,14 @@ public class OrderServiceImpl implements OrderService {
                 .orElseThrow(() -> new IllegalArgumentException("Order not found"));
 
         if (order.getStatus() != Order.OrderStatus.PENDING) {
-            throw new IllegalArgumentException("Only PENDING orders can be cancelled");
-        }
-
-        // Refund loyalty points if any were used
-        if (order.getUsedPoints() != null && order.getUsedPoints() > 0) {
-            loyaltyServiceClient.refundPoints(order.getUserId(), String.valueOf(order.getId()));
+            throw new IllegalArgumentException(
+                    "Chỉ có thể hủy đơn hàng đang ở trạng thái Chờ xác nhận");
         }
 
         order.setStatus(Order.OrderStatus.CANCELLED);
         Order cancelledOrder = orderRepository.save(order);
 
-        // Compensation: restore inventory for any order that had stock reserved
+        // Compensation via Kafka: restore inventory + refund loyalty points
         publishOrderCancelledEvent(cancelledOrder, "User cancelled order");
 
         return orderMapper.toResponse(cancelledOrder);
@@ -296,6 +293,8 @@ public class OrderServiceImpl implements OrderService {
                     .orderId(order.getId())
                     .reason(reason)
                     .items(itemEvents)
+                    .userId(order.getUserId())
+                    .usedPoints(order.getUsedPoints())
                     .build());
         } catch (Exception e) {
             log.error("Failed to publish ORDER_CANCELLED for orderId={}", order.getId(), e);

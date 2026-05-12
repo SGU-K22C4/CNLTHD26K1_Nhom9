@@ -64,8 +64,10 @@ public class OrderSagaConsumer {
             order.setInventoryReserved(true);
 
             if (order.getPaymentMethod() == Order.PaymentMethod.COD) {
-                // COD: inventory OK → auto-confirm
-                saveIfChanged(order, Order.OrderStatus.CONFIRMED, Order.PaymentStatus.PAID);
+                // COD: inventory OK → stay PENDING for 15-min grace period.
+                // A scheduled job will auto-confirm after the grace period expires.
+                log.info("COD order inventory reserved, staying PENDING for grace period orderId={}", order.getId());
+                orderRepository.save(order);
             } else if (order.getPaymentStatus() == Order.PaymentStatus.PAID) {
                 // Payment arrived first and succeeded → now inventory OK → confirm
                 saveIfChanged(order, Order.OrderStatus.CONFIRMED, Order.PaymentStatus.PAID);
@@ -201,6 +203,8 @@ public class OrderSagaConsumer {
                     .orderId(order.getId())
                     .reason(reason)
                     .items(itemEvents)
+                    .userId(order.getUserId())
+                    .usedPoints(order.getUsedPoints())
                     .build());
         } catch (Exception e) {
             log.error("Failed to publish ORDER_CANCELLED for orderId={}", order.getId(), e);

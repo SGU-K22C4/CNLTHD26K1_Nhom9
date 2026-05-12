@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   CheckCircle2,
@@ -8,7 +8,6 @@ import {
   Phone,
   User,
   CreditCard,
-  FileText,
   Printer,
   ArrowLeft,
   ShoppingBag,
@@ -16,10 +15,15 @@ import {
   Hash,
   Calendar,
   Receipt,
+  XCircle,
+  Timer,
 } from 'lucide-react'
 import { orderService } from '../services/orderService'
 import { formatCurrency, formatDateTime } from '../../../shared/utils/format'
 import PaymentResultBanner from '../components/PaymentResultBanner'
+
+/** Grace period in minutes — must match backend CANCEL_GRACE_PERIOD_MINUTES */
+const CANCEL_GRACE_MINUTES = 15
 
 /* ─── Status map ─── */
 const STATUS_MAP = {
@@ -53,6 +57,8 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [cancelSecondsLeft, setCancelSecondsLeft] = useState(0)
   const printRef = useRef(null)
 
   const isFromPayment = searchParams.get('from') === 'payment'
@@ -79,8 +85,85 @@ export default function OrderDetailPage() {
     if (orderId) fetchOrder()
   }, [orderId])
 
+  // ── Countdown timer for cancel grace period ──
+  useEffect(() => {
+    if (!order?.createdAt) return
+    const isCancellable = order.status === 'PENDING'
+    if (!isCancellable) return
+
+    const calcRemaining = () => {
+      const created = new Date(order.createdAt).getTime()
+      const deadline = created + CANCEL_GRACE_MINUTES * 60 * 1000
+      return Math.max(0, Math.floor((deadline - Date.now()) / 1000))
+    }
+
+    setCancelSecondsLeft(calcRemaining())
+    const timer = setInterval(() => {
+      const remaining = calcRemaining()
+      setCancelSecondsLeft(remaining)
+      if (remaining <= 0) clearInterval(timer)
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [order?.createdAt, order?.status])
+
+  const canCancel = cancelSecondsLeft > 0 && order?.status === 'PENDING'
+
+  const formatCountdown = useCallback((totalSeconds) => {
+    const m = Math.floor(totalSeconds / 60)
+    const s = totalSeconds % 60
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }, [])
+
+  /* ─── Reusable Cancel Button ─── */
+  const CancelButton = ({ size = 'sm' }) => {
+    const px = size === 'lg' ? 'px-6 py-3' : 'px-4 py-2.5'
+    if (canCancel) {
+      return (
+        <button
+          onClick={handleCancelOrder}
+          disabled={isCancelling}
+          className={`flex items-center gap-2 ${px} border border-[#EF4444] bg-white hover:bg-[#FEE2E2] text-sm text-[#EF4444] font-medium transition-all rounded-lg hover:shadow-sm disabled:opacity-50`}
+        >
+          <XCircle size={16} />
+          {isCancelling ? 'Đang hủy...' : 'Hủy đơn hàng'}
+          <span className="inline-flex items-center gap-1 bg-[#FEE2E2] text-[#EF4444] text-xs font-mono px-1.5 py-0.5 rounded">
+            <Timer size={12} />
+            {formatCountdown(cancelSecondsLeft)}
+          </span>
+        </button>
+      )
+    }
+    if (order?.status === 'PENDING') {
+      return (
+        <div className={`flex items-center gap-2 ${px} bg-[#FFF8E1] border border-[#FFE082] text-sm text-[#B8860B] font-medium rounded-lg`}>
+          <Clock size={16} />
+          Đã hết thời gian hủy đơn. Liên hệ Hotline để được hỗ trợ.
+        </div>
+      )
+    }
+    return null
+  }
+
   const handlePrint = () => {
     window.print()
+  }
+
+  const handleCancelOrder = async () => {
+    if (!window.confirm('Bạn có chắc chắn muốn hủy đơn hàng này không?')) return
+    try {
+      setIsCancelling(true)
+      const updatedOrder = await orderService.cancel(order.id)
+      setOrder(updatedOrder)
+    } catch (err) {
+      console.error('Failed to cancel order:', err)
+      const msg = err?.response?.data?.message
+        || err?.response?.data?.error
+        || 'Có lỗi xảy ra khi hủy đơn hàng. Vui lòng thử lại.'
+      alert(msg)
+    } finally {
+      setIsCancelling(false)
+    }
   }
 
   /* ─── Loading State ─── */
@@ -191,7 +274,7 @@ export default function OrderDetailPage() {
               Mã đơn: <span className="font-semibold text-[#5A6D57]">{order.orderNumber}</span>
             </p>
           </div>
-          <div className="flex items-center gap-3 no-print">
+          <div className="flex items-center gap-3 no-print flex-wrap">
             <button
               onClick={handlePrint}
               className="flex items-center gap-2 px-4 py-2.5 border border-[#dfdfdf] bg-white hover:bg-[#F5F6F3] text-sm text-[#404040] font-medium transition-all rounded-lg hover:shadow-sm"
@@ -199,6 +282,7 @@ export default function OrderDetailPage() {
               <Printer size={16} />
               In hóa đơn
             </button>
+            <CancelButton />
             <button
               onClick={() => navigate('/')}
               className="flex items-center gap-2 px-4 py-2.5 bg-[#5A6D57] hover:bg-[#4A5D47] text-white text-sm font-medium transition-all rounded-lg hover:shadow-md"
@@ -469,7 +553,7 @@ export default function OrderDetailPage() {
             <ArrowLeft size={16} />
             Về trang chủ
           </button>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={handlePrint}
               className="flex items-center gap-2 px-6 py-3 border border-[#dfdfdf] bg-white hover:bg-[#F5F6F3] text-sm text-[#404040] font-medium transition-all rounded-lg hover:shadow-sm"
@@ -477,6 +561,7 @@ export default function OrderDetailPage() {
               <Printer size={16} />
               In hóa đơn
             </button>
+            <CancelButton size="lg" />
             <button
               onClick={() => navigate('/products')}
               className="flex items-center gap-2 px-6 py-3 bg-[#5A6D57] hover:bg-[#4A5D47] text-white text-sm font-medium transition-all rounded-lg hover:shadow-md"

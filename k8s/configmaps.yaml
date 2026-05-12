@@ -55,10 +55,11 @@ data:
   PROMOTION_SERVICE_URL: "http://promotion-service:8085"
   ORDER_SERVICE_URL: "http://order-service:8084"
   CART_SERVICE_URL: "http://cart-service:8083"
+  REVIEW_SERVICE_URL: "http://review-service:8086"
 
-  # ── AI Model (Ollama) ─────────────────────────────────────────────────────
-  OLLAMA_MODEL: "qwen2.5:7b"
-  OLLAMA_BASE_URL: "http://localhost:11434/v1"
+  # ── AI Model (DeepSeek via chiasegpu) ──────────────────────────────────────
+  AI_MODEL: "deepseek-3.2"
+  AI_BASE_URL: "https://llm.chiasegpu.vn/v1"
 
 ---
 # ============================================================================

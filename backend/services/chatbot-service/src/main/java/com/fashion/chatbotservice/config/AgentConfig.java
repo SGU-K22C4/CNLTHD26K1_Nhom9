@@ -9,7 +9,7 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.ollama.OllamaChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 // FallbackChatLanguageModel is defined in this package (custom implementation for LangChain4j 0.36.x)
 import dev.langchain4j.service.AiServices;
 import lombok.RequiredArgsConstructor;
@@ -25,8 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Wiring LangChain4j components: model, memory, tools → FashionAgent.
- * Uses Ollama as LLM provider.
- * Supports both local Ollama (localhost:11434) and cloud Ollama endpoints.
+ * Uses DeepSeek via OpenAI-compatible endpoint.
  */
 @Configuration
 @RequiredArgsConstructor
@@ -35,70 +34,36 @@ public class AgentConfig {
 
     private final ChatSessionRepository chatSessionRepository;
 
-    @Value("${ollama.base-url:https://syncopated-pedagogic-nadia.ngrok-free.dev/api/chat}")
+    @Value("${ai.base-url}")
     private String baseUrl;
 
-    @Value("${ollama.model:gpt-oss:20b}")
+    @Value("${ai.api-key}")
+    private String apiKey;
+
+    @Value("${ai.model:deepseek-3.2}")
     private String modelName;
 
-    @Value("${ollama.fallback-model:gpt-oss:20b}")
-    private String fallbackModelName;
+    @Value("${ai.timeout-seconds:120}")
+    private int timeoutSeconds;
 
-    @Value("${ollama.timeout-seconds:120}")
-    private int primaryTimeoutSeconds;
-
-    @Value("${ollama.fallback-timeout-seconds:90}")
-    private int fallbackTimeoutSeconds;
+    @Value("${ai.max-tokens:1000}")
+    private int maxTokens;
 
     @Value("${chatbot.memory.max-messages:20}")
     private int maxMessages;
 
     @Bean
     public ChatLanguageModel chatLanguageModel() {
-        String normalizedBaseUrl = normalizeOllamaBaseUrl(baseUrl);
-        Duration primaryTimeout = Duration.ofSeconds(Math.max(10, primaryTimeoutSeconds));
-        Duration fallbackTimeout = Duration.ofSeconds(Math.max(10, fallbackTimeoutSeconds));
-
-        // Ollama native API supports base host URL and also tolerates user-provided /api/chat URL via normalization.
-        ChatLanguageModel primaryModel = buildModel(normalizedBaseUrl, modelName, primaryTimeout);
-
-        if (fallbackModelName == null
-                || fallbackModelName.isBlank()
-                || fallbackModelName.equalsIgnoreCase(modelName)) {
-            return primaryModel;
-        }
-
-        ChatLanguageModel fallbackModel = buildModel(normalizedBaseUrl, fallbackModelName, fallbackTimeout);
-        return new FallbackChatLanguageModel(primaryModel, fallbackModel);
-    }
-
-    private ChatLanguageModel buildModel(String normalizedBaseUrl, String targetModel, Duration timeout) {
-        return OllamaChatModel.builder()
-                .baseUrl(normalizedBaseUrl)
-                .modelName(targetModel)
+        return OpenAiChatModel.builder()
+                .baseUrl(baseUrl)
+                .apiKey(apiKey)
+                .modelName(modelName)
                 .temperature(0.3)
-                .timeout(timeout)
+                .maxTokens(maxTokens)
+                .timeout(Duration.ofSeconds(timeoutSeconds))
+                .logRequests(true)
+                .logResponses(true)
                 .build();
-    }
-
-    private String normalizeOllamaBaseUrl(String rawBaseUrl) {
-        String normalized = rawBaseUrl == null || rawBaseUrl.isBlank()
-                ? "https://syncopated-pedagogic-nadia.ngrok-free.dev"
-                : rawBaseUrl.trim();
-
-        if (normalized.endsWith("/")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-
-        if (normalized.endsWith("/api/chat")) {
-            return normalized.substring(0, normalized.length() - "/api/chat".length());
-        }
-
-        if (normalized.endsWith("/v1")) {
-            return normalized.substring(0, normalized.length() - "/v1".length());
-        }
-
-        return normalized;
     }
 
     @Bean

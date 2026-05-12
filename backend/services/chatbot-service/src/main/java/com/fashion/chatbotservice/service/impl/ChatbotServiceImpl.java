@@ -3,6 +3,7 @@ package com.fashion.chatbotservice.service.impl;
 import com.fashion.chatbotservice.agent.FashionAgent;
 import com.fashion.chatbotservice.agent.FashionTools;
 import com.fashion.chatbotservice.agent.ResponseAssembler;
+import com.fashion.chatbotservice.agent.ResponseGuardrail;
 import com.fashion.chatbotservice.agent.ToolResultCollector;
 import com.fashion.chatbotservice.dto.ChatRequest;
 import com.fashion.chatbotservice.dto.ChatResponse;
@@ -50,6 +51,7 @@ public class ChatbotServiceImpl implements ChatbotService {
     private final ProfileEnrichmentService profileEnrichmentService;
     private final ChatAnalyticsService chatAnalyticsService;
     private final SizeAdvisorService sizeAdvisorService;
+    private final ResponseGuardrail responseGuardrail;
     private final WebClient webClient;
 
         private static final Set<String> GENERIC_DESCRIPTORS = Set.of(
@@ -61,6 +63,15 @@ public class ChatbotServiceImpl implements ChatbotService {
 
     @Value("${chatbot.use-agent:true}")
     private boolean useAgent;
+
+    @Value("${chatbot.product-service-url:http://localhost:8080}")
+    private String productServiceUrl;
+
+    @Value("${chatbot.promotion-service-url:http://localhost:8080}")
+    private String promotionServiceUrl;
+
+    @Value("${chatbot.order-service-url:http://localhost:8080}")
+    private String orderServiceUrl;
 
     @Value("${chatbot.cart-service-url:http://localhost:8080}")
     private String cartServiceUrl;
@@ -156,13 +167,8 @@ public class ChatbotServiceImpl implements ChatbotService {
             return explicitProductResponse;
         }
 
-        // Execute agent hoặc heuristic fallback
-        ChatResponse response;
-        if (useAgent) {
-            response = executeAgent(sessionId, request.getMessage(), session, collector);
-        } else {
-            response = executeHeuristicFallback(sessionId, request.getMessage(), session, collector);
-        }
+        // Execute Agentic AI — single path, no heuristic fallback
+        ChatResponse response = executeAgent(sessionId, request.getMessage(), session, collector);
 
         // Persist messages to MongoDB
         persistMessages(session, request.getMessage(), response);
@@ -228,25 +234,13 @@ public class ChatbotServiceImpl implements ChatbotService {
                     : contextBuilder.append("\n").append(message).toString();
 
             String llmReply = fashionAgent.chat(sessionId, enrichedMessage);
-            ChatResponse agentResponse = ResponseAssembler.build(sessionId, llmReply, collector, session.getPreferenceProfile());
-
-            // Safety net: nếu Agent trả về không có sản phẩm nhưng message rõ ràng là tìm sản phẩm
-            // → fallback sang heuristic (có logic parse giá tiếng Việt chính xác hơn)
-            if (collector.getProducts().isEmpty() && collector.getPromotions().isEmpty()) {
-                IntentClassifierService.IntentScore intent = intentClassifierService.classify(message);
-                if (IntentClassifierService.SEARCH_PRODUCT.equals(intent.intent())
-                        || IntentClassifierService.ASK_PROMOTION.equals(intent.intent())
-                        || IntentClassifierService.ASK_POLICY.equals(intent.intent())) {
-                    log.info("Agent returned empty results for likely {} intent, falling back to heuristic", intent.intent());
-                    ToolResultCollector freshCollector = new ToolResultCollector();
-                    return executeHeuristicFallback(sessionId, message, session, freshCollector);
-                }
-            }
-
-            return agentResponse;
+            // Layer 3: Backend Guardrail — validate LLM output against real data
+            String validatedReply = responseGuardrail.validateAndSanitize(llmReply, collector);
+            return ResponseAssembler.build(sessionId, validatedReply, collector, session.getPreferenceProfile());
         } catch (Exception ex) {
-            log.error("Agent execution failed, falling back to heuristic: {}", ex.getMessage());
-            return executeHeuristicFallback(sessionId, message, session, collector);
+            log.error("Agent execution failed: {}", ex.getMessage(), ex);
+            String errorReply = "Hệ thống đang xử lý, vui lòng thử lại sau ít giây ạ 🙏";
+            return ResponseAssembler.build(sessionId, errorReply, collector, session.getPreferenceProfile());
         } finally {
             fashionTools.clearCollector();
         }

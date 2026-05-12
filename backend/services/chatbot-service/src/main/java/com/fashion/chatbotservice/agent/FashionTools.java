@@ -1,4 +1,4 @@
-﻿package com.fashion.chatbotservice.agent;
+package com.fashion.chatbotservice.agent;
 
 import com.fashion.chatbotservice.dto.ChatResponse;
 import com.fashion.chatbotservice.model.ChatSession;
@@ -54,6 +54,9 @@ public class FashionTools {
 
     @Value("${chatbot.order-service-url:http://localhost:8080}")
     private String orderServiceUrl;
+
+    @Value("${chatbot.review-service-url:http://localhost:8088}")
+    private String reviewServiceUrl;
 
     private List<String> buildSearchCandidates(String search, boolean allowFallback) {
         String original = search == null ? "" : search.trim();
@@ -1163,6 +1166,321 @@ public class FashionTools {
         }
 
         return answer.toString().trim();
+    }
+
+    // ========== WISHLIST TOOL ==========
+
+    @Tool("""
+            Lấy danh sách sản phẩm yêu thích (wishlist) của user và đề xuất tư vấn.
+
+            GỌI KHI:
+            - User hỏi "wishlist của tôi", "sản phẩm tôi đã lưu", "đồ yêu thích của tôi"
+            - Intent: wishlist_recommendation
+            - User muốn tư vấn dựa trên sản phẩm đã quan tâm trước đó
+
+            KHÔNG GỌI KHI:
+            - User tìm kiếm sản phẩm mới (dùng searchProducts)
+            - User là guest (chưa đăng nhập)
+
+            CRITICAL:
+            - Chỉ tư vấn dựa trên sản phẩm có trong danh sách trả về.
+            - Không bịa thêm sản phẩm ngoài danh sách.
+            - Nếu danh sách rỗng, thông báo wishlist chưa có sản phẩm và hỏi nhu cầu mới.
+            """)
+    public String getWishlistRecommendations(
+            @P("User ID, lấy từ context phiên chat. Bắt buộc.") String userId) {
+        if (userId == null || userId.isBlank() || userId.startsWith("guest-")) {
+            return "Bạn cần đăng nhập để xem danh sách yêu thích nhé.";
+        }
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> page = webClient.get()
+                    .uri(productServiceUrl + "/api/v1/wishlists?page=0&size=10")
+                    .header("X-User-Id", userId)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(TOOL_TIMEOUT)
+                    .block();
+
+            List<ChatResponse.ProductSuggestion> products = mapProductPage(page);
+            if (collector() != null) collector().addProducts(products);
+
+            if (products.isEmpty()) {
+                return "Danh sách yêu thích của bạn hiện đang trống. Bạn muốn mình gợi ý một số sản phẩm phù hợp không?";
+            }
+
+            StringBuilder result = new StringBuilder("Bạn đang có " + products.size() + " sản phẩm trong wishlist:\n");
+            for (var p : products) {
+                result.append("- ").append(p.getName())
+                        .append(" | Giá: ").append(p.getPrice())
+                        .append(" | Size còn: ").append(String.join(", ", safeList(p.getAvailableSizes())));
+                if (safeList(p.getAvailableSizes()).isEmpty()) {
+                    result.append(" (⚠️ Hết hàng)");
+                }
+                result.append("\n");
+            }
+            result.append("\nBạn muốn mình tư vấn thêm về sản phẩm nào hoặc gợi ý outfit phối cùng không?");
+            return result.toString();
+        } catch (Exception ex) {
+            log.warn("getWishlistRecommendations failed: {}", ex.getMessage());
+            return "Mình chưa thể tải danh sách yêu thích lúc này. Bạn thử lại sau nhé!";
+        }
+    }
+
+    // ========== LOYALTY TOOL ==========
+
+    @Tool("""
+            Kiểm tra thông tin điểm thưởng và quyền lợi thành viên (loyalty) của user.
+
+            GỌI KHI:
+            - User hỏi về "điểm tích lũy", "điểm thưởng", "hạng thành viên", "quyền lợi thành viên"
+            - User hỏi "tôi đang ở hạng gì", "tôi còn bao nhiêu điểm"
+            - Intent: loyalty_benefit
+            - User muốn dùng điểm để giảm giá
+
+            KHÔNG GỌI KHI:
+            - User hỏi về khuyến mãi coupon thông thường (dùng getActivePromotions hoặc validateCoupon)
+            - User là guest
+
+            CRITICAL:
+            - Trả về đúng số điểm, tên hạng, % giảm giá từ dữ liệu thật.
+            - Không suy diễn quyền lợi ngoài dữ liệu trả về.
+            """)
+    public String getLoyaltyBenefits(
+            @P("User ID, lấy từ context phiên chat. Bắt buộc.") String userId) {
+        if (userId == null || userId.isBlank() || userId.startsWith("guest-")) {
+            return "Bạn cần đăng nhập để kiểm tra điểm thưởng và quyền lợi thành viên nhé.";
+        }
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> wallet = webClient.get()
+                    .uri(promotionServiceUrl + "/api/v1/promotions/loyalty/wallet")
+                    .header("X-User-Id", userId)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(TOOL_TIMEOUT)
+                    .block();
+
+            if (wallet == null) return "Không tìm thấy thông tin tài khoản điểm thưởng của bạn.";
+
+            String points       = stringValue(wallet.get("currentPoints"));
+            String tierName     = stringValue(wallet.get("tierName"));
+            String discount     = stringValue(wallet.get("tierDiscountPercent"));
+            String pointToVnd   = stringValue(wallet.get("pointToVnd"));
+            String totalSpending = stringValue(wallet.get("totalSpending"));
+
+            StringBuilder result = new StringBuilder();
+            result.append("Thông tin thành viên của bạn:\n");
+            result.append("- Hạng thành viên: ").append(tierName.isBlank() ? "Chưa xếp hạng" : tierName).append("\n");
+            result.append("- Điểm tích lũy hiện tại: ").append(points).append(" điểm\n");
+            if (!discount.isBlank() && !discount.equals("0")) {
+                result.append("- Ưu đãi hạng: Giảm ").append(discount).append("% mỗi đơn hàng\n");
+            }
+            if (!pointToVnd.isBlank() && !pointToVnd.equals("0")) {
+                result.append("- Quy đổi: 1 điểm = ").append(pointToVnd).append(" VND\n");
+            }
+            if (!totalSpending.isBlank()) {
+                result.append("- Tổng chi tiêu: ").append(totalSpending).append(" VND\n");
+            }
+            return result.toString().trim();
+        } catch (Exception ex) {
+            log.warn("getLoyaltyBenefits failed: {}", ex.getMessage());
+            return "Mình chưa thể kiểm tra thông tin điểm thưởng lúc này. Bạn thử lại sau nhé!";
+        }
+    }
+
+    // ========== REVIEW TOOL ==========
+
+    @Tool("""
+            Lấy đánh giá và rating của sản phẩm từ khách hàng đã mua.
+
+            GỌI KHI:
+            - User hỏi "sản phẩm X có review không", "đánh giá của sản phẩm X", "rating của X"
+            - User muốn biết chất lượng thực tế trước khi mua
+            - Intent: cần thông tin chất lượng sản phẩm cụ thể
+
+            KHÔNG GỌI KHI:
+            - User chưa cung cấp product ID hoặc tên sản phẩm cụ thể
+            - User hỏi chung về chất lượng (không có sản phẩm cụ thể)
+
+            CRITICAL:
+            - Phải có productId mới gọi tool này.
+            - Trả về đúng điểm rating, số lượng review từ dữ liệu thật.
+            - Không bịa nhận xét hoặc rating.
+            """)
+    public String getProductReviews(
+            @P("ID sản phẩm cần xem đánh giá. Bắt buộc.") String productId) {
+        if (productId == null || productId.isBlank()) {
+            return "Bạn cho mình biết tên hoặc ID sản phẩm cần xem đánh giá nhé.";
+        }
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> stats = webClient.get()
+                    .uri(reviewServiceUrl + "/api/v1/reviews/product/" + productId + "/stats")
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(TOOL_TIMEOUT)
+                    .block();
+
+            if (stats == null) return "Sản phẩm này chưa có đánh giá nào.";
+
+            String avgRating  = stringValue(stats.get("averageRating"));
+            String totalCount = stringValue(stats.get("totalReviews"));
+
+            if (totalCount.equals("0") || totalCount.isBlank()) {
+                return "Sản phẩm này chưa có đánh giá nào từ khách hàng. Bạn có thể là người đầu tiên review nhé!";
+            }
+
+            StringBuilder result = new StringBuilder();
+            result.append("Đánh giá sản phẩm:\n");
+            result.append("- Điểm trung bình: ⭐ ").append(avgRating).append("/5\n");
+            result.append("- Số lượng đánh giá: ").append(totalCount).append(" review\n");
+
+            // Star distribution if available
+            @SuppressWarnings("unchecked")
+            Map<String, Object> dist = (Map<String, Object>) stats.get("starDistribution");
+            if (dist != null && !dist.isEmpty()) {
+                result.append("- Phân bổ: ");
+                for (int star = 5; star >= 1; star--) {
+                    Object count = dist.get(String.valueOf(star));
+                    if (count != null) {
+                        result.append(star).append("★:").append(count).append(" ");
+                    }
+                }
+                result.append("\n");
+            }
+            return result.toString().trim();
+        } catch (Exception ex) {
+            log.warn("getProductReviews failed: {}", ex.getMessage());
+            return "Mình chưa thể tải đánh giá sản phẩm lúc này. Bạn thử lại sau nhé!";
+        }
+    }
+
+    // ========== COMPARE TOOL ==========
+
+    @Tool("""
+            So sánh 2 sản phẩm về giá, size, màu sắc để giúp user lựa chọn.
+
+            GỌI KHI:
+            - User hỏi "so sánh A và B", "A vs B cái nào tốt hơn", "A khác B ở điểm nào"
+            - Intent: product_compare
+
+            KHÔNG GỌI KHI:
+            - User chỉ hỏi về 1 sản phẩm
+            - User chưa nêu rõ cả 2 tên sản phẩm
+
+            CRITICAL:
+            - Cần có cả 2 tên sản phẩm mới gọi tool này.
+            - Chỉ so sánh dữ liệu thật từ hệ thống.
+            - Không đưa ra kết luận "sản phẩm X tốt hơn" nếu không có đủ dữ liệu đánh giá.
+            """)
+    public String compareProducts(
+            @P("Tên hoặc từ khóa sản phẩm thứ nhất") String productA,
+            @P("Tên hoặc từ khóa sản phẩm thứ hai") String productB) {
+        if (productA == null || productA.isBlank() || productB == null || productB.isBlank()) {
+            return "Bạn cho mình biết tên 2 sản phẩm muốn so sánh nhé. VD: 'So sánh áo thun Uniqlo và áo thun Zara'";
+        }
+        try {
+            // Search both products in parallel-style (sequential for simplicity)
+            ToolResultCollector tempCollectorA = new ToolResultCollector();
+            ToolResultCollector tempCollectorB = new ToolResultCollector();
+
+            List<ChatResponse.ProductSuggestion> resultsA = executeSearch(productA, null, null);
+            List<ChatResponse.ProductSuggestion> resultsB = executeSearch(productB, null, null);
+
+            ChatResponse.ProductSuggestion a = resultsA.isEmpty() ? null : resultsA.get(0);
+            ChatResponse.ProductSuggestion b = resultsB.isEmpty() ? null : resultsB.get(0);
+
+            if (a == null && b == null) {
+                return "Mình không tìm thấy cả 2 sản phẩm '" + productA + "' và '" + productB + "' trong hệ thống.";
+            }
+            if (a == null) {
+                return "Mình không tìm thấy sản phẩm '" + productA + "' trong hệ thống. Bạn kiểm tra lại tên nhé.";
+            }
+            if (b == null) {
+                return "Mình không tìm thấy sản phẩm '" + productB + "' trong hệ thống. Bạn kiểm tra lại tên nhé.";
+            }
+
+            // Add both to collector for frontend rendering
+            if (collector() != null) {
+                collector().addProducts(List.of(a, b));
+            }
+
+            StringBuilder result = new StringBuilder("So sánh 2 sản phẩm:\n\n");
+            result.append("1️⃣ ").append(a.getName()).append("\n");
+            result.append("   Giá: ").append(a.getPrice()).append("\n");
+            result.append("   Size còn: ").append(String.join(", ", safeList(a.getAvailableSizes()))).append("\n");
+            result.append("   Màu: ").append(String.join(", ", safeList(a.getAvailableColors()))).append("\n");
+
+            result.append("\n2️⃣ ").append(b.getName()).append("\n");
+            result.append("   Giá: ").append(b.getPrice()).append("\n");
+            result.append("   Size còn: ").append(String.join(", ", safeList(b.getAvailableSizes()))).append("\n");
+            result.append("   Màu: ").append(String.join(", ", safeList(b.getAvailableColors()))).append("\n");
+
+            return result.toString().trim();
+        } catch (Exception ex) {
+            log.warn("compareProducts failed: {}", ex.getMessage());
+            return "Mình chưa thể so sánh sản phẩm lúc này. Bạn thử lại sau nhé!";
+        }
+    }
+
+    // ========== SAVE PREFERENCE TOOL ==========
+
+    @Tool("""
+            Lưu sở thích mua sắm của user vào profile để cá nhân hóa tư vấn lần sau.
+
+            GỌI KHI:
+            - User xác nhận rõ sở thích: "tôi thích màu đen", "tôi hay mặc size M", "ngân sách của tôi khoảng 500k"
+            - User cung cấp thông tin về phong cách: "tôi thích style minimal", "tôi thích oversized"
+            - Phát hiện preference mới từ hành vi chat có thể dùng lâu dài
+
+            KHÔNG GỌI KHI:
+            - User chỉ hỏi thông tin tạm thời (VD: tìm áo màu đen cho buổi này)
+            - Preference chỉ liên quan đến 1 lần mua, không mang tính lâu dài
+            - Thông tin nhạy cảm hoặc không liên quan mua sắm
+
+            CRITICAL:
+            - Chỉ lưu: size, màu yêu thích, màu không thích, phong cách, ngân sách, category yêu thích, fit, thương hiệu quan tâm.
+            - Không lưu thông tin cá nhân nhạy cảm (địa chỉ, số điện thoại, v.v.).
+            """)
+    public String saveUserPreference(
+            @P("Loại sở thích: 'size', 'color', 'style', 'budget', 'category', 'fit', 'brand'") String preferenceType,
+            @P("Giá trị sở thích. VD: size='M', color='đen', style='minimal', budget='500000'") String preferenceValue) {
+        if (preferenceType == null || preferenceType.isBlank() || preferenceValue == null || preferenceValue.isBlank()) {
+            return "Không đủ thông tin để lưu sở thích.";
+        }
+
+        ChatSession.PreferenceProfile profile = preferenceProfile();
+        if (profile == null) {
+            log.warn("saveUserPreference called but no preferenceProfile in context");
+            return "Không thể lưu sở thích lúc này.";
+        }
+
+        String type = preferenceType.toLowerCase().trim();
+        String value = preferenceValue.trim();
+
+        switch (type) {
+            case "size" -> profile.getPreferredSizes().add(value.toUpperCase());
+            case "color" -> profile.getPreferredColors().add(value);
+            case "style" -> profile.setStyle(value);
+            case "budget" -> {
+                // Accept both "500k" and "500000"
+                profile.setBudget(value);
+            }
+            case "category" -> profile.getPreferredCategories().add(value);
+            case "fit" -> profile.getFocusTags().add("fit:" + value);
+            case "brand" -> profile.getFocusTags().add("brand:" + value);
+            default -> {
+                log.debug("Unknown preference type '{}', skipping save", type);
+                return "Mình chưa hỗ trợ lưu loại sở thích '" + preferenceType + "' này.";
+            }
+        }
+
+        log.info("Saved user preference: {}={}", type, value);
+        return "Đã lưu sở thích của bạn: " + type + " = " + value + ". Mình sẽ ưu tiên gợi ý phù hợp hơn trong các lần tới!";
     }
 
     // ========== PRIVATE HELPERS ==========

@@ -234,6 +234,8 @@ jobs:
           VNPAY_HASH_SECRET: ${{ secrets.VNPAY_HASH_SECRET }}
           OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          REVIEW_MONGODB_URI: ${{ secrets.REVIEW_MONGODB_URI }}
+          CHATBOT_MONGODB_URI: ${{ secrets.CHATBOT_MONGODB_URI }}
           KONG_TLS_CRT: ${{ secrets.KONG_TLS_CRT }}
           KONG_TLS_KEY: ${{ secrets.KONG_TLS_KEY }}
         run: |
@@ -247,6 +249,16 @@ jobs:
             exit 1
           fi
 
+          if [ -z "$REVIEW_MONGODB_URI" ]; then
+            echo "::error::Missing GitHub secret REVIEW_MONGODB_URI"
+            exit 1
+          fi
+
+          if [ -z "$CHATBOT_MONGODB_URI" ]; then
+            echo "::error::Missing GitHub secret CHATBOT_MONGODB_URI"
+            exit 1
+          fi
+
           kubectl -n "$K8S_NAMESPACE" create secret generic fashion-secrets \
             --from-literal=MYSQL_ROOT_PASSWORD="$MYSQL_ROOT_PASSWORD" \
             --from-literal=JWT_SECRET="$JWT_SECRET" \
@@ -256,6 +268,8 @@ jobs:
             --from-literal=VNPAY_HASH_SECRET="$VNPAY_HASH_SECRET" \
             --from-literal=OLLAMA_API_KEY="$OLLAMA_API_KEY" \
             --from-literal=AI_API_KEY="$AI_API_KEY" \
+            --from-literal=REVIEW_MONGODB_URI="$REVIEW_MONGODB_URI" \
+            --from-literal=CHATBOT_MONGODB_URI="$CHATBOT_MONGODB_URI" \
             --dry-run=client -o yaml | kubectl apply -f -
 
           # Recreate the origin TLS secret when certificate material is available in GitHub.

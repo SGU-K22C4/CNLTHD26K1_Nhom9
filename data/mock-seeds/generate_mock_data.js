@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
 
 // 1. Load Product IDs
@@ -95,8 +96,11 @@ for (let i = 1; i <= numUsers; i++) {
     }
 }
 
-fs.writeFileSync('mock_users.sql', sqlUsers);
-fs.writeFileSync('mock_orders.sql', sqlOrders + sqlOrderItems);
-fs.writeFileSync('mock_reviews.js', jsReviews);
+const outputDir = __dirname;
+
+// Keep generated mock artifacts colocated with this script so seed assets stay grouped.
+fs.writeFileSync(path.join(outputDir, 'mock_users.sql'), sqlUsers);
+fs.writeFileSync(path.join(outputDir, 'mock_orders.sql'), sqlOrders + sqlOrderItems);
+fs.writeFileSync(path.join(outputDir, 'mock_reviews.js'), jsReviews);
 
 console.log("Mock data generated successfully!");

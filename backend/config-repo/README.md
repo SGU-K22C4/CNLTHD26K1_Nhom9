@@ -11,8 +11,11 @@
 
 ### A. Chuẩn bị Hạ Tầng (Database rỗng)
 1. Mở Terminal, đi vào dự án: `cd docker`
-2. Chạy lệnh: `docker-compose up -d mysql redis mongo kong` (KHÔNG build code Java bằng Docker ở Local).
-3. (Hoặc nếu máy cấu hình yếu) Bạn có thể dùng XAMPP / MongoDB Compass mở ở local và tự tạo nhanh các Database: `fashion_user_db`, `fashion_product_db`,... có tên khớp với trong thư mục này.
+2. Chạy lệnh: `docker-compose up -d mysql redis kong` (KHÔNG build code Java bằng Docker ở Local).
+3. Với MongoDB:
+   - `review-service` và `chatbot-service` ở môi trường `dev` đang dùng MongoDB Atlas shared để đồng bộ dữ liệu giữa các developer.
+   - Local stack không còn dựng MongoDB container mặc định.
+4. (Hoặc nếu máy cấu hình yếu) Bạn có thể dùng XAMPP mở ở local và tự tạo nhanh các MySQL Database: `fashion_user_db`, `fashion_product_db`,... có tên khớp với trong thư mục này.
 
 ### B. Khởi động Source Code 
 Quy tắc vàng: **LUÔN BẬT `ConfigServiceApplication` (Port 8888) TRƯỚC TIÊN.**

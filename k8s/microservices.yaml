@@ -572,8 +572,8 @@ spec:
               value: "8086"
             - name: SPRING_DATA_MONGODB_URI
               valueFrom:
-                configMapKeyRef:
-                  name: fashion-config
+                secretKeyRef:
+                  name: fashion-secrets
                   key: REVIEW_MONGODB_URI
             - name: JWT_SECRET
               valueFrom:
@@ -659,8 +659,8 @@ spec:
               value: "8087"
             - name: SPRING_DATA_MONGODB_URI
               valueFrom:
-                configMapKeyRef:
-                  name: fashion-config
+                secretKeyRef:
+                  name: fashion-secrets
                   key: CHATBOT_MONGODB_URI
             - name: AI_API_KEY
               valueFrom:

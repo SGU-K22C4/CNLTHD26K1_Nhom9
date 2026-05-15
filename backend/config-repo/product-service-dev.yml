@@ -1,5 +1,0 @@
-spring:
-  datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3307/fashion_product_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
-    username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:huytran123}

@@ -30,8 +30,9 @@ data:
   SPRING_DATA_REDIS_PORT: "6379"
 
   # ── MongoDB (Review + Chatbot) ────────────────────────────────────────────
-  REVIEW_MONGODB_URI: "mongodb://mongo:27017/fashion_review_db"
-  CHATBOT_MONGODB_URI: "mongodb://mongo:27017/fashion_chatbot_db"
+  # MongoDB Atlas URIs are intentionally NOT stored in this ConfigMap because
+  # they contain credentials. review-service and chatbot-service must read
+  # REVIEW_MONGODB_URI / CHATBOT_MONGODB_URI from the `fashion-secrets` Secret.
 
   # ── Kafka ─────────────────────────────────────────────────────────────────
   KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"

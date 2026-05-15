@@ -5,6 +5,7 @@ import com.fashion.chatbotservice.agent.FashionTools;
 import com.fashion.chatbotservice.agent.ResponseAssembler;
 import com.fashion.chatbotservice.agent.ResponseGuardrail;
 import com.fashion.chatbotservice.agent.ToolResultCollector;
+import com.fashion.chatbotservice.config.AgentConfig;
 import com.fashion.chatbotservice.dto.ChatRequest;
 import com.fashion.chatbotservice.dto.ChatResponse;
 import com.fashion.chatbotservice.dto.SessionResponse;
@@ -46,6 +47,7 @@ public class ChatbotServiceImpl implements ChatbotService {
 
     private final FashionAgent fashionAgent;
     private final FashionTools fashionTools;
+    private final AgentConfig agentConfig;
     private final ChatSessionRepository chatSessionRepository;
     private final IntentClassifierService intentClassifierService;
     private final ProfileEnrichmentService profileEnrichmentService;
@@ -233,16 +235,48 @@ public class ChatbotServiceImpl implements ChatbotService {
                     ? message
                     : contextBuilder.append("\n").append(message).toString();
 
-            String llmReply = fashionAgent.chat(sessionId, enrichedMessage);
+            log.info("Gọi Agent cho session: {}, message length: {}", sessionId, enrichedMessage.length());
+            String llmReply = invokeAgentWithRetry(sessionId, enrichedMessage);
+            
+            if (llmReply == null || llmReply.isBlank()) {
+                log.warn("Agent liên tục lỗi cho session: {}. Chuyển sang chế độ Heuristic Fallback.", sessionId);
+                ChatResponse fallbackResponse = executeHeuristicFallback(sessionId, message, session, collector);
+                return fallbackResponse;
+            }
+
             // Layer 3: Backend Guardrail — validate LLM output against real data
             String validatedReply = responseGuardrail.validateAndSanitize(llmReply, collector);
             return ResponseAssembler.build(sessionId, validatedReply, collector, session.getPreferenceProfile());
-        } catch (Exception ex) {
-            log.error("Agent execution failed: {}", ex.getMessage(), ex);
-            String errorReply = "Hệ thống đang xử lý, vui lòng thử lại sau ít giây ạ 🙏";
+        } catch (Throwable ex) {
+            log.error("LỖI NGHIÊM TRỌNG khi thực thi Agent cho session: {}. Type: {}. Chi tiết: {}",
+                    sessionId, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            String errorReply = "Mình gặp chút trục trặc khi xử lý thông tin. Bạn thử nhắn lại sau vài giây nhé! 🙏";
             return ResponseAssembler.build(sessionId, errorReply, collector, session.getPreferenceProfile());
         } finally {
             fashionTools.clearCollector();
+        }
+    }
+
+    /**
+     * Retry agent call once on NullPointerException from LangChain4j.
+     * NPE occurs when DeepSeek returns tool_call with null content → corrupts ChatMemory.
+     * Fix: clear corrupted memory before retry so LangChain4j starts with a clean state.
+     */
+    private String invokeAgentWithRetry(String sessionId, String message) {
+        try {
+            return fashionAgent.chat(sessionId, message);
+        } catch (NullPointerException npe) {
+            log.warn("Agent NPE for session {}, clearing corrupted memory and retrying. Cause: {}",
+                    sessionId, npe.getMessage());
+            // Clear the corrupted memory so next call starts fresh
+            agentConfig.clearSessionMemory(sessionId);
+            try {
+                Thread.sleep(300);
+                return fashionAgent.chat(sessionId, message);
+            } catch (Throwable retryEx) {
+                log.error("Agent retry failed for session {} after memory clear: {}", sessionId, retryEx.getMessage());
+                return null; // Return null → will be caught upstream as empty reply
+            }
         }
     }
 

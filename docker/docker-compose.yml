@@ -228,10 +228,11 @@ services:
     restart: unless-stopped
     environment:
       - SERVER_PORT=8086
-      - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/fashion_review_db
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
-      - SPRING_CLOUD_CONFIG_ENABLED=false
+      - SPRING_CLOUD_CONFIG_ENABLED=true
+
       - ORDER_SERVICE_URL=http://order-service:8084
       - PROMOTION_SERVICE_URL=http://promotion-service:8085
     depends_on:
@@ -246,13 +247,14 @@ services:
     restart: unless-stopped
     environment:
       - SERVER_PORT=8087
-      - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/fashion_chatbot_db
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
       - AI_API_KEY=${AI_API_KEY:?AI_API_KEY is required}
       - AI_MODEL=${AI_MODEL:-deepseek-3.2}
       - AI_BASE_URL=${AI_BASE_URL:-https://llm.chiasegpu.vn/v1}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
-      - SPRING_CLOUD_CONFIG_ENABLED=false
+      - SPRING_CLOUD_CONFIG_ENABLED=true
+
       - PRODUCT_SERVICE_URL=http://product-service:8082
       - PROMOTION_SERVICE_URL=http://promotion-service:8085
       - ORDER_SERVICE_URL=http://order-service:8084

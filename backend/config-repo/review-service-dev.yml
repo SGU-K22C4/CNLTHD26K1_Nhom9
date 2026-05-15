@@ -1,0 +1,4 @@
+spring:
+  data:
+    mongodb:
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb+srv://monimal1:monimal123@monimal1.meiqplv.mongodb.net/fashion_review_db?retryWrites=true&w=majority&appName=monimal1}

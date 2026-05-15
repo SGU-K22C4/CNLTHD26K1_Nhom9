@@ -68,31 +68,39 @@ public class ResponseGuardrail {
     }
 
     private boolean isPriceValidInContext(String priceText, ToolResultCollector collector) {
-        // Simple heuristic: extract digits and check if any product has this numeric value
         String numericOnly = priceText.replaceAll("[^\\d]", "");
         if (numericOnly.isBlank()) return true;
 
-        long priceVal = Long.parseLong(numericOnly);
-        // If it's a "k" price like 500k -> 500000
-        if (priceText.toLowerCase().contains("k") && priceVal < 1000) priceVal *= 1000;
+        try {
+            long priceVal = Long.parseLong(numericOnly);
+            if (priceText.toLowerCase().contains("k") && priceVal < 1000) priceVal *= 1000;
+            final long target = priceVal;
 
-        final long target = priceVal;
-        
-        // Check products
-        boolean inProducts = collector.getProducts().stream()
-                .anyMatch(p -> {
-                    String pPrice = p.getPrice().replaceAll("[^\\d]", "");
-                    return !pPrice.isBlank() && Long.parseLong(pPrice) == target;
-                });
-        
-        if (inProducts) return true;
+            boolean inProducts = collector.getProducts().stream()
+                    .anyMatch(p -> {
+                        try {
+                            String pPrice = p.getPrice().replaceAll("[^\\d]", "");
+                            return !pPrice.isBlank() && Long.parseLong(pPrice) == target;
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    });
 
-        // Check promotions (minOrderAmount etc)
-        return collector.getPromotions().stream()
-                .anyMatch(promo -> {
-                    String minAmt = promo.getMinOrderAmount().replaceAll("[^\\d]", "");
-                    return !minAmt.isBlank() && Long.parseLong(minAmt) == target;
-                });
+            if (inProducts) return true;
+
+            return collector.getPromotions().stream()
+                    .anyMatch(promo -> {
+                        try {
+                            String minAmt = promo.getMinOrderAmount().replaceAll("[^\\d]", "");
+                            return !minAmt.isBlank() && Long.parseLong(minAmt) == target;
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    });
+        } catch (Exception ex) {
+            log.warn("Guardrail: Failed to parse price '{}', skipping validation", priceText);
+            return true; // Bỏ qua nếu không parse được, tránh làm sập request
+        }
     }
 
     private String validateStockStatus(String reply, ToolResultCollector collector) {

@@ -342,6 +342,7 @@ public class FashionTools {
             @P("Màu sắc nếu user có đề cập (VD: 'đen', 'trắng'). null nếu không đề cập.") String color,
             @P("Size nếu user có đề cập (VD: 'S', 'M', 'L', 'XL'). null nếu không đề cập.") String size) {
         try {
+            log.info("Tool: browseProducts(min={}, max={}, color={}, size={})", minPrice, maxPrice, color, size);
             List<ChatResponse.ProductSuggestion> suggestions = executeBrowse(minPrice, maxPrice, 12);
             suggestions = applyPersonalization(suggestions, preferenceProfile(), minPrice, maxPrice);
             suggestions = applyColorFilter(suggestions, color);
@@ -367,8 +368,8 @@ public class FashionTools {
                         .append("\n");
             }
             return result.toString();
-        } catch (Exception ex) {
-            log.warn("browseProducts failed: {}", ex.getMessage());
+        } catch (Throwable ex) {
+            log.error("browseProducts failed", ex);
             return "Dịch vụ sản phẩm tạm thời không phản hồi. Vui lòng thử lại sau.";
         }
     }
@@ -385,6 +386,7 @@ public class FashionTools {
             @P("Nhóm loại đồ muốn xem (VD: 'áo', 'quần', 'váy', 'phụ kiện'). null nếu muốn xem tất cả")
             String groupHint) {
         try {
+            log.info("Tool: listProductTypes(groupHint={})", groupHint);
             List<String> allTypes = collectAllProductTypes(20, 200);
             if (allTypes.isEmpty()) {
                 return "Hiện chưa có sản phẩm nào trong hệ thống.";
@@ -404,8 +406,8 @@ public class FashionTools {
             }
 
             return formatGroupedTypeList(filteredTypes);
-        } catch (Exception ex) {
-            log.warn("listProductTypes failed: {}", ex.getMessage());
+        } catch (Throwable ex) {
+            log.error("listProductTypes failed", ex);
             return "Mình chưa thể lấy danh mục sản phẩm lúc này. Bạn thử lại sau nhé!";
         }
     }
@@ -421,6 +423,7 @@ public class FashionTools {
         }
 
         try {
+            log.info("Tool: searchProductsInternal(search={}, allowFallback={})", search, allowFallback);
             List<ChatResponse.ProductSuggestion> suggestions = new ArrayList<>();
             Set<String> seenProductKeys = new LinkedHashSet<>();
             List<String> candidates = buildSearchCandidates(search, allowFallback);
@@ -483,8 +486,8 @@ public class FashionTools {
                 result.append("\n");
             }
             return result.toString();
-        } catch (Exception ex) {
-            log.warn("searchProducts failed: {}", ex.getMessage());
+        } catch (Throwable ex) {
+            log.error("searchProductsInternal failed", ex);
             return "Dịch vụ sản phẩm tạm thời không phản hồi. Vui lòng thử lại sau.";
         }
     }
@@ -978,6 +981,7 @@ public class FashionTools {
     public String checkOrderByNumber(
             @P("Mã đơn hàng, VD: ORD-1713200000000") String orderNumber) {
         try {
+            log.info("Tool: checkOrderByNumber(orderNumber={})", orderNumber);
             @SuppressWarnings("unchecked")
             Map<String, Object> order = webClient.get()
                     .uri(orderServiceUrl + "/api/v1/orders/by-number/{number}", orderNumber)
@@ -993,8 +997,8 @@ public class FashionTools {
             String totalAmount = stringValue(order.get("totalAmount"));
 
             return "Đơn hàng " + orderNumber + ": trạng thái " + status + ", tổng tiền " + totalAmount + " VND.";
-        } catch (Exception ex) {
-            log.warn("checkOrderByNumber failed: {}", ex.getMessage());
+        } catch (Throwable ex) {
+            log.error("checkOrderByNumber failed", ex);
             return "Dịch vụ đơn hàng tạm thời không phản hồi. Vui lòng thử lại sau.";
         }
     }
@@ -1014,6 +1018,7 @@ public class FashionTools {
             @P("Mã coupon") String code,
             @P("Giá trị đơn hàng (VND)") Long orderAmount) {
         try {
+            log.info("Tool: validateCoupon(code={}, amount={})", code, orderAmount);
             @SuppressWarnings("unchecked")
             Map<String, Object> result = webClient.post()
                     .uri(promotionServiceUrl + "/api/v1/promotions/validate?code={code}&orderAmount={amount}",
@@ -1033,8 +1038,8 @@ public class FashionTools {
                 String reason = stringValue(result.get("message"));
                 return "Mã " + code + " không hợp lệ: " + (reason.isBlank() ? "không đạt điều kiện" : reason);
             }
-        } catch (Exception ex) {
-            log.warn("validateCoupon failed: {}", ex.getMessage());
+        } catch (Throwable ex) {
+            log.error("validateCoupon failed", ex);
             return "Dịch vụ khuyến mãi tạm thời không phản hồi. Vui lòng thử lại sau.";
         }
     }
@@ -1045,6 +1050,7 @@ public class FashionTools {
             """)
     public String getActivePromotions() {
         try {
+            log.info("Tool: getActivePromotions()");
             @SuppressWarnings("unchecked")
             Object payload = webClient.get()
                     .uri(promotionServiceUrl + "/api/v1/promotions/active")
@@ -1067,8 +1073,8 @@ public class FashionTools {
                         .append("\n");
             }
             return result.toString();
-        } catch (Exception ex) {
-            log.warn("getActivePromotions failed: {}", ex.getMessage());
+        } catch (Throwable ex) {
+            log.error("getActivePromotions failed", ex);
             return "Dịch vụ khuyến mãi tạm thời không phản hồi. Vui lòng thử lại sau.";
         }
     }
@@ -1091,24 +1097,30 @@ public class FashionTools {
             @P("Vòng eo (cm), null nếu không có") Integer waistCm,
             @P("Vòng hông (cm), null nếu không có") Integer hipCm,
             @P("Loại đồ: 'top' (áo) hoặc 'bottom' (quần/váy)") String garmentType) {
+        try {
+            log.info("Tool: consultSize(h={}, w={}, c={}, w={}, h={}, type={})", 
+                heightCm, weightKg, chestCm, waistCm, hipCm, garmentType);
+            SizeAdvisorService.Measurements m = new SizeAdvisorService.Measurements(
+                    heightCm, weightKg, chestCm, waistCm, hipCm);
 
-        SizeAdvisorService.Measurements m = new SizeAdvisorService.Measurements(
-                heightCm, weightKg, chestCm, waistCm, hipCm);
+            List<String> missing = m.missingFields();
+            if (!m.hasMinimumData()) {
+                if (collector() != null) collector().addMissingFields(missing);
+                return "Cần thêm thông tin: " + String.join(", ", missing) + " để tư vấn size chính xác.";
+            }
 
-        List<String> missing = m.missingFields();
-        if (!m.hasMinimumData()) {
-            if (collector() != null) collector().addMissingFields(missing);
-            return "Cần thêm thông tin: " + String.join(", ", missing) + " để tư vấn size chính xác.";
+            SizeAdvisorService.GarmentType type = "bottom".equalsIgnoreCase(garmentType)
+                    ? SizeAdvisorService.GarmentType.BOTTOM
+                    : SizeAdvisorService.GarmentType.TOP;
+
+            SizeAdvisorService.SizeResult result = sizeAdvisorService.suggest(m, type);
+            if (collector() != null) collector().setSizeRecommendation(result.recommendedSize());
+
+            return "Gợi ý size " + result.recommendedSize() + ". " + result.note();
+        } catch (Throwable ex) {
+            log.error("consultSize failed", ex);
+            return "Mình gặp chút trục trặc khi tính toán size. Bạn thử cung cấp lại số đo nhé!";
         }
-
-        SizeAdvisorService.GarmentType type = "bottom".equalsIgnoreCase(garmentType)
-                ? SizeAdvisorService.GarmentType.BOTTOM
-                : SizeAdvisorService.GarmentType.TOP;
-
-        SizeAdvisorService.SizeResult result = sizeAdvisorService.suggest(m, type);
-        if (collector() != null) collector().setSizeRecommendation(result.recommendedSize());
-
-        return "Gợi ý size " + result.recommendedSize() + ". " + result.note();
     }
 
     // ========== OUTFIT SUGGESTION ==========
@@ -1121,19 +1133,23 @@ public class FashionTools {
     public String suggestOutfit(
             @P("Mùa hoặc dịp: 'he', 'dong', 'thu', 'xuan', 'di_lam', 'di_tiec', 'du_lich'") String occasion,
             @P("Phong cách (tùy chọn): 'thanh_lich', 'casual', 'sporty'") String style) {
+        try {
+            log.info("Tool: suggestOutfit(occasion={}, style={})", occasion, style);
+            List<String> queries = outfitRuleEngine.buildQueries(occasion, style);
+            StringBuilder allResults = new StringBuilder();
 
-        List<String> queries = outfitRuleEngine.buildQueries(occasion, style);
+            for (String query : queries) {
+                String toolResult = searchProducts(query, null, null, null, null);
+                allResults.append(toolResult).append("\n");
+            }
 
-        StringBuilder allResults = new StringBuilder();
-
-        for (String query : queries) {
-            String toolResult = searchProducts(query, null, null, null, null);
-            allResults.append(toolResult).append("\n");
+            return "Gợi ý outfit cho " + occasion
+                    + (style != null ? " (phong cách " + style + ")" : "")
+                    + ":\n" + allResults;
+        } catch (Throwable ex) {
+            log.error("suggestOutfit failed", ex);
+            return "Mình chưa thể gợi ý trang phục lúc này. Bạn thử lại sau nhé!";
         }
-
-        return "Gợi ý outfit cho " + occasion
-                + (style != null ? " (phong cách " + style + ")" : "")
-                + ":\n" + allResults;
     }
 
     // ========== KNOWLEDGE ==========
@@ -1146,26 +1162,31 @@ public class FashionTools {
             """)
     public String searchKnowledge(
             @P("Câu hỏi hoặc từ khóa tìm kiếm") String query) {
+        try {
+            log.info("Tool: searchKnowledge(query={})", query);
+            List<KnowledgeBaseService.SearchResult> results = knowledgeBaseService.search(query);
 
-        List<KnowledgeBaseService.SearchResult> results = knowledgeBaseService.search(query);
-
-        if (results.isEmpty()) {
-            return "Không tìm thấy thông tin liên quan trong knowledge base. "
-                    + "Bạn có thể liên hệ CSKH để được hỗ trợ trực tiếp.";
-        }
-
-        StringBuilder answer = new StringBuilder();
-        for (var result : results) {
-            answer.append(result.content()).append("\n");
-            answer.append("[Nguồn: ").append(result.title())
-                    .append(" (").append(result.source()).append(")]\n\n");
-
-            if (collector() != null) {
-                collector().addKnowledgeSource(result.title(), result.source(), result.score());
+            if (results.isEmpty()) {
+                return "Không tìm thấy thông tin liên quan trong kiến thức của shop. "
+                        + "Bạn có thể liên hệ CSKH để được hỗ trợ trực tiếp.";
             }
-        }
 
-        return answer.toString().trim();
+            StringBuilder answer = new StringBuilder();
+            for (var result : results) {
+                answer.append(result.content()).append("\n");
+                answer.append("[Nguồn: ").append(result.title())
+                        .append(" (").append(result.source()).append(")]\n\n");
+
+                if (collector() != null) {
+                    collector().addKnowledgeSource(result.title(), result.source(), result.score());
+                }
+            }
+
+            return answer.toString().trim();
+        } catch (Throwable ex) {
+            log.error("searchKnowledge failed", ex);
+            return "Mình chưa thể tìm kiếm thông tin lúc này. Bạn thử lại sau nhé!";
+        }
     }
 
     // ========== WISHLIST TOOL ==========
@@ -1189,10 +1210,11 @@ public class FashionTools {
             """)
     public String getWishlistRecommendations(
             @P("User ID, lấy từ context phiên chat. Bắt buộc.") String userId) {
-        if (userId == null || userId.isBlank() || userId.startsWith("guest-")) {
-            return "Bạn cần đăng nhập để xem danh sách yêu thích nhé.";
-        }
         try {
+            log.info("Tool: getWishlistRecommendations(userId={})", userId);
+            if (userId == null || userId.isBlank() || userId.startsWith("guest-")) {
+                return "Bạn cần đăng nhập để xem danh sách yêu thích nhé.";
+            }
             @SuppressWarnings("unchecked")
             Map<String, Object> page = webClient.get()
                     .uri(productServiceUrl + "/api/v1/wishlists?page=0&size=10")
@@ -1222,8 +1244,8 @@ public class FashionTools {
             }
             result.append("\nBạn muốn mình tư vấn thêm về sản phẩm nào hoặc gợi ý outfit phối cùng không?");
             return result.toString();
-        } catch (Exception ex) {
-            log.warn("getWishlistRecommendations failed: {}", ex.getMessage());
+        } catch (Throwable ex) {
+            log.error("getWishlistRecommendations failed", ex);
             return "Mình chưa thể tải danh sách yêu thích lúc này. Bạn thử lại sau nhé!";
         }
     }
@@ -1249,10 +1271,11 @@ public class FashionTools {
             """)
     public String getLoyaltyBenefits(
             @P("User ID, lấy từ context phiên chat. Bắt buộc.") String userId) {
-        if (userId == null || userId.isBlank() || userId.startsWith("guest-")) {
-            return "Bạn cần đăng nhập để kiểm tra điểm thưởng và quyền lợi thành viên nhé.";
-        }
         try {
+            log.info("Tool: getLoyaltyBenefits(userId={})", userId);
+            if (userId == null || userId.isBlank() || userId.startsWith("guest-")) {
+                return "Bạn cần đăng nhập để kiểm tra điểm thưởng và quyền lợi thành viên nhé.";
+            }
             @SuppressWarnings("unchecked")
             Map<String, Object> wallet = webClient.get()
                     .uri(promotionServiceUrl + "/api/v1/promotions/loyalty/wallet")
@@ -1285,8 +1308,8 @@ public class FashionTools {
                 result.append("- Tổng chi tiêu: ").append(totalSpending).append(" VND\n");
             }
             return result.toString().trim();
-        } catch (Exception ex) {
-            log.warn("getLoyaltyBenefits failed: {}", ex.getMessage());
+        } catch (Throwable ex) {
+            log.error("getLoyaltyBenefits failed", ex);
             return "Mình chưa thể kiểm tra thông tin điểm thưởng lúc này. Bạn thử lại sau nhé!";
         }
     }
@@ -1312,10 +1335,8 @@ public class FashionTools {
             """)
     public String getProductReviews(
             @P("ID sản phẩm cần xem đánh giá. Bắt buộc.") String productId) {
-        if (productId == null || productId.isBlank()) {
-            return "Bạn cho mình biết tên hoặc ID sản phẩm cần xem đánh giá nhé.";
-        }
         try {
+            log.info("Tool: getProductReviews(productId={})", productId);
             @SuppressWarnings("unchecked")
             Map<String, Object> stats = webClient.get()
                     .uri(reviewServiceUrl + "/api/v1/reviews/product/" + productId + "/stats")
@@ -1353,8 +1374,8 @@ public class FashionTools {
                 result.append("\n");
             }
             return result.toString().trim();
-        } catch (Exception ex) {
-            log.warn("getProductReviews failed: {}", ex.getMessage());
+        } catch (Throwable ex) {
+            log.error("getProductReviews failed", ex);
             return "Mình chưa thể tải đánh giá sản phẩm lúc này. Bạn thử lại sau nhé!";
         }
     }
@@ -1384,10 +1405,7 @@ public class FashionTools {
             return "Bạn cho mình biết tên 2 sản phẩm muốn so sánh nhé. VD: 'So sánh áo thun Uniqlo và áo thun Zara'";
         }
         try {
-            // Search both products in parallel-style (sequential for simplicity)
-            ToolResultCollector tempCollectorA = new ToolResultCollector();
-            ToolResultCollector tempCollectorB = new ToolResultCollector();
-
+            log.info("Tool: compareProducts(A={}, B={})", productA, productB);
             List<ChatResponse.ProductSuggestion> resultsA = executeSearch(productA, null, null);
             List<ChatResponse.ProductSuggestion> resultsB = executeSearch(productB, null, null);
 
@@ -1421,8 +1439,8 @@ public class FashionTools {
             result.append("   Màu: ").append(String.join(", ", safeList(b.getAvailableColors()))).append("\n");
 
             return result.toString().trim();
-        } catch (Exception ex) {
-            log.warn("compareProducts failed: {}", ex.getMessage());
+        } catch (Throwable ex) {
+            log.error("compareProducts failed", ex);
             return "Mình chưa thể so sánh sản phẩm lúc này. Bạn thử lại sau nhé!";
         }
     }
@@ -1449,38 +1467,41 @@ public class FashionTools {
     public String saveUserPreference(
             @P("Loại sở thích: 'size', 'color', 'style', 'budget', 'category', 'fit', 'brand'") String preferenceType,
             @P("Giá trị sở thích. VD: size='M', color='đen', style='minimal', budget='500000'") String preferenceValue) {
-        if (preferenceType == null || preferenceType.isBlank() || preferenceValue == null || preferenceValue.isBlank()) {
-            return "Không đủ thông tin để lưu sở thích.";
-        }
-
-        ChatSession.PreferenceProfile profile = preferenceProfile();
-        if (profile == null) {
-            log.warn("saveUserPreference called but no preferenceProfile in context");
-            return "Không thể lưu sở thích lúc này.";
-        }
-
-        String type = preferenceType.toLowerCase().trim();
-        String value = preferenceValue.trim();
-
-        switch (type) {
-            case "size" -> profile.getPreferredSizes().add(value.toUpperCase());
-            case "color" -> profile.getPreferredColors().add(value);
-            case "style" -> profile.setStyle(value);
-            case "budget" -> {
-                // Accept both "500k" and "500000"
-                profile.setBudget(value);
+        try {
+            log.info("Tool: saveUserPreference(type={}, value={})", preferenceType, preferenceValue);
+            if (preferenceType == null || preferenceType.isBlank() || preferenceValue == null || preferenceValue.isBlank()) {
+                return "Không đủ thông tin để lưu sở thích.";
             }
-            case "category" -> profile.getPreferredCategories().add(value);
-            case "fit" -> profile.getFocusTags().add("fit:" + value);
-            case "brand" -> profile.getFocusTags().add("brand:" + value);
-            default -> {
-                log.debug("Unknown preference type '{}', skipping save", type);
-                return "Mình chưa hỗ trợ lưu loại sở thích '" + preferenceType + "' này.";
-            }
-        }
 
-        log.info("Saved user preference: {}={}", type, value);
-        return "Đã lưu sở thích của bạn: " + type + " = " + value + ". Mình sẽ ưu tiên gợi ý phù hợp hơn trong các lần tới!";
+            ChatSession.PreferenceProfile profile = preferenceProfile();
+            if (profile == null) {
+                log.warn("saveUserPreference called but no preferenceProfile in context");
+                return "Không thể lưu sở thích lúc này.";
+            }
+
+            String type = preferenceType.toLowerCase().trim();
+            String value = preferenceValue.trim();
+
+            switch (type) {
+                case "size" -> profile.getPreferredSizes().add(value.toUpperCase());
+                case "color" -> profile.getPreferredColors().add(value);
+                case "style" -> profile.setStyle(value);
+                case "budget" -> profile.setBudget(value);
+                case "category" -> profile.getPreferredCategories().add(value);
+                case "fit" -> profile.getFocusTags().add("fit:" + value);
+                case "brand" -> profile.getFocusTags().add("brand:" + value);
+                default -> {
+                    log.debug("Unknown preference type '{}', skipping save", type);
+                    return "Mình chưa hỗ trợ lưu loại sở thích '" + preferenceType + "' này.";
+                }
+            }
+
+            log.info("Saved user preference: {}={}", type, value);
+            return "Đã lưu sở thích của bạn: " + type + " = " + value + ". Mình sẽ ưu tiên gợi ý phù hợp hơn trong các lần tới!";
+        } catch (Throwable ex) {
+            log.error("saveUserPreference failed", ex);
+            return "Mình chưa thể lưu sở thích lúc này.";
+        }
     }
 
     // ========== PRIVATE HELPERS ==========

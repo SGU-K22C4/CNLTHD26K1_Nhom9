@@ -1,0 +1,6 @@
+spring:
+  datasource:
+    # Thay thế bằng URL MySQL của DigitalOcean khi deploy Production
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://production-mysql-host:3306/fashion_product_db?useSSL=true&serverTimezone=UTC}
+    username: ${SPRING_DATASOURCE_USERNAME:prod_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:prod_pass}

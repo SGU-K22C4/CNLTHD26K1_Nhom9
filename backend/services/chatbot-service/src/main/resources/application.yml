@@ -56,8 +56,8 @@ ai:
   api-key: ${AI_API_KEY}
   model: ${AI_MODEL:deepseek-3.2}
   base-url: ${AI_BASE_URL:https://llm.chiasegpu.vn/v1}
-  timeout-seconds: ${AI_TIMEOUT_SECONDS:120}
-  max-tokens: ${AI_MAX_TOKENS:1000}
+  timeout-seconds: ${AI_TIMEOUT_SECONDS:180}
+  max-tokens: ${AI_MAX_TOKENS:4096}
 
 server:
   port: ${SERVER_PORT:8087}

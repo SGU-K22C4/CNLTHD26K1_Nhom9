@@ -4,7 +4,8 @@ server:
 spring:
   data:
     mongodb:
-      uri: ${SPRING_DATA_MONGODB_URI:mongodb+srv://tienle:pass123@cluster0.y6jck.mongodb.net/fashion_chatbot_db}
+      # Cấu hình cụ thể nằm trong chatbot-service-dev.yml hoặc chatbot-service-prod.yml
+
 
 ollama:
   api-key: ${OLLAMA_API_KEY:}

@@ -1,0 +1,9 @@
+spring:
+  data:
+    redis:
+      # Thay thế bằng thông tin Redis Cloud khi bạn deploy lên DigitalOcean
+      host: ${SPRING_DATA_REDIS_HOST:redis-cloud-url}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+      ssl:
+        enabled: true

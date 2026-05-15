@@ -4,7 +4,8 @@ server:
 spring:
   data:
     mongodb:
-      uri: ${SPRING_DATA_MONGODB_URI:mongodb+srv://tienle:pass123@cluster0.y6jck.mongodb.net/fashion_review_db}
+      # Cấu hình cụ thể nằm trong review-service-dev.yml hoặc review-service-prod.yml
+
 
 review:
   integration:

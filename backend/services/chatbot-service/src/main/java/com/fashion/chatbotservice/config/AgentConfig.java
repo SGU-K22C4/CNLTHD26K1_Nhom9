@@ -54,11 +54,13 @@ public class AgentConfig {
 
     @Bean
     public ChatLanguageModel chatLanguageModel() {
+        log.info("Initializing ChatLanguageModel: url={}, model={}, timeout={}s, maxTokens={}",
+                baseUrl, modelName, timeoutSeconds, maxTokens);
         return OpenAiChatModel.builder()
                 .baseUrl(baseUrl)
                 .apiKey(apiKey)
                 .modelName(modelName)
-                .temperature(0.3)
+                .temperature(0.1)          // Lower = more deterministic tool calling
                 .maxTokens(maxTokens)
                 .timeout(Duration.ofSeconds(timeoutSeconds))
                 .logRequests(true)
@@ -66,10 +68,11 @@ public class AgentConfig {
                 .build();
     }
 
+    private final Map<String, MessageWindowChatMemory> chatMemoryStore = new ConcurrentHashMap<>();
+
     @Bean
     public ChatMemoryProvider chatMemoryProvider() {
-        Map<String, MessageWindowChatMemory> memoryBySession = new ConcurrentHashMap<>();
-        return sessionId -> memoryBySession.computeIfAbsent(String.valueOf(sessionId), id -> {
+        return sessionId -> chatMemoryStore.computeIfAbsent(String.valueOf(sessionId), id -> {
             MessageWindowChatMemory memory = MessageWindowChatMemory.builder()
                     .id(id)
                     .maxMessages(maxMessages)
@@ -77,6 +80,16 @@ public class AgentConfig {
             hydrateMemory(memory, id);
             return memory;
         });
+    }
+
+    /**
+     * Xóa chat memory của một session (dùng khi memory bị corrupted).
+     */
+    public void clearSessionMemory(String sessionId) {
+        if (sessionId != null) {
+            chatMemoryStore.remove(sessionId);
+            log.info("Cleared corrupted chat memory for session: {}", sessionId);
+        }
     }
 
     private void hydrateMemory(MessageWindowChatMemory memory, String sessionId) {

@@ -30,6 +30,50 @@ function normalizeMessage(message) {
   }
 }
 
+function detectChatFeedbackEvent(message) {
+  const normalized = String(message || '').toLowerCase().trim()
+  if (!normalized) return null
+
+  if (
+    normalized.includes('so sánh')
+    || normalized.includes('so sanh')
+    || normalized.includes('khác nhau')
+    || normalized.includes('khac nhau')
+    || normalized.includes('mẫu nào hơn')
+    || normalized.includes('mau nao hon')
+  ) {
+    return 'compare_intent'
+  }
+
+  if (
+    normalized.includes('xem thêm')
+    || normalized.includes('xem them')
+    || normalized.includes('gợi ý thêm')
+    || normalized.includes('goi y them')
+    || normalized.includes('còn mẫu nào khác')
+    || normalized.includes('con mau nao khac')
+    || normalized.includes('thêm lựa chọn')
+    || normalized.includes('them lua chon')
+  ) {
+    return 'view_more_products'
+  }
+
+  if (
+    normalized.includes('thêm giỏ')
+    || normalized.includes('them gio')
+    || normalized.includes('chốt mẫu này')
+    || normalized.includes('chot mau nay')
+    || normalized.includes('lấy mẫu này')
+    || normalized.includes('lay mau nay')
+    || normalized.includes('mua mẫu này')
+    || normalized.includes('mua mau nay')
+  ) {
+    return 'add_to_cart_intent'
+  }
+
+  return null
+}
+
 export function useChatbot({ autoLoadHistory = true } = {}) {
   const { user } = useAuth()
   const userId = user?.id || user?.email || null
@@ -47,7 +91,7 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
   useEffect(() => {
     if (prevUserIdRef.current !== userId) {
       prevUserIdRef.current = userId
-      chatbotService.resetSession()
+      chatbotService.resetSession(userId)
       const newSessionId = chatbotService.getOrCreateSessionId(userId)
       setSessionId(newSessionId)
       setMessages([DEFAULT_GREETING])
@@ -105,6 +149,11 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
     const message = String(rawMessage || '').trim()
     if (!message || isSending) return null
 
+    const inferredEvent = detectChatFeedbackEvent(message)
+    const latestSuggestionContext = [...messages]
+      .reverse()
+      .find((item) => item.sender === 'BOT' && Array.isArray(item.suggestions) && item.suggestions.length > 0)
+
     const userMessage = normalizeMessage({
       sender: 'USER',
       content: message,
@@ -116,6 +165,20 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
     setError('')
 
     try {
+      if (inferredEvent) {
+        chatbotService.sendFeedbackEvent({
+          sessionId,
+          eventType: inferredEvent,
+          sourceMessageId: latestSuggestionContext?.id,
+          metadata: {
+            message,
+            suggestedProductIds: latestSuggestionContext?.suggestions?.map((item) => item?.productId).filter(Boolean) || [],
+          },
+        }).catch((trackingError) => {
+          console.debug('track inferred chatbot event failed', trackingError)
+        })
+      }
+
       const response = await chatbotService.send({
         message,
         preferences,
@@ -160,7 +223,7 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
     } finally {
       setIsSending(false)
     }
-  }, [isSending, preferences])
+  }, [isSending, messages, preferences, sessionId])
 
   const updatePreferences = useCallback((nextPreferences) => {
     setPreferences((prev) => ({
@@ -173,7 +236,7 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
   }, [])
 
   const startNewSession = useCallback(() => {
-    chatbotService.resetSession()
+    chatbotService.resetSession(userId)
     const nextSession = chatbotService.getOrCreateSessionId(userId)
     setSessionId(nextSession)
     setMessages([DEFAULT_GREETING])

@@ -49,6 +49,12 @@ public class AgentConfig {
     @Value("${ai.max-tokens:1000}")
     private int maxTokens;
 
+    @Value("${ai.log-requests:true}")
+    private boolean logRequests;
+
+    @Value("${ai.log-responses:true}")
+    private boolean logResponses;
+
     @Value("${chatbot.memory.max-messages:20}")
     private int maxMessages;
 
@@ -63,8 +69,8 @@ public class AgentConfig {
                 .temperature(0.1)          // Lower = more deterministic tool calling
                 .maxTokens(maxTokens)
                 .timeout(Duration.ofSeconds(timeoutSeconds))
-                .logRequests(true)
-                .logResponses(true)
+                .logRequests(logRequests)
+                .logResponses(logResponses)
                 .build();
     }
 

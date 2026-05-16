@@ -53,8 +53,13 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
         extractSizePreference(profile, normalized);
         extractColorPreference(profile, normalized);
         extractCategoryPreference(profile, normalized);
+        extractOccasionPreference(profile, normalized);
+        extractFitPreference(profile, normalized);
+        extractTargetGender(profile, normalized);
         extractTonePreference(profile, normalized);
         extractFocusTags(profile, normalized);
+        inferPersona(profile, normalized);
+        refreshPriceComfortZone(profile);
     }
 
     @Override
@@ -158,6 +163,12 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
             if (!firstName.isBlank() || !lastName.isBlank()) {
                 profile.setPreferredTone("Professional");
             }
+            if (profile.getTargetGender() == null || profile.getTargetGender().isBlank()) {
+                Integer gender = integerValue(payload.get("gender"));
+                if (gender != null) {
+                    profile.setTargetGender(gender == 0 ? "male" : "female");
+                }
+            }
         } catch (Exception ex) {
             log.debug("User profile enrichment skipped: {}", ex.getMessage());
         }
@@ -185,6 +196,41 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
         if (normalized.contains("dam")) profile.getPreferredCategories().add("đầm");
     }
 
+    private void extractOccasionPreference(ChatSession.PreferenceProfile profile, String normalized) {
+        if (normalized.contains("di lam") || normalized.contains("cong so") || normalized.contains("van phong")) {
+            profile.getPreferredOccasions().add("office");
+        }
+        if (normalized.contains("di choi") || normalized.contains("hang ngay")
+                || normalized.contains("cuoi tuan") || normalized.contains("cafe")
+                || normalized.contains("casual")) {
+            profile.getPreferredOccasions().add("casual");
+        }
+        if (normalized.contains("du tiec") || normalized.contains("su kien")) {
+            profile.getPreferredOccasions().add("party");
+        }
+        if (normalized.contains("du lich") || normalized.contains("travel")) {
+            profile.getPreferredOccasions().add("travel");
+        }
+    }
+
+    private void extractFitPreference(ChatSession.PreferenceProfile profile, String normalized) {
+        if (normalized.contains("oversize") || normalized.contains("rong") || normalized.contains("thoai mai")) {
+            profile.setFitPreference("relaxed");
+        }
+        if (normalized.contains("slim fit") || normalized.contains("om") || normalized.contains("vua van")) {
+            profile.setFitPreference("fitted");
+        }
+    }
+
+    private void extractTargetGender(ChatSession.PreferenceProfile profile, String normalized) {
+        if (normalized.contains("do nam") || normalized.contains("cho nam") || normalized.contains("ban trai")) {
+            profile.setTargetGender("male");
+        }
+        if (normalized.contains("do nu") || normalized.contains("cho nu") || normalized.contains("ban gai")) {
+            profile.setTargetGender("female");
+        }
+    }
+
     private void extractTonePreference(ChatSession.PreferenceProfile profile, String normalized) {
         if (normalized.contains("than thien") || normalized.contains("friendly")) {
             profile.setPreferredTone("Friendly");
@@ -200,6 +246,21 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
         }
         if (normalized.contains("fit") || normalized.contains("silhouette")) {
             profile.getFocusTags().add("Silhouette & Fit");
+        }
+    }
+
+    private void inferPersona(ChatSession.PreferenceProfile profile, String normalized) {
+        if (normalized.contains("van phong") || normalized.contains("cong so") || normalized.contains("hop")) {
+            profile.setCustomerPersona("Office Worker");
+            return;
+        }
+        if (normalized.contains("trend") || normalized.contains("ca tinh") || normalized.contains("stylist")) {
+            profile.setCustomerPersona("Young Professional");
+            return;
+        }
+        if (normalized.contains("hang ngay") || normalized.contains("cuoi tuan")
+                || normalized.contains("du lich") || normalized.contains("thoai mai")) {
+            profile.setCustomerPersona("Casual Shopper");
         }
     }
 
@@ -233,6 +294,55 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
 
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private Integer integerValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value).trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private void refreshPriceComfortZone(ChatSession.PreferenceProfile profile) {
+        Long maxBudget = parseBudget(profile.getBudget());
+        if (maxBudget == null) return;
+        if (maxBudget < 599_000L) {
+            profile.setPriceComfortZone("soft");
+        } else if (maxBudget <= 1_299_000L) {
+            profile.setPriceComfortZone("mid");
+        } else {
+            profile.setPriceComfortZone("premium");
+        }
+    }
+
+    private Long parseBudget(String budget) {
+        if (budget == null || budget.isBlank()) return null;
+        String cleaned = budget.toLowerCase(Locale.ROOT)
+                .replaceAll("[^0-9kmtrd.]", " ")
+                .trim();
+        Matcher matcher = Pattern.compile("([0-9][0-9.,]*)\\s*(k|tr|trieu|d|dong)?").matcher(cleaned);
+        Long maxPrice = null;
+        while (matcher.find()) {
+            try {
+                double value = Double.parseDouble(matcher.group(1).replace(".", "").replace(",", ""));
+                String unit = matcher.group(2);
+                if ("k".equals(unit)) value *= 1_000;
+                else if ("tr".equals(unit) || "trieu".equals(unit)) value *= 1_000_000;
+                long vnd = Math.round(value);
+                if (maxPrice == null || vnd > maxPrice) {
+                    maxPrice = vnd;
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return maxPrice;
     }
 
     // ========== LONG-TERM PROFILE PERSISTENCE (Task 4) ==========

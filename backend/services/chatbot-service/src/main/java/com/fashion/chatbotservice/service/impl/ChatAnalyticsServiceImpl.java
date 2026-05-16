@@ -10,7 +10,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Lưu structured log entry cho mỗi request chat để analytics.
@@ -35,6 +37,23 @@ public class ChatAnalyticsServiceImpl implements ChatAnalyticsService {
                     .mapToDouble(ToolResultCollector.KnowledgeSource::score)
                     .max().orElse(0.0);
 
+            LinkedHashMap<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("suggestedProductIds", response.getSuggestions().stream()
+                    .map(item -> item != null ? item.getProductId() : null)
+                    .filter(id -> id != null && !id.isBlank())
+                    .collect(Collectors.toList()));
+            metadata.put("suggestedProductNames", response.getSuggestions().stream()
+                    .map(item -> item != null ? item.getName() : null)
+                    .filter(name -> name != null && !name.isBlank())
+                    .limit(5)
+                    .collect(Collectors.toList()));
+            metadata.put("promotionCodes", response.getPromotions().stream()
+                    .map(item -> item != null ? item.getCode() : null)
+                    .filter(code -> code != null && !code.isBlank())
+                    .collect(Collectors.toList()));
+            metadata.put("guardrailViolations", collector.getGuardrailViolations());
+            metadata.put("toolFailure", collector.hasToolFailure());
+
             ChatAnalyticsDocument doc = ChatAnalyticsDocument.builder()
                     .traceId(traceId)
                     .sessionId(sessionId)
@@ -44,12 +63,14 @@ public class ChatAnalyticsServiceImpl implements ChatAnalyticsService {
                     .messageLength(userMessage != null ? userMessage.length() : 0)
                     .intent(response.getIntent())
                     .confidence(response.getConfidence())
+                    .eventType("chat_turn")
                     .knowledgeSources(kbSources)
                     .topKnowledgeScore(topScore)
                     .replyLength(response.getReply() != null ? response.getReply().length() : 0)
                     .suggestionsCount(response.getSuggestions().size())
                     .promotionsCount(response.getPromotions().size())
                     .hasCitation(!kbSources.isEmpty())
+                    .metadata(metadata)
                     .totalLatencyMs(totalLatencyMs)
                     .build();
 

@@ -4,7 +4,10 @@ import com.fashion.chatbotservice.dto.ChatResponse;
 import com.fashion.chatbotservice.model.ChatSession;
 import com.fashion.chatbotservice.service.KnowledgeBaseService;
 import com.fashion.chatbotservice.service.OutfitRuleEngine;
+import com.fashion.chatbotservice.service.ProductRecommendationService;
+import com.fashion.chatbotservice.service.ProductTaxonomyService;
 import com.fashion.chatbotservice.service.SizeAdvisorService;
+import com.fashion.chatbotservice.service.SizeFitAdvisoryService;
 import com.fashion.chatbotservice.util.VietnameseNormalizer;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -45,6 +48,9 @@ public class FashionTools {
     private final SizeAdvisorService sizeAdvisorService;
     private final OutfitRuleEngine outfitRuleEngine;
     private final KnowledgeBaseService knowledgeBaseService;
+    private final ProductRecommendationService productRecommendationService;
+    private final ProductTaxonomyService productTaxonomyService;
+    private final SizeFitAdvisoryService sizeFitAdvisoryService;
 
     @Value("${chatbot.product-service-url:http://localhost:8080}")
     private String productServiceUrl;
@@ -246,14 +252,25 @@ public class FashionTools {
      */
     private final ThreadLocal<ChatSession.PreferenceProfile> preferenceHolder = new ThreadLocal<>();
 
+    /**
+     * User context của phiên hiện tại để gọi các protected endpoint theo đúng ownership.
+     */
+    private final ThreadLocal<String> currentUserIdHolder = new ThreadLocal<>();
+
     public FashionTools(WebClient webClient,
                         SizeAdvisorService sizeAdvisorService,
                         OutfitRuleEngine outfitRuleEngine,
-                        KnowledgeBaseService knowledgeBaseService) {
+                        KnowledgeBaseService knowledgeBaseService,
+                        ProductRecommendationService productRecommendationService,
+                        ProductTaxonomyService productTaxonomyService,
+                        SizeFitAdvisoryService sizeFitAdvisoryService) {
         this.webClient = webClient;
         this.sizeAdvisorService = sizeAdvisorService;
         this.outfitRuleEngine = outfitRuleEngine;
         this.knowledgeBaseService = knowledgeBaseService;
+        this.productRecommendationService = productRecommendationService;
+        this.productTaxonomyService = productTaxonomyService;
+        this.sizeFitAdvisoryService = sizeFitAdvisoryService;
     }
 
     public void setCollector(ToolResultCollector collector) {
@@ -263,10 +280,15 @@ public class FashionTools {
     public void clearCollector() {
         this.collectorHolder.remove();
         this.preferenceHolder.remove();
+        this.currentUserIdHolder.remove();
     }
 
     public void setPreferenceProfile(ChatSession.PreferenceProfile profile) {
         this.preferenceHolder.set(profile);
+    }
+
+    public void setCurrentUserId(String userId) {
+        this.currentUserIdHolder.set(userId);
     }
 
     private ToolResultCollector collector() {
@@ -275,6 +297,20 @@ public class FashionTools {
 
     private ChatSession.PreferenceProfile preferenceProfile() {
         return preferenceHolder.get();
+    }
+
+    private String currentUserId() {
+        return currentUserIdHolder.get();
+    }
+
+    private boolean isGuestUser(String userId) {
+        return userId == null || userId.isBlank() || userId.startsWith("guest-");
+    }
+
+    private void markToolFailure() {
+        if (collector() != null) {
+            collector().markToolFailure();
+        }
     }
 
     // ========== PRODUCT TOOLS ==========
@@ -344,10 +380,18 @@ public class FashionTools {
         try {
             log.info("Tool: browseProducts(min={}, max={}, color={}, size={})", minPrice, maxPrice, color, size);
             List<ChatResponse.ProductSuggestion> suggestions = executeBrowse(minPrice, maxPrice, 12);
-            suggestions = applyPersonalization(suggestions, preferenceProfile(), minPrice, maxPrice);
+            suggestions = productRecommendationService.rankSuggestions(
+                    suggestions,
+                    preferenceProfile(),
+                    null,
+                    minPrice,
+                    maxPrice,
+                    color,
+                    size
+            );
             suggestions = applyColorFilter(suggestions, color);
             suggestions = applySizeFilter(suggestions, size);
-            suggestions = diversifySuggestionsByCategory(suggestions, 12);
+            suggestions = productRecommendationService.diversifySuggestionsByCategory(suggestions, 12);
 
             if (collector() != null) collector().addProducts(suggestions);
 
@@ -355,21 +399,18 @@ public class FashionTools {
                 return "Hiện chưa có sản phẩm phù hợp với yêu cầu này.";
             }
 
-            StringBuilder result = new StringBuilder("Mình tìm thấy " + suggestions.size()
-                    + " sản phẩm phù hợp để bạn tham khảo:\n");
-            for (var s : suggestions) {
-                List<String> colors = safeList(s.getAvailableColors());
-                List<String> sizes = safeList(s.getAvailableSizes());
-
-                result.append("- ").append(s.getName())
-                        .append(" | Giá: ").append(s.getPrice())
-                        .append(" | Size: ").append(String.join(", ", sizes))
-                        .append(" | Màu: ").append(String.join(", ", colors))
-                        .append("\n");
-            }
-            return result.toString();
+            return buildConciseSuggestionReply(
+                    suggestions,
+                    "Mình đã gom sẵn vài mẫu phù hợp để bạn xem nhanh bên dưới.",
+                    minPrice,
+                    maxPrice,
+                    color,
+                    size,
+                    "Nếu bạn muốn, mình sẽ lọc tiếp theo form, chất liệu hoặc chọn giúp 1-2 mẫu dễ mặc nhất."
+            );
         } catch (Throwable ex) {
             log.error("browseProducts failed", ex);
+            markToolFailure();
             return "Dịch vụ sản phẩm tạm thời không phản hồi. Vui lòng thử lại sau.";
         }
     }
@@ -400,7 +441,7 @@ public class FashionTools {
             }
 
             if (!normalizedHint.isBlank()) {
-                String groupLabel = resolveGroupLabel(normalizedHint);
+                String groupLabel = productTaxonomyService.resolveGroupLabel(normalizedHint);
                 return "Các loại " + groupLabel + " hiện có: " + String.join(", ", filteredTypes)
                         + ". Bạn muốn mình tư vấn loại nào ạ?";
             }
@@ -443,10 +484,20 @@ public class FashionTools {
                 appendUniqueSuggestions(suggestions, semanticMatches, seenProductKeys, 18);
             }
 
-            suggestions = applyPersonalization(suggestions, preferenceProfile(), minPrice, maxPrice);
+            suggestions = productRecommendationService.rankSuggestions(
+                    suggestions,
+                    preferenceProfile(),
+                    search,
+                    minPrice,
+                    maxPrice,
+                    color,
+                    size
+            );
+            suggestions = applyCategoryLock(suggestions, search);
+            suggestions = applyGenderGate(suggestions, preferenceProfile(), search);
             suggestions = applyColorFilter(suggestions, color);
             suggestions = applySizeFilter(suggestions, size);
-            suggestions = diversifySuggestionsByCategory(suggestions, 12);
+            suggestions = productRecommendationService.diversifySuggestionsByCategory(suggestions, 12);
             if (collector() != null) collector().addProducts(suggestions);
 
             if (suggestions.isEmpty()) {
@@ -469,25 +520,18 @@ public class FashionTools {
                 return "Hiện chưa có sản phẩm khớp với từ khóa bạn cung cấp trong hệ thống.";
             }
 
-            // Post-filter: highlight color matches if user specified color
-            StringBuilder result = new StringBuilder("Tìm thấy " + suggestions.size() + " sản phẩm:\n");
-            for (var s : suggestions) {
-                List<String> colors = safeList(s.getAvailableColors());
-                List<String> sizes = safeList(s.getAvailableSizes());
-                boolean colorMatch = (color != null && !color.isBlank())
-                        && colors.stream()
-                                .anyMatch(c -> normalizeText(c).contains(normalizeText(color)));
-
-                result.append("- ").append(s.getName())
-                        .append(" | Giá: ").append(s.getPrice())
-                        .append(" | Size: ").append(String.join(", ", sizes))
-                        .append(" | Màu: ").append(String.join(", ", colors));
-                if (colorMatch) result.append(" ✓ (có màu ").append(color).append(")");
-                result.append("\n");
-            }
-            return result.toString();
+            return buildConciseSuggestionReply(
+                    suggestions,
+                    "Mình đã chọn sẵn vài mẫu khá sát với nhu cầu của bạn.",
+                    minPrice,
+                    maxPrice,
+                    color,
+                    size,
+                    "Bạn xem card bên dưới, nếu thích mình có thể so sánh nhanh hoặc lọc tiếp xuống còn 1-2 mẫu."
+            );
         } catch (Throwable ex) {
             log.error("searchProductsInternal failed", ex);
+            markToolFailure();
             return "Dịch vụ sản phẩm tạm thời không phản hồi. Vui lòng thử lại sau.";
         }
     }
@@ -541,51 +585,141 @@ public class FashionTools {
         return fallbacks;
     }
 
-    private List<ChatResponse.ProductSuggestion> applyPersonalization(
+    private List<ChatResponse.ProductSuggestion> rankBusinessSuggestions(
             List<ChatResponse.ProductSuggestion> suggestions,
             ChatSession.PreferenceProfile profile,
+            String search,
             Long minPrice,
-            Long maxPrice) {
-        if (suggestions == null || suggestions.isEmpty() || profile == null) return suggestions;
+            Long maxPrice,
+            String color,
+            String size) {
+        if (suggestions == null || suggestions.isEmpty()) return suggestions;
 
         List<ScoredSuggestion> scored = new ArrayList<>();
-        Long preferredMaxPrice = (maxPrice != null) ? maxPrice : parseBudget(profile.getBudget());
+        Long preferredMaxPrice = (maxPrice != null) ? maxPrice : parseBudget(profile == null ? null : profile.getBudget());
+        List<String> searchTokens = buildSemanticTokens(search);
+        String normalizedSearch = normalizeText(search);
+        String inferredOccasion = inferOccasionContext(normalizedSearch);
+        boolean wantsSafeOption = normalizedSearch.contains("an toan")
+                || normalizedSearch.contains("de mac")
+                || normalizedSearch.contains("de phoi")
+                || normalizedSearch.contains("basic");
+        boolean wantsStatementOption = normalizedSearch.contains("noi bat")
+                || normalizedSearch.contains("co diem nhan")
+                || normalizedSearch.contains("statement");
 
         int index = 0;
-        for (ChatResponse.ProductSuggestion s : suggestions) {
+        for (ChatResponse.ProductSuggestion suggestion : suggestions) {
             double score = 0.0;
             List<String> reasons = new ArrayList<>();
+            String haystack = normalizeText(stringValue(suggestion.getName()) + " " + stringValue(suggestion.getCategory()));
+            Set<String> taxonomyLabels = inferTaxonomyLabels(haystack);
 
-            boolean sizeMatch = hasAnyMatch(profile.getPreferredSizes(), s.getAvailableSizes());
-            if (sizeMatch) {
-                score += 1.8;
+            if (!searchTokens.isEmpty()) {
+                int tokenHits = 0;
+                for (String token : searchTokens) {
+                    if (!token.isBlank() && haystack.contains(token)) {
+                        tokenHits++;
+                    }
+                }
+                if (tokenHits > 0) {
+                    score += Math.min(3.2d, tokenHits * 1.2d);
+                    reasons.add("Đúng nhu cầu đang tìm");
+                }
+            }
+
+            if (!safeList(suggestion.getAvailableSizes()).isEmpty()) {
+                score += 0.9d;
+            } else {
+                score -= 2.5d;
+                reasons.add("Cần kiểm tra lại tồn size");
+            }
+
+            boolean explicitSizeMatch = size != null && !size.isBlank()
+                    && safeList(suggestion.getAvailableSizes()).stream()
+                    .anyMatch(avail -> normalizeText(avail).equals(normalizeText(size)));
+            if (explicitSizeMatch) {
+                score += 2.4d;
+                reasons.add("Có đúng size bạn đang cần");
+            } else if (profile != null && hasAnyMatch(profile.getPreferredSizes(), suggestion.getAvailableSizes())) {
+                score += 1.4d;
                 reasons.add("Hợp size bạn hay mặc");
             }
 
-            boolean colorMatch = hasAnyMatch(profile.getPreferredColors(), s.getAvailableColors());
-            if (colorMatch) {
-                score += 2.2;
-                reasons.add("Phù hợp màu bạn thích");
+            boolean explicitColorMatch = color != null && !color.isBlank()
+                    && safeList(suggestion.getAvailableColors()).stream()
+                    .anyMatch(avail -> normalizeText(avail).contains(normalizeText(color)));
+            if (explicitColorMatch) {
+                score += 2.6d;
+                reasons.add("Có đúng tông màu bạn ưu tiên");
+            } else if (profile != null && hasAnyMatch(profile.getPreferredColors(), suggestion.getAvailableColors())) {
+                score += 1.8d;
+                reasons.add("Hợp màu bạn thường thích");
             }
 
-            boolean categoryMatch = hasCategoryMatch(profile.getPreferredCategories(), s.getCategory());
+            boolean categoryMatch = profile != null && hasCategoryMatch(profile.getPreferredCategories(), suggestion.getCategory());
             if (categoryMatch) {
-                score += 1.2;
-                reasons.add("Đúng loại đồ bạn quan tâm");
+                score += 1.4d;
+                reasons.add("Đúng nhóm đồ bạn quan tâm");
             }
 
-            Long productPrice = parsePriceToLong(s.getPrice());
-            boolean budgetMatch = preferredMaxPrice != null && productPrice != null && productPrice <= preferredMaxPrice;
-            if (budgetMatch) {
-                score += 0.8;
-                reasons.add("Phù hợp ngân sách");
+            if (profile != null
+                    && profile.getLastProductCategoryQueried() != null
+                    && !profile.getLastProductCategoryQueried().isBlank()
+                    && haystack.contains(normalizeText(profile.getLastProductCategoryQueried()))) {
+                score += 0.9d;
             }
 
-            if (!reasons.isEmpty()) {
-                s.setReason(String.join(" | ", reasons));
+            Long productPrice = parsePriceToLong(suggestion.getPrice());
+            if (productPrice != null) {
+                if (minPrice != null && productPrice >= minPrice) {
+                    score += 0.5d;
+                }
+                if (preferredMaxPrice != null) {
+                    if (productPrice <= preferredMaxPrice) {
+                        score += 1.5d;
+                        reasons.add("Nằm trong tầm giá dễ chốt");
+                        score += budgetClosenessBonus(productPrice, preferredMaxPrice);
+                    } else {
+                        score -= 1.0d;
+                    }
+                }
             }
 
-            scored.add(new ScoredSuggestion(s, score, index++));
+            double styleScore = scoreStyleFit(profile, haystack);
+            if (styleScore > 0.0d) {
+                score += styleScore;
+                reasons.add("Hợp phong cách đang ưu tiên");
+            }
+
+            if (profile != null && profile.getFocusTags() != null) {
+                score += scoreFocusTags(profile.getFocusTags(), haystack);
+            }
+
+            double occasionScore = scoreOccasionFit(inferredOccasion, taxonomyLabels);
+            if (occasionScore > 0.0d) {
+                score += occasionScore;
+                reasons.add(buildOccasionReason(inferredOccasion));
+            }
+
+            if (wantsSafeOption) {
+                double safetyScore = scoreSafetyFit(taxonomyLabels);
+                if (safetyScore > 0.0d) {
+                    score += safetyScore;
+                    reasons.add("Dễ mặc và dễ phối");
+                }
+            }
+
+            if (wantsStatementOption) {
+                double statementScore = scoreStatementFit(taxonomyLabels);
+                if (statementScore > 0.0d) {
+                    score += statementScore;
+                    reasons.add("Có điểm nhấn hơn trong outfit");
+                }
+            }
+
+            suggestion.setReason(buildBusinessReason(reasons));
+            scored.add(new ScoredSuggestion(suggestion, score, index++));
         }
 
         return scored.stream()
@@ -655,6 +789,152 @@ public class FashionTools {
         return VietnameseNormalizer.normalize(value == null ? "" : value);
     }
 
+    private double budgetClosenessBonus(Long productPrice, Long preferredMaxPrice) {
+        if (productPrice == null || preferredMaxPrice == null || preferredMaxPrice <= 0) {
+            return 0.0d;
+        }
+        double ratio = (double) productPrice / preferredMaxPrice;
+        if (ratio >= 0.6d && ratio <= 1.0d) {
+            return 0.45d;
+        }
+        if (ratio >= 0.4d) {
+            return 0.2d;
+        }
+        return 0.0d;
+    }
+
+    private double scoreStyleFit(ChatSession.PreferenceProfile profile, String haystack) {
+        if (profile == null || profile.getStyle() == null || profile.getStyle().isBlank()) {
+            return 0.0d;
+        }
+        String style = normalizeText(profile.getStyle());
+        if (style.contains("minimal") || style.contains("basic")) {
+            return containsAny(haystack, "basic", "regular", "so mi", "ao thun", "midi", "tron") ? 0.9d : 0.0d;
+        }
+        if (style.contains("thanh lich") || style.contains("elegant") || style.contains("smart casual")) {
+            return containsAny(haystack, "so mi", "blazer", "midi", "dam", "trouser", "chan vay") ? 1.0d : 0.0d;
+        }
+        if (style.contains("sporty") || style.contains("casual") || style.contains("relaxed")) {
+            return containsAny(haystack, "ao thun", "jean", "short", "hoodie", "bomber", "oversize") ? 0.9d : 0.0d;
+        }
+        return 0.0d;
+    }
+
+    private String inferOccasionContext(String normalizedSearch) {
+        if (normalizedSearch == null || normalizedSearch.isBlank()) {
+            return "";
+        }
+        if (containsAny(normalizedSearch, "di lam", "cong so", "office")) return "office";
+        if (containsAny(normalizedSearch, "di tiec", "su kien", "party")) return "party";
+        if (containsAny(normalizedSearch, "du lich", "di choi", "hang ngay", "casual")) return "casual";
+        if (containsAny(normalizedSearch, "mua he", "he")) return "summer";
+        if (containsAny(normalizedSearch, "mua dong", "dong")) return "winter";
+        return "";
+    }
+
+    private Set<String> inferTaxonomyLabels(String haystack) {
+        LinkedHashSet<String> labels = new LinkedHashSet<>();
+        if (haystack == null || haystack.isBlank()) {
+            return labels;
+        }
+
+        if (containsAny(haystack, "ao so mi", "shirt", "blazer", "trouser", "quan tay")) {
+            labels.add("office");
+            labels.add("safe");
+        }
+        if (containsAny(haystack, "ao thun", "ao phong", "jean", "short", "hoodie", "bomber")) {
+            labels.add("casual");
+        }
+        if (containsAny(haystack, "dam", "dress", "ao kieu", "chan vay", "jacquard")) {
+            labels.add("statement");
+        }
+        if (containsAny(haystack, "midi", "regular", "basic", "cotton", "linen", "tron")) {
+            labels.add("safe");
+        }
+        if (containsAny(haystack, "linen", "short", "midi", "ao phong")) {
+            labels.add("summer");
+        }
+        if (containsAny(haystack, "len", "hoodie", "ao khoac", "jacket", "coat")) {
+            labels.add("winter");
+        }
+        if (containsAny(haystack, "ao khoac", "blazer", "dress", "dam", "chan vay")) {
+            labels.add("party");
+        }
+        return labels;
+    }
+
+    private double scoreOccasionFit(String occasion, Set<String> taxonomyLabels) {
+        if (occasion == null || occasion.isBlank() || taxonomyLabels == null || taxonomyLabels.isEmpty()) {
+            return 0.0d;
+        }
+        if (taxonomyLabels.contains(occasion)) {
+            return 1.4d;
+        }
+        if ("office".equals(occasion) && taxonomyLabels.contains("safe")) {
+            return 0.8d;
+        }
+        if ("party".equals(occasion) && taxonomyLabels.contains("statement")) {
+            return 1.0d;
+        }
+        if ("casual".equals(occasion) && taxonomyLabels.contains("safe")) {
+            return 0.5d;
+        }
+        return 0.0d;
+    }
+
+    private double scoreSafetyFit(Set<String> taxonomyLabels) {
+        if (taxonomyLabels == null || taxonomyLabels.isEmpty()) {
+            return 0.0d;
+        }
+        return taxonomyLabels.contains("safe") ? 1.0d : 0.0d;
+    }
+
+    private double scoreStatementFit(Set<String> taxonomyLabels) {
+        if (taxonomyLabels == null || taxonomyLabels.isEmpty()) {
+            return 0.0d;
+        }
+        return taxonomyLabels.contains("statement") || taxonomyLabels.contains("party") ? 0.9d : 0.0d;
+    }
+
+    private String buildOccasionReason(String occasion) {
+        if (occasion == null || occasion.isBlank()) {
+            return "Hợp ngữ cảnh đang tìm";
+        }
+        return switch (occasion) {
+            case "office" -> "Hợp đi làm và dễ chốt";
+            case "party" -> "Hợp dịp cần lên outfit";
+            case "casual" -> "Hợp mặc hằng ngày hoặc đi chơi";
+            case "summer" -> "Hợp thời tiết nóng hoặc mùa hè";
+            case "winter" -> "Hợp thời tiết mát hoặc mùa lạnh";
+            default -> "Hợp ngữ cảnh đang tìm";
+        };
+    }
+
+    private double scoreFocusTags(Set<String> focusTags, String haystack) {
+        double score = 0.0d;
+        for (String tag : focusTags) {
+            String normalizedTag = normalizeText(tag);
+            if (normalizedTag.startsWith("fit:")) {
+                String fitValue = normalizedTag.substring(4);
+                if (!fitValue.isBlank() && haystack.contains(fitValue)) {
+                    score += 0.5d;
+                }
+            }
+        }
+        return score;
+    }
+
+    private String buildBusinessReason(List<String> reasons) {
+        if (reasons == null || reasons.isEmpty()) {
+            return "Dễ cân nhắc cho nhu cầu hiện tại";
+        }
+        return reasons.stream()
+                .distinct()
+                .limit(2)
+                .reduce((left, right) -> left + " | " + right)
+                .orElse("Dễ cân nhắc cho nhu cầu hiện tại");
+    }
+
     private List<ChatResponse.ProductSuggestion> applySizeFilter(
             List<ChatResponse.ProductSuggestion> suggestions,
             String size) {
@@ -680,6 +960,115 @@ public class FashionTools {
                 .anyMatch(avail -> normalizeText(avail).contains(normalizedColor)))
             .toList();
         }
+
+    private List<ChatResponse.ProductSuggestion> applyCategoryLock(
+            List<ChatResponse.ProductSuggestion> suggestions,
+            String search) {
+        if (suggestions == null || suggestions.isEmpty() || search == null || search.isBlank()) {
+            return suggestions;
+        }
+
+        List<String> lockedTypes = productTaxonomyService.extractTypeLabels(search, search);
+        if (lockedTypes == null || lockedTypes.isEmpty()) {
+            return suggestions;
+        }
+
+        Set<String> normalizedLockedTypes = new LinkedHashSet<>();
+        for (String type : lockedTypes) {
+            String normalizedType = normalizeText(type);
+            if (!normalizedType.isBlank()) {
+                normalizedLockedTypes.add(normalizedType);
+            }
+        }
+        if (normalizedLockedTypes.isEmpty()) {
+            return suggestions;
+        }
+
+        List<ChatResponse.ProductSuggestion> filtered = new ArrayList<>();
+        for (ChatResponse.ProductSuggestion suggestion : suggestions) {
+            if (hasLockedCategoryMatch(suggestion, normalizedLockedTypes)) {
+                filtered.add(suggestion);
+            }
+        }
+        return filtered.isEmpty() ? suggestions : filtered;
+    }
+
+    private List<ChatResponse.ProductSuggestion> applyGenderGate(
+            List<ChatResponse.ProductSuggestion> suggestions,
+            ChatSession.PreferenceProfile profile,
+            String search) {
+        if (suggestions == null || suggestions.isEmpty() || profile == null) {
+            return suggestions;
+        }
+
+        String effectiveGender = resolveEffectiveTargetGender(profile, search);
+        if (effectiveGender == null || effectiveGender.isBlank()) {
+            return suggestions;
+        }
+
+        List<ChatResponse.ProductSuggestion> filtered = suggestions.stream()
+                .filter(suggestion -> matchesGenderGate(suggestion, effectiveGender))
+                .toList();
+
+        return filtered.isEmpty() ? suggestions : filtered;
+    }
+
+    private String resolveEffectiveTargetGender(ChatSession.PreferenceProfile profile, String search) {
+        String normalizedSearch = normalizeText(search);
+        if (containsAny(normalizedSearch, "vay", "dam", "chan vay", "blouse", "ao kieu", "wrap dress", "midi")) {
+            return "female";
+        }
+        if (containsAny(normalizedSearch, "ao so mi nam", "do nam", "quan chino", "ao oxford", "ao polo nam")) {
+            return "male";
+        }
+        return normalizeText(profile.getTargetGender());
+    }
+
+    private boolean matchesGenderGate(ChatResponse.ProductSuggestion suggestion, String targetGender) {
+        if (suggestion == null || targetGender == null || targetGender.isBlank()) {
+            return true;
+        }
+
+        String categoryGender = normalizeText(suggestion.getCategoryGender());
+        if (!categoryGender.isBlank()) {
+            if ("male".equals(targetGender)) {
+                return categoryGender.contains("male");
+            }
+            if ("female".equals(targetGender)) {
+                return categoryGender.contains("female");
+            }
+        }
+
+        String normalized = normalizeText(stringValue(suggestion.getName()) + " " + stringValue(suggestion.getCategory()));
+        if ("female".equals(targetGender)) {
+            return !containsAny(normalized, "ao so mi nam", "oxford", "chino", "regular fit nam");
+        }
+        if ("male".equals(targetGender)) {
+            return !containsAny(normalized, "vay", "dam", "chan vay", "blouse", "midi", "wrap dress");
+        }
+        return true;
+    }
+
+    private boolean hasLockedCategoryMatch(
+            ChatResponse.ProductSuggestion suggestion,
+            Set<String> normalizedLockedTypes) {
+        if (suggestion == null || normalizedLockedTypes == null || normalizedLockedTypes.isEmpty()) {
+            return false;
+        }
+        List<String> suggestionTypes = productTaxonomyService.extractTypeLabels(
+                suggestion.getName(),
+                suggestion.getCategory()
+        );
+        if (suggestionTypes == null || suggestionTypes.isEmpty()) {
+            return false;
+        }
+        for (String suggestionType : suggestionTypes) {
+            if (normalizedLockedTypes.contains(normalizeText(suggestionType))) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     @SuppressWarnings("unchecked")
     private List<ChatResponse.ProductSuggestion> executeBrowse(Long minPrice, Long maxPrice, int size) {
@@ -736,7 +1125,7 @@ public class FashionTools {
             if (products.isEmpty()) break;
 
             for (ChatResponse.ProductSuggestion product : products) {
-                types.addAll(extractTypeLabels(product.getName(), product.getCategory()));
+                types.addAll(productTaxonomyService.extractTypeLabels(product.getName(), product.getCategory()));
             }
 
             Object lastFlag = payload.get("last");
@@ -869,10 +1258,10 @@ public class FashionTools {
         if (allTypes == null || allTypes.isEmpty()) return List.of();
         if (groupHint == null || groupHint.isBlank()) return allTypes;
 
-        String targetGroup = resolveGroupLabel(groupHint);
+        String targetGroup = productTaxonomyService.resolveGroupLabel(groupHint);
         List<String> filtered = new ArrayList<>();
         for (String type : allTypes) {
-            if (resolveGroupLabel(type).equals(targetGroup)) {
+            if (productTaxonomyService.resolveGroupLabel(type).equals(targetGroup)) {
                 filtered.add(type);
             }
         }
@@ -930,29 +1319,32 @@ public class FashionTools {
             int maxResults) {
         if (suggestions == null || suggestions.isEmpty()) return suggestions;
 
-        Map<String, List<ChatResponse.ProductSuggestion>> byCategory = new LinkedHashMap<>();
+        int target = Math.min(maxResults, suggestions.size());
+        Map<String, Integer> categoryCounts = new LinkedHashMap<>();
+        List<ChatResponse.ProductSuggestion> diversified = new ArrayList<>();
+        List<ChatResponse.ProductSuggestion> overflow = new ArrayList<>();
+
         for (ChatResponse.ProductSuggestion suggestion : suggestions) {
             String key = suggestion.getCategory() == null || suggestion.getCategory().isBlank()
                     ? "Khác"
                     : suggestion.getCategory();
-            byCategory.computeIfAbsent(key, ignored -> new ArrayList<>()).add(suggestion);
+            int count = categoryCounts.getOrDefault(key, 0);
+            if (count < 2) {
+                diversified.add(suggestion);
+                categoryCounts.put(key, count + 1);
+            } else {
+                overflow.add(suggestion);
+            }
+            if (diversified.size() >= target) {
+                return diversified;
+            }
         }
 
-        List<ChatResponse.ProductSuggestion> diversified = new ArrayList<>();
-        int target = Math.min(maxResults, suggestions.size());
-        int index = 0;
-
-        while (diversified.size() < target) {
-            boolean added = false;
-            for (List<ChatResponse.ProductSuggestion> bucket : byCategory.values()) {
-                if (index < bucket.size()) {
-                    diversified.add(bucket.get(index));
-                    added = true;
-                    if (diversified.size() >= target) break;
-                }
+        for (ChatResponse.ProductSuggestion suggestion : overflow) {
+            diversified.add(suggestion);
+            if (diversified.size() >= target) {
+                break;
             }
-            if (!added) break;
-            index++;
         }
 
         return diversified.isEmpty() ? suggestions : diversified;
@@ -960,6 +1352,80 @@ public class FashionTools {
 
     private List<String> safeList(List<String> values) {
         return values == null ? List.of() : values;
+    }
+
+    private String buildConciseSuggestionReply(List<ChatResponse.ProductSuggestion> suggestions,
+                                               String opener,
+                                               Long minPrice,
+                                               Long maxPrice,
+                                               String color,
+                                               String size,
+                                               String closing) {
+        StringBuilder reply = new StringBuilder(opener);
+        List<String> highlights = new ArrayList<>();
+
+        if (color != null && !color.isBlank()) {
+            highlights.add("ưu tiên tông " + color);
+        }
+        if (size != null && !size.isBlank()) {
+            highlights.add("size " + size.toUpperCase(Locale.ROOT));
+        }
+
+        String priceRange = describePriceRange(minPrice, maxPrice);
+        if (!priceRange.isBlank()) {
+            highlights.add(priceRange);
+        }
+
+        if (!highlights.isEmpty()) {
+            reply.append(" Mình đang ưu tiên ").append(String.join(", ", highlights)).append(".");
+        }
+
+        if (closing != null && !closing.isBlank()) {
+            reply.append(" ").append(closing);
+        }
+        return reply.toString();
+    }
+
+    private String describePriceRange(Long minPrice, Long maxPrice) {
+        if (minPrice == null && maxPrice == null) {
+            return "";
+        }
+        if (minPrice != null && maxPrice != null) {
+            return "khoảng giá " + formatMoney(BigDecimal.valueOf(minPrice))
+                    + " - " + formatMoney(BigDecimal.valueOf(maxPrice));
+        }
+        if (minPrice != null) {
+            return "mức giá từ " + formatMoney(BigDecimal.valueOf(minPrice));
+        }
+        return "mức giá dưới " + formatMoney(BigDecimal.valueOf(maxPrice));
+    }
+
+    private String humanizeOccasion(String occasion) {
+        if (occasion == null || occasion.isBlank()) {
+            return "nhu cầu này";
+        }
+        return switch (normalizeText(occasion)) {
+            case "di lam" -> "đi làm";
+            case "di tiec" -> "đi tiệc";
+            case "du lich" -> "du lịch";
+            case "he" -> "mùa hè";
+            case "dong" -> "mùa đông";
+            case "thu" -> "mùa thu";
+            case "xuan" -> "mùa xuân";
+            default -> occasion.replace('_', ' ');
+        };
+    }
+
+    private String humanizeStyle(String style) {
+        if (style == null || style.isBlank()) {
+            return "";
+        }
+        return switch (normalizeText(style)) {
+            case "thanh lich" -> "thanh lịch";
+            case "casual" -> "casual";
+            case "sporty" -> "sporty";
+            default -> style.replace('_', ' ');
+        };
     }
 
     private record SemanticMatch(ChatResponse.ProductSuggestion suggestion, int score, int index) {}
@@ -982,10 +1448,19 @@ public class FashionTools {
             @P("Mã đơn hàng, VD: ORD-1713200000000") String orderNumber) {
         try {
             log.info("Tool: checkOrderByNumber(orderNumber={})", orderNumber);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> order = webClient.get()
+            String userId = currentUserId();
+            if (isGuestUser(userId)) {
+                return "Báº¡n cáº§n Ä‘Äƒng nháº­p Ä‘á»ƒ mÃ¬nh kiá»ƒm tra Ä‘Æ¡n hÃ ng chÃ­nh xÃ¡c nhÃ©.";
+            }
+            var request = webClient.get()
                     .uri(orderServiceUrl + "/api/v1/orders/by-number/{number}", orderNumber)
-                    .accept(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON);
+            if (userId != null && !userId.isBlank()) {
+                request = request.header("X-User-Id", userId);
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> order = request
                     .retrieve()
                     .bodyToMono(Map.class)
                     .timeout(TOOL_TIMEOUT)
@@ -999,6 +1474,7 @@ public class FashionTools {
             return "Đơn hàng " + orderNumber + ": trạng thái " + status + ", tổng tiền " + totalAmount + " VND.";
         } catch (Throwable ex) {
             log.error("checkOrderByNumber failed", ex);
+            markToolFailure();
             return "Dịch vụ đơn hàng tạm thời không phản hồi. Vui lòng thử lại sau.";
         }
     }
@@ -1040,6 +1516,7 @@ public class FashionTools {
             }
         } catch (Throwable ex) {
             log.error("validateCoupon failed", ex);
+            markToolFailure();
             return "Dịch vụ khuyến mãi tạm thời không phản hồi. Vui lòng thử lại sau.";
         }
     }
@@ -1075,6 +1552,7 @@ public class FashionTools {
             return result.toString();
         } catch (Throwable ex) {
             log.error("getActivePromotions failed", ex);
+            markToolFailure();
             return "Dịch vụ khuyến mãi tạm thời không phản hồi. Vui lòng thử lại sau.";
         }
     }
@@ -1113,10 +1591,15 @@ public class FashionTools {
                     ? SizeAdvisorService.GarmentType.BOTTOM
                     : SizeAdvisorService.GarmentType.TOP;
 
-            SizeAdvisorService.SizeResult result = sizeAdvisorService.suggest(m, type);
-            if (collector() != null) collector().setSizeRecommendation(result.recommendedSize());
+            SizeFitAdvisoryService.SizeFitAdvice advice =
+                    sizeFitAdvisoryService.advise(m, type, garmentType, preferenceProfile());
+            if (collector() != null) collector().setSizeRecommendation(advice.recommendedSize());
 
-            return "Gợi ý size " + result.recommendedSize() + ". " + result.note();
+            String reply = "Goi y size " + advice.recommendedSize() + ". " + advice.rationale();
+            if (advice.followUpPrompt() != null && !advice.followUpPrompt().isBlank()) {
+                reply += " " + advice.followUpPrompt();
+            }
+            return reply;
         } catch (Throwable ex) {
             log.error("consultSize failed", ex);
             return "Mình gặp chút trục trặc khi tính toán size. Bạn thử cung cấp lại số đo nhé!";
@@ -1136,16 +1619,19 @@ public class FashionTools {
         try {
             log.info("Tool: suggestOutfit(occasion={}, style={})", occasion, style);
             List<String> queries = outfitRuleEngine.buildQueries(occasion, style);
-            StringBuilder allResults = new StringBuilder();
 
             for (String query : queries) {
-                String toolResult = searchProducts(query, null, null, null, null);
-                allResults.append(toolResult).append("\n");
+                // Giữ flow tool-calling hiện tại để collector tiếp tục gom suggestions cho FE render.
+                searchProducts(query, null, null, null, null);
             }
 
-            return "Gợi ý outfit cho " + occasion
-                    + (style != null ? " (phong cách " + style + ")" : "")
-                    + ":\n" + allResults;
+            StringBuilder reply = new StringBuilder("Mình đã phối sẵn vài lựa chọn phù hợp cho ");
+            reply.append(humanizeOccasion(occasion));
+            if (style != null && !style.isBlank()) {
+                reply.append(" theo phong cách ").append(humanizeStyle(style));
+            }
+            reply.append(". Bạn xem các card bên dưới, nếu muốn mình sẽ chốt giúp 1 combo dễ mặc nhất.");
+            return reply.toString();
         } catch (Throwable ex) {
             log.error("suggestOutfit failed", ex);
             return "Mình chưa thể gợi ý trang phục lúc này. Bạn thử lại sau nhé!";
@@ -1162,9 +1648,27 @@ public class FashionTools {
             """)
     public String searchKnowledge(
             @P("Câu hỏi hoặc từ khóa tìm kiếm") String query) {
+        return searchKnowledgeInternal(query, false);
+    }
+
+    @Tool("""
+            Tìm playbook tư vấn bán hàng, style guide, objection handling và ngôn ngữ chốt đơn mềm.
+            Gọi khi người dùng hỏi kiểu: mẫu nào dễ mặc hơn, nên chọn phương án an toàn hay nổi bật,
+            giá hơi cao có lựa chọn mềm hơn không, nên phối thế nào, nên chốt mẫu nào, đi làm/đi chơi/đi tiệc nên ưu tiên kiểu gì.
+            Ưu tiên dùng tool này cho câu hỏi mang tính tư vấn phong cách và sales, không phải policy thuần.
+            """)
+    public String searchSalesGuidance(
+            @P("Câu hỏi hoặc tình huống cần tư vấn theo góc nhìn sales/stylist") String query) {
+        return searchKnowledgeInternal(query, true);
+    }
+
+    private String searchKnowledgeInternal(String query, boolean prioritizeSalesSources) {
         try {
-            log.info("Tool: searchKnowledge(query={})", query);
+            log.info("Tool: searchKnowledgeInternal(query={}, prioritizeSalesSources={})", query, prioritizeSalesSources);
             List<KnowledgeBaseService.SearchResult> results = knowledgeBaseService.search(query);
+            if (prioritizeSalesSources) {
+                results = prioritizeSalesKnowledge(results);
+            }
 
             if (results.isEmpty()) {
                 return "Không tìm thấy thông tin liên quan trong kiến thức của shop. "
@@ -1185,8 +1689,41 @@ public class FashionTools {
             return answer.toString().trim();
         } catch (Throwable ex) {
             log.error("searchKnowledge failed", ex);
+            markToolFailure();
             return "Mình chưa thể tìm kiếm thông tin lúc này. Bạn thử lại sau nhé!";
         }
+    }
+
+    private List<KnowledgeBaseService.SearchResult> prioritizeSalesKnowledge(List<KnowledgeBaseService.SearchResult> results) {
+        if (results == null || results.isEmpty()) {
+            return List.of();
+        }
+
+        return results.stream()
+                .sorted(Comparator.comparingDouble((KnowledgeBaseService.SearchResult result) ->
+                        scoreKnowledgeSourcePriority(result.source(), result.title(), result.score())).reversed())
+                .limit(4)
+                .toList();
+    }
+
+    private double scoreKnowledgeSourcePriority(String source, String title, double baseScore) {
+        String sourceKey = normalizeText(stringValue(source) + " " + stringValue(title));
+        double bonus = 0.0d;
+
+        if (sourceKey.contains("sales playbook")) {
+            bonus += 0.6d;
+        }
+        if (sourceKey.contains("style guide")) {
+            bonus += 0.45d;
+        }
+        if (sourceKey.contains("sales objections")) {
+            bonus += 0.5d;
+        }
+        if (sourceKey.contains("faq") || sourceKey.contains("policy")) {
+            bonus -= 0.1d;
+        }
+
+        return baseScore + bonus;
     }
 
     // ========== WISHLIST TOOL ==========
@@ -1232,20 +1769,20 @@ public class FashionTools {
                 return "Danh sách yêu thích của bạn hiện đang trống. Bạn muốn mình gợi ý một số sản phẩm phù hợp không?";
             }
 
-            StringBuilder result = new StringBuilder("Bạn đang có " + products.size() + " sản phẩm trong wishlist:\n");
-            for (var p : products) {
-                result.append("- ").append(p.getName())
-                        .append(" | Giá: ").append(p.getPrice())
-                        .append(" | Size còn: ").append(String.join(", ", safeList(p.getAvailableSizes())));
-                if (safeList(p.getAvailableSizes()).isEmpty()) {
-                    result.append(" (⚠️ Hết hàng)");
-                }
-                result.append("\n");
+            long outOfStockCount = products.stream()
+                    .filter(product -> safeList(product.getAvailableSizes()).isEmpty())
+                    .count();
+
+            StringBuilder reply = new StringBuilder("Mình đã mở lại wishlist và chọn sẵn những mẫu đáng chú ý cho bạn.");
+            if (outOfStockCount > 0) {
+                reply.append(" Hiện có ").append(outOfStockCount)
+                        .append(" mẫu tạm hết size hoặc khó chốt nhanh, nên mình ưu tiên những lựa chọn dễ mua hơn.");
             }
-            result.append("\nBạn muốn mình tư vấn thêm về sản phẩm nào hoặc gợi ý outfit phối cùng không?");
-            return result.toString();
+            reply.append(" Bạn xem các card bên dưới, nếu cần mình sẽ gợi ý outfit hoặc chọn giúp mẫu nên mua trước.");
+            return reply.toString();
         } catch (Throwable ex) {
             log.error("getWishlistRecommendations failed", ex);
+            markToolFailure();
             return "Mình chưa thể tải danh sách yêu thích lúc này. Bạn thử lại sau nhé!";
         }
     }
@@ -1310,6 +1847,7 @@ public class FashionTools {
             return result.toString().trim();
         } catch (Throwable ex) {
             log.error("getLoyaltyBenefits failed", ex);
+            markToolFailure();
             return "Mình chưa thể kiểm tra thông tin điểm thưởng lúc này. Bạn thử lại sau nhé!";
         }
     }
@@ -1569,6 +2107,7 @@ public class FashionTools {
                     .productId(productId)
                     .name(name)
                     .category(category)
+                    .categoryGender(stringValue(product.get("categoryGender")))
                     .imageUrl(imageUrl)
                     .link(link)
                     .price(formatMoney(minPrice))

@@ -23,6 +23,11 @@ chatbot:
   product-service-url: ${PRODUCT_SERVICE_URL:http://localhost:8080}
   promotion-service-url: ${PROMOTION_SERVICE_URL:http://localhost:8080}
   order-service-url: ${ORDER_SERVICE_URL:http://localhost:8080}
+  internal:
+    caller: ${CHATBOT_INTERNAL_CALLER:chatbot-service}
+    shared-secret: ${INTERNAL_SERVICE_SHARED_SECRET:local-chatbot-internal-secret}
+  security:
+    allow-direct-user-header: ${CHATBOT_ALLOW_DIRECT_USER_HEADER:true}
   knowledge:
     enabled: ${CHATBOT_KB_ENABLED:true}
     data-path: classpath:knowledge
@@ -36,3 +41,7 @@ chatbot:
       related-threshold: ${CHATBOT_GRAPHRAG_RELATED_THRESHOLD:0.25}
       adjacent-boost: ${CHATBOT_GRAPHRAG_ADJACENT_BOOST:0.25}
       related-boost: ${CHATBOT_GRAPHRAG_RELATED_BOOST:0.35}
+
+ai:
+  log-requests: ${AI_LOG_REQUESTS:true}
+  log-responses: ${AI_LOG_RESPONSES:true}

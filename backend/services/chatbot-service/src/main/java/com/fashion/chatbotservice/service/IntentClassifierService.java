@@ -11,6 +11,8 @@ public interface IntentClassifierService {
     String ASK_POLICY = "ASK_POLICY";
     String SEARCH_PRODUCT = "SEARCH_PRODUCT";
     String CHECK_ORDER = "CHECK_ORDER";
+    String WISHLIST_RECOMMENDATION = "WISHLIST_RECOMMENDATION";
+    String LOYALTY_BENEFIT = "LOYALTY_BENEFIT";
     String GREETING = "GREETING";
     String OUT_OF_DOMAIN = "OUT_OF_DOMAIN";
     String GENERAL = "GENERAL";

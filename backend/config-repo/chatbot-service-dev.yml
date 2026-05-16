@@ -2,3 +2,11 @@ spring:
   data:
     mongodb:
       uri: ${SPRING_DATA_MONGODB_URI:mongodb+srv://monimal1:huytran123@monimal1.meiqplv.mongodb.net/fashion_chatbot_db?retryWrites=true&w=majority&appName=monimal1}
+
+chatbot:
+  security:
+    allow-direct-user-header: true
+
+ai:
+  log-requests: true
+  log-responses: true

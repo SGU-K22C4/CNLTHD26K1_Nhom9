@@ -14,6 +14,11 @@ chatbot:
   order-service-url: ${ORDER_SERVICE_URL:http://localhost:8080}
   cart-service-url: ${CART_SERVICE_URL:http://localhost:8080}
   review-service-url: ${REVIEW_SERVICE_URL:http://localhost:8088}
+  internal:
+    caller: ${CHATBOT_INTERNAL_CALLER:chatbot-service}
+    shared-secret: ${INTERNAL_SERVICE_SHARED_SECRET:local-chatbot-internal-secret}
+  security:
+    allow-direct-user-header: ${CHATBOT_ALLOW_DIRECT_USER_HEADER:true}
 
   # Agent mode: true = LangChain4j agent, false = heuristic fallback
   use-agent: ${CHATBOT_USE_AGENT:true}
@@ -58,6 +63,8 @@ ai:
   base-url: ${AI_BASE_URL:https://llm.chiasegpu.vn/v1}
   timeout-seconds: ${AI_TIMEOUT_SECONDS:180}
   max-tokens: ${AI_MAX_TOKENS:4096}
+  log-requests: ${AI_LOG_REQUESTS:true}
+  log-responses: ${AI_LOG_RESPONSES:true}
 
 server:
   port: ${SERVER_PORT:8087}

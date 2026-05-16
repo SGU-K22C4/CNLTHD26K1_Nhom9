@@ -1,25 +1,24 @@
 package com.fashion.chatbotservice.controller;
 
-import com.fashion.chatbotservice.dto.ChatRequest;
-import com.fashion.chatbotservice.dto.ChatResponse;
-import com.fashion.chatbotservice.dto.SessionResponse;
-import com.fashion.chatbotservice.service.ChatbotService;
+import com.fashion.chatbotservice.dto.ChatFeedbackEventRequest;
+import com.fashion.chatbotservice.service.ChatFeedbackService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.UUID;
+import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/chatbot")
+@RequestMapping("/api/v1/chatbot/analytics")
 @RequiredArgsConstructor
-@Slf4j
-public class ChatbotController {
+public class ChatAnalyticsController {
 
-    private final ChatbotService chatbotService;
+    private final ChatFeedbackService chatFeedbackService;
 
     @Value("${chatbot.internal.shared-secret:local-chatbot-internal-secret}")
     private String internalSharedSecret;
@@ -27,42 +26,21 @@ public class ChatbotController {
     @Value("${chatbot.security.allow-direct-user-header:true}")
     private boolean allowDirectUserHeader;
 
-    @PostMapping("/chat")
-    public ResponseEntity<ChatResponse> chat(
-            @RequestBody ChatRequest request,
+    @PostMapping("/events")
+    public ResponseEntity<Map<String, String>> recordEvent(
+            @RequestBody ChatFeedbackEventRequest request,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @RequestHeader(value = "X-User-Role", required = false) String userRole,
             @RequestHeader(value = "X-Consumer-Username", required = false) String consumerUsername,
             @RequestHeader(value = "X-Internal-Caller", required = false) String internalCaller,
             @RequestHeader(value = "X-Internal-Auth", required = false) String internalAuth) {
 
-        String traceId = UUID.randomUUID().toString();
-        MDC.put("traceId", traceId);
-
-        try {
-            log.info("Chat request: sessionId={}, messageLength={}",
-                    request.getSessionId(),
-                    request.getMessage() != null ? request.getMessage().length() : 0);
-
-            ChatResponse response = chatbotService.chat(
-                    request,
-                    resolveTrustedUserId(userId, userRole, consumerUsername, internalCaller, internalAuth),
-                    traceId);
-            return ResponseEntity.ok(response);
-        } finally {
-            MDC.remove("traceId");
-        }
+        chatFeedbackService.recordEvent(
+                resolveTrustedUserId(userId, userRole, consumerUsername, internalCaller, internalAuth),
+                request);
+        return ResponseEntity.ok(Map.of("status", "ok"));
     }
 
-    @GetMapping("/sessions/{sessionId}")
-    public ResponseEntity<SessionResponse> getSession(@PathVariable String sessionId) {
-        return ResponseEntity.ok(chatbotService.getSession(sessionId));
-    }
-
-    /**
-     * Chat vẫn public cho guest mode, nhưng user context chỉ được tin khi request đi
-     * qua gateway/internal trust hợp lệ. Làm vậy để tránh client tự spoof X-User-Id.
-     */
     private String resolveTrustedUserId(String userId,
                                         String userRole,
                                         String consumerUsername,
@@ -81,7 +59,6 @@ public class ChatbotController {
         if (allowDirectUserHeader) {
             return userId.trim();
         }
-        log.debug("Ignoring untrusted X-User-Id header for chatbot request");
         return null;
     }
 

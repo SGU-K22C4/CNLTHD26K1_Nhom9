@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useCartContext } from '@/modules/cart/hooks/useCartContext'
 import { paymentService } from '../services/paymentService'
 import PaymentResultBanner from '../components/PaymentResultBanner'
+import { chatbotService } from '../../chatbot/services/chatbotService'
 
 export default function VNPayReturnPage() {
   const [searchParams] = useSearchParams()
@@ -27,6 +28,33 @@ export default function VNPayReturnPage() {
 
         // If payment successful, redirect to order detail page
         if (data.success) {
+          const chatbotAttributions = chatbotService.getCheckoutAttributions()
+          if (chatbotAttributions.length > 0) {
+            const primaryAttribution = chatbotAttributions[0]
+            await chatbotService.sendFeedbackEvent({
+              sessionId: primaryAttribution.sessionId,
+              eventType: 'order_success',
+              sourceMessageId: primaryAttribution.sourceMessageId,
+              metadata: {
+                paymentMethod: 'VNPAY',
+                orderId: data.orderId || '',
+                orderNumber: data.orderNumber || '',
+                transactionNo: data.transactionNo || '',
+                attributedProductIds: chatbotAttributions.map((item) => item?.productId).filter(Boolean),
+                attributedItems: chatbotAttributions.map((item) => ({
+                  productId: item?.productId || '',
+                  productName: item?.productName || '',
+                  sourceMessageId: item?.sourceMessageId || '',
+                  surface: item?.surface || '',
+                  quantity: item?.quantity || 1,
+                })),
+              },
+            }).catch((trackingError) => {
+              console.debug('track vnpay order_success failed', trackingError)
+            })
+            chatbotService.clearCheckoutAttributions()
+          }
+
           // Clear cart after successful VNPay payment
           try {
             await clearCart()

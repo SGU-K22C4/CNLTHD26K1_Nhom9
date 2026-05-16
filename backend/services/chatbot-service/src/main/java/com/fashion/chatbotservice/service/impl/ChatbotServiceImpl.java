@@ -16,6 +16,7 @@ import com.fashion.chatbotservice.service.ChatAnalyticsService;
 import com.fashion.chatbotservice.service.IntentClassifierService;
 import com.fashion.chatbotservice.service.ProfileEnrichmentService;
 import com.fashion.chatbotservice.service.SizeAdvisorService;
+import com.fashion.chatbotservice.service.SizeFitAdvisoryService;
 import com.fashion.chatbotservice.util.VietnameseNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +46,17 @@ import java.util.regex.Pattern;
 @Slf4j
 public class ChatbotServiceImpl implements ChatbotService {
 
+    private static final String FLOW_PRODUCT_DISCOVERY = "PRODUCT_DISCOVERY";
+    private static final String FLOW_SIZE_COLLECTION = "SIZE_COLLECTION";
+    private static final String FLOW_WISHLIST_REVIEW = "WISHLIST_REVIEW";
+    private static final String FLOW_LOYALTY_REVIEW = "LOYALTY_REVIEW";
+    private static final String PENDING_PRODUCT_TYPE = "PRODUCT_TYPE";
+    private static final String PENDING_SIZE = "SIZE";
+    private static final String PENDING_MEASUREMENTS = "MEASUREMENTS";
+    private static final String PENDING_BUDGET = "BUDGET";
+    private static final String PENDING_GENDER_CONTEXT = "GENDER_CONTEXT";
+    private static final long CONVERSATION_STATE_TTL_MINUTES = 20L;
+
     private final FashionAgent fashionAgent;
     private final FashionTools fashionTools;
     private final AgentConfig agentConfig;
@@ -53,6 +65,7 @@ public class ChatbotServiceImpl implements ChatbotService {
     private final ProfileEnrichmentService profileEnrichmentService;
     private final ChatAnalyticsService chatAnalyticsService;
     private final SizeAdvisorService sizeAdvisorService;
+    private final SizeFitAdvisoryService sizeFitAdvisoryService;
     private final ResponseGuardrail responseGuardrail;
     private final WebClient webClient;
 
@@ -102,6 +115,7 @@ public class ChatbotServiceImpl implements ChatbotService {
         String userId = resolveUserId(userIdHeader, sessionId);
         ChatSession session = findOrCreateSession(sessionId, userId);
         mergePreferences(session, request.getPreferences());
+        ToolResultCollector collector = new ToolResultCollector();
 
         // ============ COLD START DETECTION ============
         // Nếu đây là câu đầu tiên trong phiên (session.messages == null hoặc rỗng) → đây là Cold Start
@@ -113,6 +127,7 @@ public class ChatbotServiceImpl implements ChatbotService {
         if (isColdStart) {
             ChatResponse coldStartResponse = handleColdStart(sessionId, request.getMessage(), session);
             if (coldStartResponse != null) {
+                coldStartResponse = applyFinalGuardrail(coldStartResponse, collectorFromResponse(coldStartResponse, collector));
                 persistMessages(session, request.getMessage(), coldStartResponse);
                 return coldStartResponse;
             }
@@ -124,10 +139,21 @@ public class ChatbotServiceImpl implements ChatbotService {
         profileEnrichmentService.enrichFromWishlist(session.getPreferenceProfile(), userId);
         profileEnrichmentService.enrichFromUserProfile(session.getPreferenceProfile(), userId);
         updateBudgetFromMessage(session.getPreferenceProfile(), request.getMessage());
+        refreshProductQueryContext(session.getPreferenceProfile(), request.getMessage());
+
+        ChatResponse genderContextResponse = handleGenderContextStep(sessionId, request.getMessage(), session);
+        if (genderContextResponse != null) {
+            genderContextResponse = applyFinalGuardrail(genderContextResponse, collectorFromResponse(genderContextResponse, collector));
+            persistMessages(session, request.getMessage(), genderContextResponse);
+            return genderContextResponse;
+        }
 
         // === Task 2: Out-of-Domain Short-Circuit ===
         // Classify intent BEFORE calling LLM to block off-topic/injection queries
-        IntentClassifierService.IntentScore preCheck = intentClassifierService.classify(request.getMessage());
+        IntentClassifierService.IntentScore preCheck = applyConversationStateOverride(
+                session.getPreferenceProfile(),
+                request.getMessage(),
+                intentClassifierService.classify(request.getMessage()));
         if (IntentClassifierService.OUT_OF_DOMAIN.equals(preCheck.intent())) {
             log.info("Out-of-domain query blocked (no LLM call): {}", request.getMessage());
             ChatResponse oodResponse = ChatResponse.builder()
@@ -141,15 +167,27 @@ public class ChatbotServiceImpl implements ChatbotService {
                     .profile(session.getPreferenceProfile())
                     .createdAt(Instant.now())
                     .build();
+            oodResponse = applyFinalGuardrail(oodResponse, collectorFromResponse(oodResponse, collector));
             persistMessages(session, request.getMessage(), oodResponse);
             return oodResponse;
         }
 
-        ToolResultCollector collector = new ToolResultCollector();
+        ChatResponse directIntentResponse = handleDirectIntent(
+                sessionId, request.getMessage(), session, collector, preCheck.intent(), preCheck.confidence());
+        if (directIntentResponse != null) {
+            directIntentResponse = applyFinalGuardrail(directIntentResponse, collector);
+            persistMessages(session, request.getMessage(), directIntentResponse);
+
+            long totalLatency = System.currentTimeMillis() - startTime;
+            chatAnalyticsService.record(traceId, sessionId, userId,
+                    request.getMessage(), directIntentResponse, collector, totalLatency);
+            return directIntentResponse;
+        }
 
         // === Deictic reference handling ("áo này", "mẫu này") ===
         ChatResponse deicticResponse = handleDeicticReference(sessionId, request.getMessage(), session, collector);
         if (deicticResponse != null) {
+            deicticResponse = applyFinalGuardrail(deicticResponse, collector);
             persistMessages(session, request.getMessage(), deicticResponse);
 
             long totalLatency = System.currentTimeMillis() - startTime;
@@ -161,6 +199,7 @@ public class ChatbotServiceImpl implements ChatbotService {
         // === Explicit product check handling (strict search) ===
         ChatResponse explicitProductResponse = handleExplicitProductLookup(sessionId, request.getMessage(), session, collector);
         if (explicitProductResponse != null) {
+            explicitProductResponse = applyFinalGuardrail(explicitProductResponse, collector);
             persistMessages(session, request.getMessage(), explicitProductResponse);
 
             long totalLatency = System.currentTimeMillis() - startTime;
@@ -171,6 +210,7 @@ public class ChatbotServiceImpl implements ChatbotService {
 
         // Execute Agentic AI — single path, no heuristic fallback
         ChatResponse response = executeAgent(sessionId, request.getMessage(), session, collector);
+        response = applyFinalGuardrail(response, collector);
 
         // Persist messages to MongoDB
         persistMessages(session, request.getMessage(), response);
@@ -181,6 +221,72 @@ public class ChatbotServiceImpl implements ChatbotService {
                 request.getMessage(), response, collector, totalLatency);
 
         return response;
+    }
+
+    private ChatResponse handleDirectIntent(String sessionId, String message,
+                                            ChatSession session, ToolResultCollector collector,
+                                            String intent, double confidence) {
+        if (IntentClassifierService.WISHLIST_RECOMMENDATION.equals(intent)) {
+            if (isGuestUser(session.getUserId())) {
+                return buildLoginRequiredResponse(sessionId, intent, confidence, collector, session,
+                        "Mình cần bạn đăng nhập để mở wishlist và gợi ý đúng các mẫu bạn đã lưu nhé.");
+            }
+            try {
+                fashionTools.setCollector(collector);
+                fashionTools.setPreferenceProfile(session.getPreferenceProfile());
+                fashionTools.setCurrentUserId(session.getUserId());
+                String reply = fashionTools.getWishlistRecommendations(session.getUserId());
+                return ResponseAssembler.build(sessionId, reply, collector, session.getPreferenceProfile());
+            } catch (Exception ex) {
+                log.warn("Direct wishlist handling failed: {}", ex.getMessage());
+                return ChatResponse.builder()
+                        .sessionId(sessionId)
+                        .intent(intent)
+                        .confidence(confidence)
+                        .reply("Mình chưa thể mở wishlist lúc này. Bạn thử lại sau ít phút nhé.")
+                        .suggestions(collector.getProducts())
+                        .promotions(collector.getPromotions())
+                        .profile(session.getPreferenceProfile())
+                        .createdAt(Instant.now())
+                        .build();
+            } finally {
+                fashionTools.clearCollector();
+            }
+        }
+
+        if (IntentClassifierService.LOYALTY_BENEFIT.equals(intent)) {
+            if (isGuestUser(session.getUserId())) {
+                return buildLoginRequiredResponse(sessionId, intent, confidence, collector, session,
+                        "Mình cần bạn đăng nhập để kiểm tra điểm thưởng và quyền lợi thành viên chính xác nhé.");
+            }
+            try {
+                fashionTools.setCollector(collector);
+                fashionTools.setPreferenceProfile(session.getPreferenceProfile());
+                fashionTools.setCurrentUserId(session.getUserId());
+                String reply = fashionTools.getLoyaltyBenefits(session.getUserId());
+                return ResponseAssembler.build(sessionId, reply, collector, session.getPreferenceProfile());
+            } catch (Exception ex) {
+                log.warn("Direct loyalty handling failed: {}", ex.getMessage());
+                return ChatResponse.builder()
+                        .sessionId(sessionId)
+                        .intent(intent)
+                        .confidence(confidence)
+                        .reply("Mình chưa thể kiểm tra điểm thưởng lúc này. Bạn thử lại sau ít phút nhé.")
+                        .suggestions(collector.getProducts())
+                        .promotions(collector.getPromotions())
+                        .profile(session.getPreferenceProfile())
+                        .createdAt(Instant.now())
+                        .build();
+            } finally {
+                fashionTools.clearCollector();
+            }
+        }
+
+        if (IntentClassifierService.CONSULT_SIZE.equals(intent) && isStrongDirectSizeIntent(message)) {
+            return buildSizeConsultationResponse(sessionId, message, session, collector, intent, confidence);
+        }
+
+        return null;
     }
 
     @Override
@@ -209,6 +315,45 @@ public class ChatbotServiceImpl implements ChatbotService {
                 .build();
     }
 
+    private IntentClassifierService.IntentScore applyConversationStateOverride(
+            ChatSession.PreferenceProfile profile,
+            String message,
+            IntentClassifierService.IntentScore original) {
+        if (profile == null || original == null || !hasActiveConversationState(profile)) {
+            return original;
+        }
+
+        String normalized = VietnameseNormalizer.normalize(message);
+        if (IntentClassifierService.OUT_OF_DOMAIN.equals(original.intent())
+                || IntentClassifierService.CHECK_ORDER.equals(original.intent())
+                || IntentClassifierService.ASK_POLICY.equals(original.intent())
+                || IntentClassifierService.ASK_PROMOTION.equals(original.intent())
+                || IntentClassifierService.WISHLIST_RECOMMENDATION.equals(original.intent())
+                || IntentClassifierService.LOYALTY_BENEFIT.equals(original.intent())) {
+            return original;
+        }
+
+        if (FLOW_PRODUCT_DISCOVERY.equals(profile.getConversationFlow())) {
+            if (PENDING_MEASUREMENTS.equals(profile.getPendingQuestionType())
+                    && (containsMeasurementData(normalized) || isSizeFitFollowUp(normalized))) {
+                return new IntentClassifierService.IntentScore(IntentClassifierService.CONSULT_SIZE,
+                        Math.max(original.confidence(), 0.93d));
+            }
+            if (isRefinementFollowUp(message, normalized)) {
+                return new IntentClassifierService.IntentScore(IntentClassifierService.SEARCH_PRODUCT,
+                        Math.max(original.confidence(), 0.9d));
+            }
+        }
+
+        if (FLOW_SIZE_COLLECTION.equals(profile.getConversationFlow())
+                && (containsMeasurementData(normalized) || isSizeFitFollowUp(normalized))) {
+            return new IntentClassifierService.IntentScore(IntentClassifierService.CONSULT_SIZE,
+                    Math.max(original.confidence(), 0.94d));
+        }
+
+        return original;
+    }
+
     /**
      * Chế độ Agent: LLM tự quyết định gọi tool nào.
      * Safety net: nếu Agent trả về rỗng nhưng message rõ ràng là tìm SP → fallback heuristic.
@@ -218,12 +363,21 @@ public class ChatbotServiceImpl implements ChatbotService {
         try {
             fashionTools.setCollector(collector);
             fashionTools.setPreferenceProfile(session.getPreferenceProfile());
+            fashionTools.setCurrentUserId(session.getUserId());
 
             // === Task 3: Inject active cart context into the message ===
             String cartContext = fetchActiveCartContext(session.getUserId());
+            String clarificationContext = buildClarificationContext(session.getPreferenceProfile());
+            String conversationStateContext = buildConversationStateContext(session.getPreferenceProfile());
             String profileContext = buildProfileContext(session.getPreferenceProfile());
 
             StringBuilder contextBuilder = new StringBuilder();
+            if (!clarificationContext.isBlank()) {
+                contextBuilder.append("[Clarification context] ").append(clarificationContext).append("\n");
+            }
+            if (!conversationStateContext.isBlank()) {
+                contextBuilder.append("[Conversation state] ").append(conversationStateContext).append("\n");
+            }
             if (!profileContext.isBlank()) {
                 contextBuilder.append("[Ngữ cảnh cá nhân] ").append(profileContext).append("\n");
             }
@@ -236,7 +390,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                     : contextBuilder.append("\n").append(message).toString();
 
             log.info("Gọi Agent cho session: {}, message length: {}", sessionId, enrichedMessage.length());
-            String llmReply = invokeAgentWithRetry(sessionId, enrichedMessage);
+            String llmReply = invokeAgentWithRetry(sessionId, enrichedMessage, session);
             
             if (llmReply == null || llmReply.isBlank()) {
                 log.warn("Agent liên tục lỗi cho session: {}. Chuyển sang chế độ Heuristic Fallback.", sessionId);
@@ -245,8 +399,7 @@ public class ChatbotServiceImpl implements ChatbotService {
             }
 
             // Layer 3: Backend Guardrail — validate LLM output against real data
-            String validatedReply = responseGuardrail.validateAndSanitize(llmReply, collector);
-            return ResponseAssembler.build(sessionId, validatedReply, collector, session.getPreferenceProfile());
+            return ResponseAssembler.build(sessionId, llmReply, collector, session.getPreferenceProfile());
         } catch (Throwable ex) {
             log.error("LỖI NGHIÊM TRỌNG khi thực thi Agent cho session: {}. Type: {}. Chi tiết: {}",
                     sessionId, ex.getClass().getSimpleName(), ex.getMessage(), ex);
@@ -262,17 +415,18 @@ public class ChatbotServiceImpl implements ChatbotService {
      * NPE occurs when DeepSeek returns tool_call with null content → corrupts ChatMemory.
      * Fix: clear corrupted memory before retry so LangChain4j starts with a clean state.
      */
-    private String invokeAgentWithRetry(String sessionId, String message) {
+    private String invokeAgentWithRetry(String sessionId, String message, ChatSession session) {
         try {
             return fashionAgent.chat(sessionId, message);
         } catch (NullPointerException npe) {
             log.warn("Agent NPE for session {}, clearing corrupted memory and retrying. Cause: {}",
                     sessionId, npe.getMessage());
-            // Clear the corrupted memory so next call starts fresh
+            // Retry with reduced context rebuilt from persisted state so one malformed
+            // tool call does not wipe the whole conversation flow.
             agentConfig.clearSessionMemory(sessionId);
             try {
                 Thread.sleep(300);
-                return fashionAgent.chat(sessionId, message);
+                return fashionAgent.chat(sessionId, buildRecoveryRetryMessage(session, message));
             } catch (Throwable retryEx) {
                 log.error("Agent retry failed for session {} after memory clear: {}", sessionId, retryEx.getMessage());
                 return null; // Return null → will be caught upstream as empty reply
@@ -317,16 +471,25 @@ public class ChatbotServiceImpl implements ChatbotService {
                 profile.setLastWaistCm(waistCm);
                 profile.setLastHipCm(hipCm);
 
+                String garmentKeyword = extractGarmentKeyword(message);
+                if ((garmentKeyword == null || garmentKeyword.isBlank())
+                        && profile.getLastProductCategoryQueried() != null
+                        && !profile.getLastProductCategoryQueried().isBlank()) {
+                    garmentKeyword = profile.getLastProductCategoryQueried();
+                }
                 SizeAdvisorService.GarmentType type = sizeAdvisorService.detectGarmentType(message);
-                SizeAdvisorService.SizeResult result = sizeAdvisorService.suggest(merged, type);
-                collector.setSizeRecommendation(result.recommendedSize());
+                SizeFitAdvisoryService.SizeFitAdvice advice =
+                        sizeFitAdvisoryService.advise(merged, type, garmentKeyword == null ? message : garmentKeyword, profile);
+                collector.setSizeRecommendation(advice.recommendedSize());
+                SizeAdvisorService.SizeResult result =
+                        new SizeAdvisorService.SizeResult(advice.recommendedSize(), advice.rationale());
 
                 // Tư vấn size xong → tự động tìm sản phẩm phù hợp
-                String garmentKeyword = extractGarmentKeyword(message);
                 if (garmentKeyword != null && !garmentKeyword.isBlank()) {
                     try {
                         fashionTools.setCollector(collector);
                         fashionTools.setPreferenceProfile(profile);
+                        fashionTools.setCurrentUserId(session.getUserId());
                         Double maxPrice = parseBudget(profile.getBudget());
                         fashionTools.searchProducts(garmentKeyword, null, maxPrice != null ? maxPrice.longValue() : null, null, null);
                     } catch (Exception ex) {
@@ -340,6 +503,9 @@ public class ChatbotServiceImpl implements ChatbotService {
                 sizeReply.append("Với chiều cao ").append(heightCm).append("cm và cân nặng ").append(weightKg)
                         .append("kg, mình gợi ý bạn chọn **size ").append(result.recommendedSize()).append("**. ")
                         .append(result.note());
+                if (advice.followUpPrompt() != null && !advice.followUpPrompt().isBlank()) {
+                    sizeReply.append("\n\n").append(advice.followUpPrompt());
+                }
                 if (!collector.getProducts().isEmpty()) {
                     sizeReply.append("\n\nMình cũng tìm thấy một số sản phẩm phù hợp cho bạn:");
                 }
@@ -351,6 +517,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                 try {
                     fashionTools.setCollector(collector);
                     fashionTools.setPreferenceProfile(profile);
+                    fashionTools.setCurrentUserId(session.getUserId());
                     String knowledgeResult = fashionTools.searchKnowledge(message);
                     yield knowledgeResult;
                 } catch (Exception ex) {
@@ -366,6 +533,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                 try {
                     fashionTools.setCollector(collector);
                     fashionTools.setPreferenceProfile(profile);
+                    fashionTools.setCurrentUserId(session.getUserId());
                     String toolResult = fashionTools.getActivePromotions();
                     yield toolResult;
                 } catch (Exception ex) {
@@ -379,7 +547,7 @@ public class ChatbotServiceImpl implements ChatbotService {
             case IntentClassifierService.SEARCH_PRODUCT -> {
                 // Gọi Tool thật để tìm sản phẩm — áp dụng budget từ message HOẶC Personalization panel
                 try {
-                    String searchKeyword = extractProductSearchKeyword(message);
+                    String searchKeyword = resolveSearchKeywordForTurn(message, profile);
                     if (shouldListProductTypes(message, searchKeyword)) {
                         fashionTools.setCollector(collector);
                         fashionTools.setPreferenceProfile(profile);
@@ -400,12 +568,13 @@ public class ChatbotServiceImpl implements ChatbotService {
                     fashionTools.setCollector(collector);
                     fashionTools.setPreferenceProfile(profile);
                     String sizeFilter = extractSizeFilter(message);
+                    String colorFilter = extractColorFilterForTurn(message, profile);
 
                     if (shouldBrowseProducts(message)) {
                         String browseResult = fashionTools.browseProducts(
                                 minPrice != null ? minPrice.longValue() : null,
                                 maxPrice != null ? maxPrice.longValue() : null,
-                                null,
+                                colorFilter,
                                 sizeFilter);
                         yield browseResult;
                     }
@@ -413,7 +582,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                     String toolResult = fashionTools.searchProducts(searchKeyword,
                             minPrice != null ? minPrice.longValue() : null,
                             maxPrice != null ? maxPrice.longValue() : null,
-                            null,
+                            colorFilter,
                             sizeFilter);
 
                     // Nếu có filter giá mà không tìm thấy → retry KHÔNG có giá để gợi ý sản phẩm gần nhất
@@ -423,7 +592,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                         fashionTools.clearCollector();
                         fashionTools.setCollector(collector);
                         fashionTools.setPreferenceProfile(profile);
-                        String fallbackResult = fashionTools.searchProducts(searchKeyword, null, null, null, sizeFilter);
+                        String fallbackResult = fashionTools.searchProducts(searchKeyword, null, null, colorFilter, sizeFilter);
 
                         if (!collector.getProducts().isEmpty()) {
                             String priceNote = formatPriceRange(minPrice, maxPrice);
@@ -456,7 +625,10 @@ public class ChatbotServiceImpl implements ChatbotService {
                 try {
                     fashionTools.setCollector(collector);
                     fashionTools.setPreferenceProfile(profile);
-                        String outfitResult = fashionTools.suggestOutfit(
+                    if (shouldUseSalesGuidance(message)) {
+                        fashionTools.searchSalesGuidance(message);
+                    }
+                    String outfitResult = fashionTools.suggestOutfit(
                             extractOccasion(message), extractStyle(message));
                     yield outfitResult;
                 } catch (Exception ex) {
@@ -467,6 +639,9 @@ public class ChatbotServiceImpl implements ChatbotService {
             }
 
             case IntentClassifierService.CHECK_ORDER -> {
+                if (isGuestUser(session.getUserId())) {
+                    yield "Mình cần bạn đăng nhập để kiểm tra đơn hàng chính xác theo tài khoản nhé.";
+                }
                 // Kiểm tra đơn hàng — trích xuất mã đơn nếu có, nếu không thì hỏi lại
                 String orderNumber = extractOrderNumber(message);
                 if (orderNumber != null) {
@@ -508,13 +683,29 @@ public class ChatbotServiceImpl implements ChatbotService {
             }
 
             default -> {
+                if (shouldUseSalesGuidance(message)) {
+                    try {
+                        fashionTools.setCollector(collector);
+                        fashionTools.setPreferenceProfile(profile);
+                        String salesReply = fashionTools.searchSalesGuidance(message);
+                        if (salesReply != null && !salesReply.isBlank()) {
+                            yield salesReply;
+                        }
+                    } catch (Exception ex) {
+                        log.debug("Sales guidance fallback skipped: {}", ex.getMessage());
+                    } finally {
+                        fashionTools.clearCollector();
+                    }
+                }
+
                 // Fallback: thử search product nếu message có keyword thời trang
-                String keyword = extractProductSearchKeyword(message);
+                String keyword = resolveSearchKeywordForTurn(message, profile);
                 if (keyword.length() >= 2) {
                     try {
                         fashionTools.setCollector(collector);
                         fashionTools.setPreferenceProfile(profile);
-                        String searchResult = fashionTools.searchProducts(keyword, null, null, null, null);
+                        String colorFilter = extractColorFilterForTurn(message, profile);
+                        String searchResult = fashionTools.searchProducts(keyword, null, null, colorFilter, null);
                         if (!collector.getProducts().isEmpty()) {
                             yield searchResult;
                         }
@@ -545,6 +736,27 @@ public class ChatbotServiceImpl implements ChatbotService {
                 .build();
     }
 
+    private boolean shouldUseSalesGuidance(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String normalized = VietnameseNormalizer.normalize(message).toLowerCase();
+        return normalized.contains("de mac")
+                || normalized.contains("an toan")
+                || normalized.contains("de phoi")
+                || normalized.contains("phan van")
+                || normalized.contains("gia hoi cao")
+                || normalized.contains("gia cao")
+                || normalized.contains("mem hon")
+                || normalized.contains("de chot")
+                || normalized.contains("nen chon")
+                || normalized.contains("noi bat hon")
+                || normalized.contains("di lam nen mac")
+                || normalized.contains("di tiec nen mac")
+                || normalized.contains("phoi the nao")
+                || normalized.contains("combo nao hop");
+    }
+
     /**
      * Handle Cold Start (khởi động lạnh):
      * - Nếu user nói generic ("áo", "quần", "váy") → hỏi chi tiết loại sản phẩm
@@ -554,7 +766,14 @@ public class ChatbotServiceImpl implements ChatbotService {
     private ChatResponse handleColdStart(String sessionId, String message, ChatSession session) {
         if (message == null || message.isBlank()) return null;
 
+        if (isStrongDirectSizeIntent(message)) {
+            return null;
+        }
+
         String searchKeyword = extractProductSearchKeyword(message);
+        if (hasShoppingConstraints(message)) {
+            return null;
+        }
         
         // Nếu search keyword không phải generic (đã đủ cụ thể), không cần hỏi thêm
         if (!isGenericGarmentKeyword(searchKeyword)) {
@@ -606,6 +825,101 @@ public class ChatbotServiceImpl implements ChatbotService {
         }
 
         return "";
+    }
+
+    private boolean isStrongDirectSizeIntent(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String normalized = VietnameseNormalizer.normalize(message);
+        boolean hasMeasurement = containsMeasurementData(normalized);
+        boolean hasSizeLanguage = normalized.contains("size")
+                || normalized.contains("so do")
+                || normalized.contains("nen chon")
+                || normalized.contains("size nao")
+                || normalized.matches(".*\\b(xs|s|m|l|xl|xxl)\\s+hay\\s+(xs|s|m|l|xl|xxl)\\b.*");
+        boolean hasGarment = !extractGarmentKeyword(message).isBlank()
+                || containsAnyKeyword(normalized, "ao so mi", "ao thun", "ao khoac", "blazer", "quan jean", "quan tay", "vay", "dam");
+        return (hasMeasurement || hasSizeLanguage) && hasGarment;
+    }
+
+    private ChatResponse buildSizeConsultationResponse(String sessionId, String message,
+                                                       ChatSession session, ToolResultCollector collector,
+                                                       String intent, double confidence) {
+        return ChatResponse.builder()
+                .sessionId(sessionId)
+                .intent(intent)
+                .confidence(confidence)
+                .reply(buildSizeConsultationReply(message, session, collector))
+                .missingFields(collector.getMissingFields())
+                .suggestions(collector.getProducts())
+                .promotions(collector.getPromotions())
+                .profile(session.getPreferenceProfile())
+                .createdAt(Instant.now())
+                .build();
+    }
+
+    private String buildSizeConsultationReply(String message, ChatSession session, ToolResultCollector collector) {
+        ChatSession.PreferenceProfile profile = session.getPreferenceProfile();
+        SizeAdvisorService.Measurements extracted = sizeAdvisorService.extractMeasurements(message);
+
+        Integer heightCm = extracted.heightCm() != null ? extracted.heightCm() : profile.getLastHeightCm();
+        Integer weightKg = extracted.weightKg() != null ? extracted.weightKg() : profile.getLastWeightKg();
+        Integer chestCm = extracted.chestCm() != null ? extracted.chestCm() : profile.getLastChestCm();
+        Integer waistCm = extracted.waistCm() != null ? extracted.waistCm() : profile.getLastWaistCm();
+        Integer hipCm = extracted.hipCm() != null ? extracted.hipCm() : profile.getLastHipCm();
+
+        SizeAdvisorService.Measurements merged = new SizeAdvisorService.Measurements(
+                heightCm, weightKg, chestCm, waistCm, hipCm);
+
+        if (!merged.hasMinimumData()) {
+            collector.addMissingFields(merged.missingFields());
+            return "Để tư vấn size chính xác, bạn cung cấp thêm: " + String.join(", ", merged.missingFields());
+        }
+
+        profile.setLastHeightCm(heightCm);
+        profile.setLastWeightKg(weightKg);
+        profile.setLastChestCm(chestCm);
+        profile.setLastWaistCm(waistCm);
+        profile.setLastHipCm(hipCm);
+
+        String garmentKeyword = extractGarmentKeyword(message);
+        if ((garmentKeyword == null || garmentKeyword.isBlank())
+                && profile.getLastProductCategoryQueried() != null
+                && !profile.getLastProductCategoryQueried().isBlank()) {
+            garmentKeyword = profile.getLastProductCategoryQueried();
+        }
+
+        SizeAdvisorService.GarmentType type = sizeAdvisorService.detectGarmentType(message);
+        SizeFitAdvisoryService.SizeFitAdvice advice =
+                sizeFitAdvisoryService.advise(merged, type, garmentKeyword == null ? message : garmentKeyword, profile);
+        collector.setSizeRecommendation(advice.recommendedSize());
+
+        if (garmentKeyword != null && !garmentKeyword.isBlank()) {
+            try {
+                fashionTools.setCollector(collector);
+                fashionTools.setPreferenceProfile(profile);
+                fashionTools.setCurrentUserId(session.getUserId());
+                Double maxPrice = parseBudget(profile.getBudget());
+                fashionTools.searchProducts(garmentKeyword, null, maxPrice != null ? maxPrice.longValue() : null, null, null);
+            } catch (Exception ex) {
+                log.debug("Auto product search after size advice skipped: {}", ex.getMessage());
+            } finally {
+                fashionTools.clearCollector();
+            }
+        }
+
+        StringBuilder sizeReply = new StringBuilder();
+        sizeReply.append("Với chiều cao ").append(heightCm).append("cm và cân nặng ").append(weightKg)
+                .append("kg, mình gợi ý bạn chọn **size ").append(advice.recommendedSize()).append("**. ")
+                .append(advice.rationale());
+        if (advice.followUpPrompt() != null && !advice.followUpPrompt().isBlank()) {
+            sizeReply.append("\n\n").append(advice.followUpPrompt());
+        }
+        if (!collector.getProducts().isEmpty()) {
+            sizeReply.append("\n\nMình cũng tìm thấy một số sản phẩm phù hợp cho bạn:");
+        }
+        return sizeReply.toString();
     }
 
     private String normalizeText(String value) {
@@ -676,6 +990,15 @@ public class ChatbotServiceImpl implements ChatbotService {
                                                      String message,
                                                      ChatSession session,
                                                      ToolResultCollector collector) {
+        String normalized = VietnameseNormalizer.normalize(message == null ? "" : message);
+        if (isRefinementFollowUp(message, normalized)
+                && session != null
+                && session.getPreferenceProfile() != null
+                && session.getPreferenceProfile().getLastProductCategoryQueried() != null
+                && !session.getPreferenceProfile().getLastProductCategoryQueried().isBlank()) {
+            return null;
+        }
+
         if (!isExplicitProductCheck(message)) return null;
 
         String searchKeyword = extractProductSearchKeyword(message);
@@ -813,6 +1136,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                     .productId(snapshot.getProductId())
                     .name(snapshot.getName())
                     .category(snapshot.getCategory())
+                    .categoryGender(snapshot.getCategoryGender())
                     .imageUrl(snapshot.getImageUrl())
                     .link(snapshot.getLink())
                     .price(snapshot.getPrice())
@@ -862,6 +1186,7 @@ public class ChatbotServiceImpl implements ChatbotService {
     private boolean isExplicitProductCheck(String message) {
         if (message == null || message.isBlank()) return false;
         String normalized = VietnameseNormalizer.normalize(message);
+        String searchKeyword = extractProductSearchKeyword(message);
 
         boolean hasCheckPhrase = normalized.contains("co khong")
                 || normalized.contains("con khong")
@@ -871,14 +1196,51 @@ public class ChatbotServiceImpl implements ChatbotService {
                 || normalized.contains("het hang")
                 || normalized.contains("co ban");
 
-        boolean hasSpecificCue = normalized.contains("mau ")
-                || normalized.contains("san pham ")
+        boolean hasSpecificCue = normalized.contains("san pham ")
                 || normalized.contains("sp ")
-                || normalized.contains("ten ");
+                || normalized.contains("ten ")
+                || normalized.contains("ma ");
 
         boolean hasQuote = message.contains("\"") || message.contains("'");
+        boolean hasConcreteKeyword = searchKeyword != null
+                && !searchKeyword.isBlank()
+                && !isGenericGarmentKeyword(searchKeyword);
+        boolean attributeOnlyRefinement = isAttributeOnlyRefinement(message, normalized);
 
-        return hasCheckPhrase || hasSpecificCue || hasQuote;
+        if (hasQuote) {
+            return true;
+        }
+
+        // Nhánh explicit lookup chỉ dành cho việc kiểm tra một sản phẩm khá cụ thể.
+        // Follow-up kiểu "màu đen không", "size S không", "dưới 1 triệu" phải đi
+        // theo context sản phẩm đang tư vấn thay vì bị hiểu là tên sản phẩm mới.
+        if (attributeOnlyRefinement) {
+            return false;
+        }
+
+        return hasCheckPhrase && hasConcreteKeyword
+                && (hasSpecificCue || !isRefinementFollowUp(message, normalized));
+    }
+
+    private boolean isAttributeOnlyRefinement(String message, String normalized) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        boolean hasColor = extractColorFilterForTurn(message, null) != null;
+        boolean hasSize = extractSizeFilter(message) != null;
+        boolean hasBudget = hasPriceSignal(normalized);
+        boolean hasConcreteGarment = !extractGarmentKeyword(message).isBlank();
+        boolean refinementFollowUp = isRefinementFollowUp(message, normalized);
+
+        if (!refinementFollowUp) {
+            return false;
+        }
+
+        if (hasColor || hasSize || hasBudget) {
+            return !hasConcreteGarment || isGenericGarmentKeyword(extractProductSearchKeyword(message));
+        }
+
+        return false;
     }
 
     private boolean wantsSimilarSuggestion(String message) {
@@ -949,6 +1311,21 @@ public class ChatbotServiceImpl implements ChatbotService {
         return "Bạn đang tìm " + recent + ". ";
     }
 
+    private String buildConversationStateContext(ChatSession.PreferenceProfile profile) {
+        if (!hasActiveConversationState(profile)) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        parts.add("Flow hiện tại: " + profile.getConversationFlow());
+        if (profile.getPendingQuestionType() != null && !profile.getPendingQuestionType().isBlank()) {
+            parts.add("Đang chờ: " + profile.getPendingQuestionType());
+        }
+        if (profile.getLastProductCategoryQueried() != null && !profile.getLastProductCategoryQueried().isBlank()) {
+            parts.add("Category đang theo: " + profile.getLastProductCategoryQueried());
+        }
+        return String.join("; ", parts);
+    }
+
     private String buildProfileContext(ChatSession.PreferenceProfile profile) {
         if (profile == null) return "";
         List<String> parts = new ArrayList<>();
@@ -975,12 +1352,60 @@ public class ChatbotServiceImpl implements ChatbotService {
             parts.add("Ưu tiên: " + String.join(", ", profile.getFocusTags()));
         }
 
+        if (profile.getPreferredOccasions() != null && !profile.getPreferredOccasions().isEmpty()) {
+            parts.add("Dip mac uu tien: " + String.join(", ", profile.getPreferredOccasions()));
+        }
+        if (profile.getFitPreference() != null && !profile.getFitPreference().isBlank()) {
+            parts.add("Fit ua thich: " + profile.getFitPreference());
+        }
+        if (profile.getCustomerPersona() != null && !profile.getCustomerPersona().isBlank()) {
+            parts.add("Persona suy ra: " + profile.getCustomerPersona());
+        }
+        if (profile.getPriceComfortZone() != null && !profile.getPriceComfortZone().isBlank()) {
+            parts.add("Vung gia thoai mai: " + profile.getPriceComfortZone());
+        }
+        if (profile.getTargetGender() != null && !profile.getTargetGender().isBlank()) {
+            parts.add("Nhom gioi tinh dang chon: " + profile.getTargetGender());
+        }
+
         String measurement = buildMeasurementContext(profile);
         if (!measurement.isBlank()) {
             parts.add(measurement);
         }
 
         return String.join("; ", parts).trim();
+    }
+
+    private String buildRecoveryRetryMessage(ChatSession session, String originalMessage) {
+        StringBuilder retryContext = new StringBuilder();
+        retryContext.append("[Recovery mode] Bám đúng ngữ cảnh hiện có, không hỏi lại thông tin user đã cung cấp.\n");
+
+        if (session != null && session.getPreferenceProfile() != null) {
+            String conversationStateContext = buildConversationStateContext(session.getPreferenceProfile());
+            String profileContext = buildProfileContext(session.getPreferenceProfile());
+            if (!conversationStateContext.isBlank()) {
+                retryContext.append("[Conversation state] ").append(conversationStateContext).append("\n");
+            }
+            if (!profileContext.isBlank()) {
+                retryContext.append("[Ngữ cảnh cá nhân] ").append(profileContext).append("\n");
+            }
+        }
+
+        if (session != null && session.getMessages() != null && !session.getMessages().isEmpty()) {
+            int start = Math.max(0, session.getMessages().size() - 4);
+            retryContext.append("[Recent turns]\n");
+            for (int i = start; i < session.getMessages().size(); i++) {
+                ChatSession.ChatMessage item = session.getMessages().get(i);
+                if (item == null || item.getContent() == null || item.getContent().isBlank()) {
+                    continue;
+                }
+                String speaker = item.getSender() == ChatSession.Sender.USER ? "User" : "Bot";
+                retryContext.append("- ").append(speaker).append(": ").append(item.getContent()).append("\n");
+            }
+        }
+
+        retryContext.append("\n[Current user message]\n").append(originalMessage);
+        return retryContext.toString();
     }
 
     private String buildMeasurementContext(ChatSession.PreferenceProfile profile) {
@@ -991,6 +1416,303 @@ public class ChatbotServiceImpl implements ChatbotService {
         if (profile.getLastWaistCm() != null) items.add("eo " + profile.getLastWaistCm() + "cm");
         if (profile.getLastHipCm() != null) items.add("hông " + profile.getLastHipCm() + "cm");
         return items.isEmpty() ? "" : "Số đo gần nhất: " + String.join(", ", items);
+    }
+
+    private boolean hasActiveConversationState(ChatSession.PreferenceProfile profile) {
+        if (profile == null || profile.getConversationFlow() == null || profile.getConversationFlow().isBlank()) {
+            return false;
+        }
+        Instant updatedAt = profile.getConversationStateUpdatedAt();
+        if (updatedAt == null) {
+            return false;
+        }
+        long elapsedMinutes = java.time.temporal.ChronoUnit.MINUTES.between(updatedAt, Instant.now());
+        return elapsedMinutes <= CONVERSATION_STATE_TTL_MINUTES;
+    }
+
+    private boolean containsMeasurementData(String normalizedMessage) {
+        if (normalizedMessage == null || normalizedMessage.isBlank()) {
+            return false;
+        }
+        return normalizedMessage.matches(".*\\d+\\s*(cm|kg|m\\d).*")
+                || normalizedMessage.matches(".*\\b(1m\\d{2}|\\d{2,3}kg)\\b.*")
+                || normalizedMessage.contains("vong nguc")
+                || normalizedMessage.contains("vong eo")
+                || normalizedMessage.contains("vong hong");
+    }
+
+    private boolean isRefinementFollowUp(String message, String normalizedMessage) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        boolean budgetFollowUp = isGenericBudgetOnlyFollowUp(message);
+        boolean sizeFollowUp = extractSizeFilter(message) != null;
+        boolean measurementFollowUp = containsMeasurementData(normalizedMessage);
+        boolean fitFollowUp = isSizeFitFollowUp(normalizedMessage);
+        boolean colorFollowUp = containsAnyKeyword(normalizedMessage,
+                "den", "trang", "xanh", "do", "hong", "vang", "nau", "be", "xam", "ghi", "navy", "kem");
+        boolean quickChoiceFollowUp = containsAnyKeyword(normalizedMessage,
+                "mau nay", "mau kia", "loai nay", "loai kia", "cai nay", "cai kia",
+                "phuong an nay", "phuong an kia", "vay thi", "the con", "neu vay", "ok vay");
+        return budgetFollowUp || sizeFollowUp || measurementFollowUp || fitFollowUp || colorFollowUp || quickChoiceFollowUp;
+    }
+
+    private boolean isSizeFitFollowUp(String normalizedMessage) {
+        if (normalizedMessage == null || normalizedMessage.isBlank()) {
+            return false;
+        }
+        return normalizedMessage.matches(".*\\b(xs|s|m|l|xl|xxl)\\s*(hay|hoac|vs|voi)\\s*(xs|s|m|l|xl|xxl)\\b.*")
+                || containsAnyKeyword(normalizedMessage,
+                "phan van size", "size nao hop", "size nao on", "size nao dep",
+                "om hay rong", "fit nao hop", "vai rong", "nguc day", "mong to", "dui to",
+                "mac rong", "mac om", "vua van", "thoai mai hon");
+    }
+
+    private void refreshProductQueryContext(ChatSession.PreferenceProfile profile, String message) {
+        if (profile == null || message == null || message.isBlank()) {
+            return;
+        }
+        String inferredCategory = extractProductSearchKeyword(message);
+        if (inferredCategory == null || inferredCategory.isBlank() || isGenericBudgetOnlyFollowUp(message)) {
+            return;
+        }
+        if (isGenericGarmentKeyword(inferredCategory) || looksLikeConcreteProductCategory(inferredCategory)) {
+            profile.setLastProductCategoryQueried(inferredCategory);
+            profile.setLastProductQueryTime(Instant.now());
+        }
+    }
+
+    private String resolveSearchKeywordForTurn(String message, ChatSession.PreferenceProfile profile) {
+        String normalized = VietnameseNormalizer.normalize(message == null ? "" : message);
+        if (isRefinementFollowUp(message, normalized)
+                && profile != null
+                && profile.getLastProductCategoryQueried() != null
+                && !profile.getLastProductCategoryQueried().isBlank()) {
+            return profile.getLastProductCategoryQueried();
+        }
+        String extracted = extractProductSearchKeyword(message);
+        if (extracted != null && !extracted.isBlank() && !isGenericBudgetOnlyFollowUp(message)) {
+            return extracted;
+        }
+        if (profile != null && profile.getLastProductCategoryQueried() != null && !profile.getLastProductCategoryQueried().isBlank()) {
+            return profile.getLastProductCategoryQueried();
+        }
+        return extracted;
+    }
+
+    private String extractColorFilterForTurn(String message, ChatSession.PreferenceProfile profile) {
+        if (message == null || message.isBlank()) {
+            return null;
+        }
+        String normalized = VietnameseNormalizer.normalize(message);
+        if (normalized.contains("mau den") || normalized.contains("den khong") || normalized.contains("tone den")) return "đen";
+        if (normalized.contains("mau trang") || normalized.contains("trang khong") || normalized.contains("tone trang")) return "trắng";
+        if (normalized.contains("mau xanh") || normalized.contains("xanh khong") || normalized.contains("tone xanh")) return "xanh";
+        if (normalized.contains("mau do") || normalized.contains("do khong") || normalized.contains("tone do")) return "đỏ";
+        if (normalized.contains("mau hong") || normalized.contains("hong khong")) return "hồng";
+        if (normalized.contains("mau vang") || normalized.contains("vang khong")) return "vàng";
+        if (normalized.contains("mau nau") || normalized.contains("nau khong")) return "nâu";
+        if (normalized.contains("mau be") || normalized.contains("be khong")) return "be";
+        if (normalized.contains("mau xam") || normalized.contains("xam khong") || normalized.contains("ghi khong")) return "xám";
+        if (normalized.contains("mau navy") || normalized.contains("navy khong")) return "navy";
+        if (normalized.contains("mau kem") || normalized.contains("kem khong")) return "kem";
+
+        if (isRefinementFollowUp(message, normalized)
+                && profile != null
+                && profile.getPreferredColors() != null
+                && !profile.getPreferredColors().isEmpty()) {
+            return profile.getPreferredColors().iterator().next();
+        }
+        return null;
+    }
+
+    private ChatResponse handleGenderContextStep(String sessionId, String message, ChatSession session) {
+        if (session == null || session.getPreferenceProfile() == null || message == null || message.isBlank()) {
+            return null;
+        }
+
+        ChatSession.PreferenceProfile profile = session.getPreferenceProfile();
+        String normalized = VietnameseNormalizer.normalize(message);
+
+        if (PENDING_GENDER_CONTEXT.equals(profile.getPendingQuestionType())
+                && profile.getPendingTargetGender() != null
+                && !profile.getPendingTargetGender().isBlank()) {
+            if (isCrossGenderAffirmation(normalized)) {
+                profile.setTargetGender(profile.getPendingTargetGender());
+                profile.setPendingQuestionType(null);
+                profile.setPendingTargetGender(null);
+                profile.setConversationFlow(FLOW_PRODUCT_DISCOVERY);
+                profile.setConversationStateUpdatedAt(Instant.now());
+
+                String rememberedCategory = profile.getLastProductCategoryQueried();
+                if (rememberedCategory != null && !rememberedCategory.isBlank()) {
+                    return runHeuristicProductRefresh(sessionId, rememberedCategory, session);
+                }
+                return ChatResponse.builder()
+                        .sessionId(sessionId)
+                        .intent(IntentClassifierService.SEARCH_PRODUCT)
+                        .confidence(0.9d)
+                        .reply("Ok, mình sẽ ưu tiên lọc theo đồ "
+                                + humanizeGender(profile.getTargetGender())
+                                + " cho bạn trong các gợi ý tiếp theo nhé.")
+                        .suggestions(List.of())
+                        .promotions(List.of())
+                        .profile(profile)
+                        .createdAt(Instant.now())
+                        .build();
+            }
+
+            if (isSelfGenderAffirmation(normalized)) {
+                profile.setPendingQuestionType(null);
+                profile.setPendingTargetGender(null);
+                profile.setConversationFlow(FLOW_PRODUCT_DISCOVERY);
+                profile.setConversationStateUpdatedAt(Instant.now());
+                return ChatResponse.builder()
+                        .sessionId(sessionId)
+                        .intent(IntentClassifierService.SEARCH_PRODUCT)
+                        .confidence(0.88d)
+                        .reply("Ok, mình sẽ giữ theo đồ "
+                                + humanizeGender(profile.getTargetGender())
+                                + " cho bạn. Nếu muốn, mình có thể lọc lại theo màu, size hoặc ngân sách ngay.")
+                        .suggestions(List.of())
+                        .promotions(List.of())
+                        .profile(profile)
+                        .createdAt(Instant.now())
+                        .build();
+            }
+        }
+
+        String explicitGenderIntent = inferExplicitTargetGenderFromQuery(normalized);
+        if (explicitGenderIntent == null || explicitGenderIntent.isBlank()) {
+            return null;
+        }
+        if (profile.getTargetGender() == null || profile.getTargetGender().isBlank()) {
+            return null;
+        }
+        if (explicitGenderIntent.equalsIgnoreCase(profile.getTargetGender())) {
+            return null;
+        }
+
+        profile.setConversationFlow(FLOW_PRODUCT_DISCOVERY);
+        profile.setPendingQuestionType(PENDING_GENDER_CONTEXT);
+        profile.setPendingTargetGender(explicitGenderIntent);
+        profile.setConversationStateUpdatedAt(Instant.now());
+
+        return ChatResponse.builder()
+                .sessionId(sessionId)
+                .intent("GENDER_CONTEXT_CLARIFY")
+                .confidence(0.93d)
+                .reply("Mình thấy bạn thường mua đồ "
+                        + humanizeGender(profile.getTargetGender())
+                        + ", nhưng yêu cầu này đang nghiêng sang đồ "
+                        + humanizeGender(explicitGenderIntent)
+                        + ". Bạn đang muốn xem để mua cho bản thân hay mua giúp người khác vậy?")
+                .suggestions(List.of())
+                .promotions(List.of())
+                .profile(profile)
+                .createdAt(Instant.now())
+                .build();
+    }
+
+    private ChatResponse runHeuristicProductRefresh(String sessionId, String searchKeyword, ChatSession session) {
+        ToolResultCollector collector = new ToolResultCollector();
+        try {
+            fashionTools.setCollector(collector);
+            fashionTools.setPreferenceProfile(session.getPreferenceProfile());
+            fashionTools.setCurrentUserId(session.getUserId());
+            String colorFilter = extractColorFilterForTurn(searchKeyword, session.getPreferenceProfile());
+            String reply = fashionTools.searchProducts(searchKeyword, null, null, colorFilter, null);
+            return ResponseAssembler.build(sessionId, reply, collector, session.getPreferenceProfile());
+        } catch (Exception ex) {
+            log.warn("Gender-context refresh failed: {}", ex.getMessage());
+            return ChatResponse.builder()
+                    .sessionId(sessionId)
+                    .intent(IntentClassifierService.SEARCH_PRODUCT)
+                    .confidence(0.82d)
+                    .reply("Ok, mình sẽ lọc lại theo đồ "
+                            + humanizeGender(session.getPreferenceProfile().getTargetGender())
+                            + " cho bạn ở lượt tiếp theo nhé.")
+                    .suggestions(List.of())
+                    .promotions(List.of())
+                    .profile(session.getPreferenceProfile())
+                    .createdAt(Instant.now())
+                    .build();
+        } finally {
+            fashionTools.clearCollector();
+        }
+    }
+
+    private boolean isGenericBudgetOnlyFollowUp(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String normalized = VietnameseNormalizer.normalize(message);
+        boolean hasPrice = hasPriceSignal(normalized);
+        boolean hasGarment = !extractGarmentKeyword(message).isBlank();
+        boolean hasColor = containsAnyKeyword(normalized,
+                "den", "trang", "xanh", "do", "hong", "vang", "nau", "be", "xam", "ghi");
+        boolean hasSize = extractSizeFilter(message) != null;
+        return hasPrice && !hasGarment && !hasColor && !hasSize;
+    }
+
+    private String inferExplicitTargetGenderFromQuery(String normalizedMessage) {
+        if (normalizedMessage == null || normalizedMessage.isBlank()) {
+            return null;
+        }
+
+        if (containsAnyKeyword(normalizedMessage,
+                "cho nu", "do nu", "ban gai", "vo", "me", "chi gai", "em gai",
+                "vay", "dam", "chan vay", "blouse", "ao kieu", "midi", "wrap dress")) {
+            return "female";
+        }
+
+        if (containsAnyKeyword(normalizedMessage,
+                "cho nam", "do nam", "ban trai", "chong", "anh trai", "em trai",
+                "ao so mi nam", "quan chino", "ao oxford", "ao polo nam")) {
+            return "male";
+        }
+
+        return null;
+    }
+
+    private boolean isCrossGenderAffirmation(String normalizedMessage) {
+        if (normalizedMessage == null || normalizedMessage.isBlank()) {
+            return false;
+        }
+        return containsAnyKeyword(normalizedMessage,
+                "mua cho nguoi khac", "mua giup", "cho ban gai", "cho vo", "cho me",
+                "cho chi", "cho em gai", "cho ban trai", "cho chong", "cho anh trai", "cho em trai");
+    }
+
+    private boolean isSelfGenderAffirmation(String normalizedMessage) {
+        if (normalizedMessage == null || normalizedMessage.isBlank()) {
+            return false;
+        }
+        return containsAnyKeyword(normalizedMessage,
+                "cho minh", "mua cho minh", "mua cho ban than", "khong, cho minh", "khong cho nguoi khac");
+    }
+
+    private String humanizeGender(String gender) {
+        String normalized = VietnameseNormalizer.normalize(gender == null ? "" : gender);
+        if ("male".equals(normalized)) {
+            return "nam";
+        }
+        if ("female".equals(normalized)) {
+            return "nữ";
+        }
+        return "phù hợp";
+    }
+
+    private boolean looksLikeConcreteProductCategory(String keyword) {
+        String normalized = VietnameseNormalizer.normalize(keyword);
+        return normalized.contains("ao")
+                || normalized.contains("quan")
+                || normalized.contains("vay")
+                || normalized.contains("dam")
+                || normalized.contains("chan vay")
+                || normalized.contains("giay")
+                || normalized.contains("tui")
+                || normalized.contains("ao khoac");
     }
 
     private void updateBudgetFromMessage(ChatSession.PreferenceProfile profile, String message) {
@@ -1289,7 +2011,15 @@ public class ChatbotServiceImpl implements ChatbotService {
                 || normalized.contains("tu van mua sam")
                 || normalized.contains("tham khao")
                 || normalized.contains("nhieu mau")
-                || normalized.contains("da dang");
+                || normalized.contains("da dang")
+                || normalized.contains("mac gi")
+                || normalized.contains("chon gi")
+                || normalized.contains("phu hop")
+                || normalized.contains("phoi do")
+                || normalized.contains("combo")
+                || normalized.contains("di lam")
+                || normalized.contains("di choi")
+                || normalized.contains("di tiec");
     }
 
     private boolean shouldListProductTypes(String message, String searchKeyword) {
@@ -1308,6 +2038,28 @@ public class ChatbotServiceImpl implements ChatbotService {
                 || normalized.contains("mau");
 
         return askingCatalog || (genericKeyword && shouldBrowseProducts(message) && !hasConstraints);
+    }
+
+    private boolean hasShoppingConstraints(String message) {
+        if (message == null || message.isBlank()) return false;
+        String normalized = VietnameseNormalizer.normalize(message);
+        return hasPriceSignal(normalized)
+                || extractSizeFilter(message) != null
+                || containsAnyKeyword(normalized,
+                "den", "trang", "xanh", "do", "hong", "vang", "nau", "be", "xam", "ghi",
+                "di lam", "di choi", "di tiec", "cong so", "du lich",
+                "casual", "sporty", "thanh lich", "sang trong", "oversize", "slim fit",
+                "cotton", "linen", "jean", "kaki", "form", "chat lieu");
+    }
+
+    private boolean containsAnyKeyword(String text, String... keywords) {
+        if (text == null || text.isBlank()) return false;
+        for (String keyword : keywords) {
+            if (text.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String deriveProductTypeGroupHint(String searchKeyword, String message) {
@@ -1371,7 +2123,8 @@ public class ChatbotServiceImpl implements ChatbotService {
                 productSnapshots.add(ChatSession.ProductSuggestionSnapshot.builder()
                         .productId(s.getProductId())
                         .name(s.getName())
-                            .category(s.getCategory())
+                        .category(s.getCategory())
+                        .categoryGender(s.getCategoryGender())
                         .price(s.getPrice())
                         .imageUrl(s.getImageUrl())
                         .link(s.getLink())
@@ -1408,6 +2161,7 @@ public class ChatbotServiceImpl implements ChatbotService {
         session.getMessages().add(userMsg);
         session.getMessages().add(botMsg);
         session.setEndedAt(Instant.now());
+        updateConversationState(session.getPreferenceProfile(), userMessage, response);
 
         try {
             chatSessionRepository.save(session);
@@ -1431,6 +2185,75 @@ public class ChatbotServiceImpl implements ChatbotService {
                 log.info("Saved clarified product type: {} for user {}", clarifiedType, session.getUserId());
             }
         }
+    }
+
+    private void updateConversationState(ChatSession.PreferenceProfile profile, String userMessage, ChatResponse response) {
+        if (profile == null || response == null) {
+            return;
+        }
+
+        String intent = response.getIntent();
+        Instant now = Instant.now();
+
+        if ("COLD_START_CLARIFY".equals(intent)) {
+            profile.setConversationFlow(FLOW_PRODUCT_DISCOVERY);
+            profile.setPendingQuestionType(PENDING_PRODUCT_TYPE);
+            profile.setConversationStateUpdatedAt(now);
+            return;
+        }
+
+        if (IntentClassifierService.CONSULT_SIZE.equals(intent)) {
+            if (response.getMissingFields() != null && !response.getMissingFields().isEmpty()) {
+                profile.setConversationFlow(FLOW_SIZE_COLLECTION);
+                profile.setPendingQuestionType(PENDING_MEASUREMENTS);
+            } else {
+                profile.setConversationFlow(FLOW_PRODUCT_DISCOVERY);
+                profile.setPendingQuestionType(PENDING_BUDGET);
+            }
+            profile.setConversationStateUpdatedAt(now);
+            return;
+        }
+
+        if (IntentClassifierService.SEARCH_PRODUCT.equals(intent) || IntentClassifierService.CONSULT_SEASON.equals(intent)) {
+            profile.setConversationFlow(FLOW_PRODUCT_DISCOVERY);
+            if (response.getSuggestions() == null || response.getSuggestions().isEmpty()) {
+                profile.setPendingQuestionType(PENDING_BUDGET);
+            } else if (response.getMissingFields() != null && !response.getMissingFields().isEmpty()) {
+                profile.setPendingQuestionType(PENDING_SIZE);
+            } else {
+                profile.setPendingQuestionType(null);
+            }
+            profile.setConversationStateUpdatedAt(now);
+            return;
+        }
+
+        if (IntentClassifierService.WISHLIST_RECOMMENDATION.equals(intent)) {
+            profile.setConversationFlow(FLOW_WISHLIST_REVIEW);
+            profile.setPendingQuestionType(null);
+            profile.setConversationStateUpdatedAt(now);
+            return;
+        }
+
+        if (IntentClassifierService.LOYALTY_BENEFIT.equals(intent)) {
+            profile.setConversationFlow(FLOW_LOYALTY_REVIEW);
+            profile.setPendingQuestionType(null);
+            profile.setConversationStateUpdatedAt(now);
+            return;
+        }
+
+        if (IntentClassifierService.GREETING.equals(intent) || IntentClassifierService.OUT_OF_DOMAIN.equals(intent)) {
+            clearConversationState(profile);
+        }
+    }
+
+    private void clearConversationState(ChatSession.PreferenceProfile profile) {
+        if (profile == null) {
+            return;
+        }
+        profile.setConversationFlow(null);
+        profile.setPendingQuestionType(null);
+        profile.setPendingTargetGender(null);
+        profile.setConversationStateUpdatedAt(null);
     }
 
     /**
@@ -1523,6 +2346,57 @@ public class ChatbotServiceImpl implements ChatbotService {
             return userIdHeader.trim();
         }
         return "guest-" + sessionId.substring(0, Math.min(12, sessionId.length()));
+    }
+
+    private boolean isGuestUser(String userId) {
+        return userId == null || userId.isBlank() || userId.startsWith("guest-");
+    }
+
+    private ChatResponse buildLoginRequiredResponse(String sessionId,
+                                                    String intent,
+                                                    double confidence,
+                                                    ToolResultCollector collector,
+                                                    ChatSession session,
+                                                    String reply) {
+        return ChatResponse.builder()
+                .sessionId(sessionId)
+                .intent(intent)
+                .confidence(confidence)
+                .reply(reply)
+                .missingFields(collector.getMissingFields())
+                .suggestions(collector.getProducts())
+                .promotions(collector.getPromotions())
+                .profile(session.getPreferenceProfile())
+                .createdAt(Instant.now())
+                .build();
+    }
+
+    /**
+     * Guardrail được đặt ở cuối flow để mọi response path đều bị hậu kiểm như nhau:
+     * direct intent, heuristic fallback, deictic lookup và agent path.
+     */
+    private ChatResponse applyFinalGuardrail(ChatResponse response, ToolResultCollector collector) {
+        if (response == null) {
+            return null;
+        }
+        ToolResultCollector effectiveCollector = collectorFromResponse(response, collector);
+        String sanitizedReply = responseGuardrail.validateAndSanitize(response.getReply(), effectiveCollector);
+        response.setReply(sanitizedReply);
+        return response;
+    }
+
+    private ToolResultCollector collectorFromResponse(ChatResponse response, ToolResultCollector baseCollector) {
+        if (baseCollector != null) {
+            return baseCollector;
+        }
+        ToolResultCollector collector = new ToolResultCollector();
+        if (response == null) {
+            return collector;
+        }
+        collector.addProducts(response.getSuggestions());
+        collector.addPromotions(response.getPromotions());
+        collector.addMissingFields(response.getMissingFields());
+        return collector;
     }
 
     // ========== CART CONTEXT INJECTION (Task 3) ==========

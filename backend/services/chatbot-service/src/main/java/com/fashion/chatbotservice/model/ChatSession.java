@@ -68,6 +68,7 @@ public class ChatSession {
         private String productId;
         private String name;
         private String category;
+        private String categoryGender;
         private String imageUrl;
         private String link;
         private String price;
@@ -119,6 +120,14 @@ public class ChatSession {
         @Builder.Default
         private Set<String> preferredCategories = new LinkedHashSet<>();
 
+        @Builder.Default
+        private Set<String> preferredOccasions = new LinkedHashSet<>();
+
+        private String fitPreference;
+        private String customerPersona;
+        private String priceComfortZone;
+        private String targetGender;
+
         /** Lưu số đo cơ thể gần nhất để dùng cho câu tiếp theo (context memory) */
         private Integer lastHeightCm;
         private Integer lastWeightKg;
@@ -133,6 +142,18 @@ public class ChatSession {
         /** Lưu thông tin về lần cuối cùng user hỏi về loại sản phẩm nào (để tái sử dụng context) */
         private String lastProductCategoryQueried;
         private Instant lastProductQueryTime;
+
+        /** Lightweight flow state to keep multi-turn sales conversations stable. */
+        private String conversationFlow;
+
+        /** Indicates what the bot is currently waiting for inside the active flow. */
+        private String pendingQuestionType;
+
+        /** Stores the temporary gender target being confirmed with the user. */
+        private String pendingTargetGender;
+
+        /** Timestamp used to expire stale conversation state. */
+        private Instant conversationStateUpdatedAt;
 
         public static PreferenceProfile empty() {
             return PreferenceProfile.builder().build();

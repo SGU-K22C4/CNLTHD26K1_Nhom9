@@ -30,7 +30,8 @@ public class ResponseGuardrail {
     private static final String SOFT_POLICY_REPLY =
             "Mình chưa kiểm tra được nguồn chính sách chính xác lúc này. Bạn giúp mình hỏi lại sau ít phút hoặc liên hệ CSKH để xác nhận nhanh nhé.";
 
-    private static final List<String> STOCK_CLAIMS = List.of("còn hàng", "có sẵn", "available", "in stock");
+    private static final List<String> STOCK_CLAIMS = List.of(
+            "còn hàng", "có sẵn", "con hang", "co san", "available", "in stock");
     private static final List<String> POLICY_KEYWORDS = List.of(
             "đổi trả", "doi tra", "giao hàng", "giao hang", "chính sách", "chinh sach",
             "bảo hành", "bao hanh", "thanh toán", "thanh toan", "refund", "return", "ship", "policy");
@@ -214,8 +215,12 @@ public class ResponseGuardrail {
 
         if (allOutOfStock && containsAny(reply, STOCK_CLAIMS)) {
             collector.addGuardrailViolation("invalid_stock_claim");
+            // Replace both accented and ASCII variants because fallback/test paths
+            // may normalize Vietnamese before reaching the guardrail.
             return reply.replace("còn hàng", "hiện đang hết hàng")
-                    .replace("có sẵn", "tạm thời chưa có sẵn");
+                    .replace("có sẵn", "tạm thời chưa có sẵn")
+                    .replace("con hang", "hien dang het hang")
+                    .replace("co san", "tam thoi chua co san");
         }
         return reply;
     }

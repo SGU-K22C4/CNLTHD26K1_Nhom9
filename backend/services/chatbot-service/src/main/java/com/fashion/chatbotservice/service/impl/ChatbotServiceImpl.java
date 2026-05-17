@@ -6,15 +6,23 @@ import com.fashion.chatbotservice.agent.ResponseAssembler;
 import com.fashion.chatbotservice.agent.ResponseGuardrail;
 import com.fashion.chatbotservice.agent.ToolResultCollector;
 import com.fashion.chatbotservice.config.AgentConfig;
+import com.fashion.chatbotservice.conversation.ConversationStateService;
+import com.fashion.chatbotservice.conversation.SlotFillingService;
+import com.fashion.chatbotservice.conversation.StageDecision;
 import com.fashion.chatbotservice.dto.ChatRequest;
 import com.fashion.chatbotservice.dto.ChatResponse;
 import com.fashion.chatbotservice.dto.SessionResponse;
 import com.fashion.chatbotservice.model.ChatSession;
+import com.fashion.chatbotservice.response.FashionResponseComposer;
 import com.fashion.chatbotservice.repository.ChatSessionRepository;
+import com.fashion.chatbotservice.sales.CompareEngine;
 import com.fashion.chatbotservice.service.ChatbotService;
 import com.fashion.chatbotservice.service.ChatAnalyticsService;
 import com.fashion.chatbotservice.service.IntentClassifierService;
+import com.fashion.chatbotservice.service.FallbackHandler;
 import com.fashion.chatbotservice.service.ProfileEnrichmentService;
+import com.fashion.chatbotservice.service.MultiIntentResolver;
+import com.fashion.chatbotservice.service.ProductQueryHandler;
 import com.fashion.chatbotservice.service.SizeAdvisorService;
 import com.fashion.chatbotservice.service.SizeFitAdvisoryService;
 import com.fashion.chatbotservice.util.VietnameseNormalizer;
@@ -29,6 +37,7 @@ import jakarta.annotation.PostConstruct;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -38,7 +47,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Orchestrator chính: nhận request → enrich profile → gọi agent → assemble response → persist.
+ * Orchestrator chính: nhận request → enrich profile → gọi agent → assemble
+ * response → persist.
  * Hỗ trợ feature flag để chuyển đổi giữa agent mode và heuristic fallback.
  */
 @Service
@@ -66,15 +76,21 @@ public class ChatbotServiceImpl implements ChatbotService {
     private final ChatAnalyticsService chatAnalyticsService;
     private final SizeAdvisorService sizeAdvisorService;
     private final SizeFitAdvisoryService sizeFitAdvisoryService;
+    private final FallbackHandler fallbackHandler;
+    private final ProductQueryHandler productQueryHandler;
+    private final MultiIntentResolver multiIntentResolver;
     private final ResponseGuardrail responseGuardrail;
+    private final ConversationStateService conversationStateService;
+    private final SlotFillingService slotFillingService;
+    private final FashionResponseComposer fashionResponseComposer;
+    private final CompareEngine compareEngine;
     private final WebClient webClient;
 
-        private static final Set<String> GENERIC_DESCRIPTORS = Set.of(
+    private static final Set<String> GENERIC_DESCRIPTORS = Set.of(
             "trang", "den", "do", "xanh", "hong", "vang", "nau", "be", "kem", "xam", "ghi", "bac",
             "navy", "gray", "black", "white", "red", "blue", "pink",
             "nam", "nu", "unisex", "cotton", "kaki", "jean", "denim",
-            "tay", "dai", "short", "oversize", "form", "slim", "regular"
-        );
+            "tay", "dai", "short", "oversize", "form", "slim", "regular");
 
     @Value("${chatbot.use-agent:true}")
     private boolean useAgent;
@@ -115,19 +131,23 @@ public class ChatbotServiceImpl implements ChatbotService {
         String userId = resolveUserId(userIdHeader, sessionId);
         ChatSession session = findOrCreateSession(sessionId, userId);
         mergePreferences(session, request.getPreferences());
+        applySelectedProductContext(session.getPreferenceProfile(), request.getSelectedProductContext());
         ToolResultCollector collector = new ToolResultCollector();
 
         // ============ COLD START DETECTION ============
-        // Nếu đây là câu đầu tiên trong phiên (session.messages == null hoặc rỗng) → đây là Cold Start
-        boolean isColdStart = (request.getColdStart() != null && request.getColdStart()) 
-                || session.getMessages() == null 
+        // Nếu đây là câu đầu tiên trong phiên (session.messages == null hoặc rỗng) →
+        // đây là Cold Start
+        boolean isColdStart = (request.getColdStart() != null && request.getColdStart())
+                || session.getMessages() == null
                 || session.getMessages().isEmpty();
 
-        // Nếu Cold Start + yêu cầu là generic (chỉ nói "áo", "quần", "váy") → hỏi chi tiết loại sản phẩm trước
+        // Nếu Cold Start + yêu cầu là generic (chỉ nói "áo", "quần", "váy") → hỏi chi
+        // tiết loại sản phẩm trước
         if (isColdStart) {
             ChatResponse coldStartResponse = handleColdStart(sessionId, request.getMessage(), session);
             if (coldStartResponse != null) {
-                coldStartResponse = applyFinalGuardrail(coldStartResponse, collectorFromResponse(coldStartResponse, collector));
+                coldStartResponse = applyFinalGuardrail(coldStartResponse,
+                        collectorFromResponse(coldStartResponse, collector));
                 persistMessages(session, request.getMessage(), coldStartResponse);
                 return coldStartResponse;
             }
@@ -140,12 +160,38 @@ public class ChatbotServiceImpl implements ChatbotService {
         profileEnrichmentService.enrichFromUserProfile(session.getPreferenceProfile(), userId);
         updateBudgetFromMessage(session.getPreferenceProfile(), request.getMessage());
         refreshProductQueryContext(session.getPreferenceProfile(), request.getMessage());
+        conversationStateService.refreshState(session.getPreferenceProfile(), request.getMessage());
 
         ChatResponse genderContextResponse = handleGenderContextStep(sessionId, request.getMessage(), session);
         if (genderContextResponse != null) {
-            genderContextResponse = applyFinalGuardrail(genderContextResponse, collectorFromResponse(genderContextResponse, collector));
+            genderContextResponse = applyFinalGuardrail(genderContextResponse,
+                    collectorFromResponse(genderContextResponse, collector));
             persistMessages(session, request.getMessage(), genderContextResponse);
             return genderContextResponse;
+        }
+
+        ChatResponse listRankingResponse = handleCurrentListRankingFollowUp(sessionId, request.getMessage(), session,
+                collector);
+        if (listRankingResponse != null) {
+            listRankingResponse = applyFinalGuardrail(listRankingResponse, collector);
+            persistMessages(session, request.getMessage(), listRankingResponse);
+
+            long totalLatency = System.currentTimeMillis() - startTime;
+            chatAnalyticsService.record(traceId, sessionId, userId,
+                    request.getMessage(), listRankingResponse, collector, totalLatency);
+            return listRankingResponse;
+        }
+
+        ChatResponse listCompareResponse = handleCurrentListComparisonFollowUp(sessionId, request.getMessage(), session,
+                collector);
+        if (listCompareResponse != null) {
+            listCompareResponse = applyFinalGuardrail(listCompareResponse, collector);
+            persistMessages(session, request.getMessage(), listCompareResponse);
+
+            long totalLatency = System.currentTimeMillis() - startTime;
+            chatAnalyticsService.record(traceId, sessionId, userId,
+                    request.getMessage(), listCompareResponse, collector, totalLatency);
+            return listCompareResponse;
         }
 
         // === Task 2: Out-of-Domain Short-Circuit ===
@@ -170,6 +216,31 @@ public class ChatbotServiceImpl implements ChatbotService {
             oodResponse = applyFinalGuardrail(oodResponse, collectorFromResponse(oodResponse, collector));
             persistMessages(session, request.getMessage(), oodResponse);
             return oodResponse;
+        }
+
+        ChatResponse discoveryResponse = handleSalesDiscoveryStep(sessionId, request.getMessage(), session,
+                preCheck.intent());
+        if (discoveryResponse != null) {
+            discoveryResponse = applyFinalGuardrail(discoveryResponse,
+                    collectorFromResponse(discoveryResponse, collector));
+            persistMessages(session, request.getMessage(), discoveryResponse);
+
+            long totalLatency = System.currentTimeMillis() - startTime;
+            chatAnalyticsService.record(traceId, sessionId, userId,
+                    request.getMessage(), discoveryResponse, collector, totalLatency);
+            return discoveryResponse;
+        }
+
+        ChatResponse multiIntentResponse = multiIntentResolver.resolve(
+                sessionId, request.getMessage(), session, collector);
+        if (multiIntentResponse != null) {
+            multiIntentResponse = applyFinalGuardrail(multiIntentResponse, collector);
+            persistMessages(session, request.getMessage(), multiIntentResponse);
+
+            long totalLatency = System.currentTimeMillis() - startTime;
+            chatAnalyticsService.record(traceId, sessionId, userId,
+                    request.getMessage(), multiIntentResponse, collector, totalLatency);
+            return multiIntentResponse;
         }
 
         ChatResponse directIntentResponse = handleDirectIntent(
@@ -197,7 +268,8 @@ public class ChatbotServiceImpl implements ChatbotService {
         }
 
         // === Explicit product check handling (strict search) ===
-        ChatResponse explicitProductResponse = handleExplicitProductLookup(sessionId, request.getMessage(), session, collector);
+        ChatResponse explicitProductResponse = productQueryHandler.handleExplicitLookup(sessionId, request.getMessage(),
+                session, collector);
         if (explicitProductResponse != null) {
             explicitProductResponse = applyFinalGuardrail(explicitProductResponse, collector);
             persistMessages(session, request.getMessage(), explicitProductResponse);
@@ -224,8 +296,8 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     private ChatResponse handleDirectIntent(String sessionId, String message,
-                                            ChatSession session, ToolResultCollector collector,
-                                            String intent, double confidence) {
+            ChatSession session, ToolResultCollector collector,
+            String intent, double confidence) {
         if (IntentClassifierService.WISHLIST_RECOMMENDATION.equals(intent)) {
             if (isGuestUser(session.getUserId())) {
                 return buildLoginRequiredResponse(sessionId, intent, confidence, collector, session,
@@ -286,7 +358,81 @@ public class ChatbotServiceImpl implements ChatbotService {
             return buildSizeConsultationResponse(sessionId, message, session, collector, intent, confidence);
         }
 
+        if (IntentClassifierService.SEARCH_PRODUCT.equals(intent)
+                && productQueryHandler.shouldHandleDirectSearch(message, session.getPreferenceProfile())) {
+            ChatResponse response = productQueryHandler.searchWithContext(sessionId, message, session, collector);
+            return maybeComposeConsultativeRecommendation(response, session.getPreferenceProfile(), message);
+        }
+
         return null;
+    }
+
+    private ChatResponse handleSalesDiscoveryStep(String sessionId,
+            String message,
+            ChatSession session,
+            String intent) {
+        if (session == null || session.getPreferenceProfile() == null) {
+            return null;
+        }
+        if (!isDiscoveryFriendlyIntent(intent) || containsHardCommerceSignal(message)) {
+            return null;
+        }
+        StageDecision decision = conversationStateService.evaluateStageDecision(session.getPreferenceProfile(), message);
+        if (!decision.shouldAskClarifyingQuestion()) {
+            return null;
+        }
+
+        String nextSlot = decision.clarifyingQuestion() != null
+                ? decision.clarifyingQuestion().slotName()
+                : conversationStateService.pickNextQuestionSlot(session.getPreferenceProfile());
+        if (nextSlot == null || nextSlot.isBlank()) {
+            return null;
+        }
+
+        // Track which slot was asked so later phases can turn this into a
+        // more complete slot-filling state machine without rewriting the flow.
+        session.getPreferenceProfile().setLastAskedSlot(nextSlot);
+        if (session.getPreferenceProfile().getAskedSlots() == null) {
+            session.getPreferenceProfile().setAskedSlots(new LinkedHashSet<>());
+        }
+        session.getPreferenceProfile().getAskedSlots().add(nextSlot);
+        session.getPreferenceProfile().setSlotConfidence(
+                slotFillingService.estimateConfidence(session.getPreferenceProfile()));
+        String reply = fashionResponseComposer.buildClarifyingQuestion(decision.clarifyingQuestion());
+
+        return ChatResponse.builder()
+                .sessionId(sessionId)
+                .intent(intent != null ? intent : "GENERAL")
+                .confidence(0.82d)
+                .reply(reply)
+                .suggestions(List.of())
+                .promotions(List.of())
+                .profile(session.getPreferenceProfile())
+                .createdAt(Instant.now())
+                .build();
+    }
+
+    private ChatResponse maybeComposeConsultativeRecommendation(ChatResponse response,
+                                                                ChatSession.PreferenceProfile profile,
+                                                                String message) {
+        if (response == null || profile == null || response.getSuggestions() == null || response.getSuggestions().isEmpty()) {
+            return response;
+        }
+        if (!isConsultativeRecommendationTurn(message)) {
+            return response;
+        }
+
+        StageDecision decision = conversationStateService.evaluateStageDecision(profile, message);
+        if (!decision.shouldRecommend()) {
+            return response;
+        }
+
+        List<ChatResponse.ProductSuggestion> limitedSuggestions = response.getSuggestions().stream()
+                .limit(3)
+                .toList();
+        response.setSuggestions(new ArrayList<>(limitedSuggestions));
+        response.setReply(fashionResponseComposer.composeRecommendationReply(profile, limitedSuggestions));
+        return response;
     }
 
     @Override
@@ -299,7 +445,8 @@ public class ChatbotServiceImpl implements ChatbotService {
         }
 
         if (session == null) {
-            // Session may be generated on client side before first chat message is persisted.
+            // Session may be generated on client side before first chat message is
+            // persisted.
             // Return an empty payload to avoid noisy 404 errors on initial widget load.
             return SessionResponse.builder()
                     .sessionId(sessionId)
@@ -356,10 +503,11 @@ public class ChatbotServiceImpl implements ChatbotService {
 
     /**
      * Chế độ Agent: LLM tự quyết định gọi tool nào.
-     * Safety net: nếu Agent trả về rỗng nhưng message rõ ràng là tìm SP → fallback heuristic.
+     * Safety net: nếu Agent trả về rỗng nhưng message rõ ràng là tìm SP → fallback
+     * heuristic.
      */
     private ChatResponse executeAgent(String sessionId, String message,
-                                       ChatSession session, ToolResultCollector collector) {
+            ChatSession session, ToolResultCollector collector) {
         try {
             fashionTools.setCollector(collector);
             fashionTools.setPreferenceProfile(session.getPreferenceProfile());
@@ -391,10 +539,10 @@ public class ChatbotServiceImpl implements ChatbotService {
 
             log.info("Gọi Agent cho session: {}, message length: {}", sessionId, enrichedMessage.length());
             String llmReply = invokeAgentWithRetry(sessionId, enrichedMessage, session);
-            
+
             if (llmReply == null || llmReply.isBlank()) {
                 log.warn("Agent liên tục lỗi cho session: {}. Chuyển sang chế độ Heuristic Fallback.", sessionId);
-                ChatResponse fallbackResponse = executeHeuristicFallback(sessionId, message, session, collector);
+                ChatResponse fallbackResponse = fallbackHandler.handle(sessionId, message, session, collector);
                 return fallbackResponse;
             }
 
@@ -412,8 +560,10 @@ public class ChatbotServiceImpl implements ChatbotService {
 
     /**
      * Retry agent call once on NullPointerException from LangChain4j.
-     * NPE occurs when DeepSeek returns tool_call with null content → corrupts ChatMemory.
-     * Fix: clear corrupted memory before retry so LangChain4j starts with a clean state.
+     * NPE occurs when DeepSeek returns tool_call with null content → corrupts
+     * ChatMemory.
+     * Fix: clear corrupted memory before retry so LangChain4j starts with a clean
+     * state.
      */
     private String invokeAgentWithRetry(String sessionId, String message, ChatSession session) {
         try {
@@ -435,11 +585,12 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     /**
-     * Chế độ Heuristic fallback: dùng IntentClassifier khi agent lỗi hoặc bị disable.
+     * Chế độ Heuristic fallback: dùng IntentClassifier khi agent lỗi hoặc bị
+     * disable.
      * Giờ đây sẽ gọi Tool thật thay vì trả câu tĩnh.
      */
     private ChatResponse executeHeuristicFallback(String sessionId, String message,
-                                                   ChatSession session, ToolResultCollector collector) {
+            ChatSession session, ToolResultCollector collector) {
         IntentClassifierService.IntentScore intentScore = intentClassifierService.classify(message);
         ChatSession.PreferenceProfile profile = session.getPreferenceProfile();
 
@@ -452,9 +603,9 @@ public class ChatbotServiceImpl implements ChatbotService {
                 // Merge với số đo đã lưu trong session (context memory)
                 Integer heightCm = extracted.heightCm() != null ? extracted.heightCm() : profile.getLastHeightCm();
                 Integer weightKg = extracted.weightKg() != null ? extracted.weightKg() : profile.getLastWeightKg();
-                Integer chestCm  = extracted.chestCm()  != null ? extracted.chestCm()  : profile.getLastChestCm();
-                Integer waistCm  = extracted.waistCm()  != null ? extracted.waistCm()  : profile.getLastWaistCm();
-                Integer hipCm    = extracted.hipCm()    != null ? extracted.hipCm()    : profile.getLastHipCm();
+                Integer chestCm = extracted.chestCm() != null ? extracted.chestCm() : profile.getLastChestCm();
+                Integer waistCm = extracted.waistCm() != null ? extracted.waistCm() : profile.getLastWaistCm();
+                Integer hipCm = extracted.hipCm() != null ? extracted.hipCm() : profile.getLastHipCm();
 
                 SizeAdvisorService.Measurements merged = new SizeAdvisorService.Measurements(
                         heightCm, weightKg, chestCm, waistCm, hipCm);
@@ -478,11 +629,11 @@ public class ChatbotServiceImpl implements ChatbotService {
                     garmentKeyword = profile.getLastProductCategoryQueried();
                 }
                 SizeAdvisorService.GarmentType type = sizeAdvisorService.detectGarmentType(message);
-                SizeFitAdvisoryService.SizeFitAdvice advice =
-                        sizeFitAdvisoryService.advise(merged, type, garmentKeyword == null ? message : garmentKeyword, profile);
+                SizeFitAdvisoryService.SizeFitAdvice advice = sizeFitAdvisoryService.advise(merged, type,
+                        garmentKeyword == null ? message : garmentKeyword, profile);
                 collector.setSizeRecommendation(advice.recommendedSize());
-                SizeAdvisorService.SizeResult result =
-                        new SizeAdvisorService.SizeResult(advice.recommendedSize(), advice.rationale());
+                SizeAdvisorService.SizeResult result = new SizeAdvisorService.SizeResult(advice.recommendedSize(),
+                        advice.rationale());
 
                 // Tư vấn size xong → tự động tìm sản phẩm phù hợp
                 if (garmentKeyword != null && !garmentKeyword.isBlank()) {
@@ -491,7 +642,8 @@ public class ChatbotServiceImpl implements ChatbotService {
                         fashionTools.setPreferenceProfile(profile);
                         fashionTools.setCurrentUserId(session.getUserId());
                         Double maxPrice = parseBudget(profile.getBudget());
-                        fashionTools.searchProducts(garmentKeyword, null, maxPrice != null ? maxPrice.longValue() : null, null, null);
+                        fashionTools.searchProducts(garmentKeyword, null,
+                                maxPrice != null ? maxPrice.longValue() : null, null, null);
                     } catch (Exception ex) {
                         log.debug("Auto product search after size advice skipped: {}", ex.getMessage());
                     } finally {
@@ -545,7 +697,8 @@ public class ChatbotServiceImpl implements ChatbotService {
             }
 
             case IntentClassifierService.SEARCH_PRODUCT -> {
-                // Gọi Tool thật để tìm sản phẩm — áp dụng budget từ message HOẶC Personalization panel
+                // Gọi Tool thật để tìm sản phẩm — áp dụng budget từ message HOẶC
+                // Personalization panel
                 try {
                     String searchKeyword = resolveSearchKeywordForTurn(message, profile);
                     if (shouldListProductTypes(message, searchKeyword)) {
@@ -585,14 +738,16 @@ public class ChatbotServiceImpl implements ChatbotService {
                             colorFilter,
                             sizeFilter);
 
-                    // Nếu có filter giá mà không tìm thấy → retry KHÔNG có giá để gợi ý sản phẩm gần nhất
+                    // Nếu có filter giá mà không tìm thấy → retry KHÔNG có giá để gợi ý sản phẩm
+                    // gần nhất
                     if (collector.getProducts().isEmpty() && hasPriceFilter) {
                         log.info("No products found with price filter [{}-{}], retrying without price for keyword: {}",
                                 minPrice, maxPrice, searchKeyword);
                         fashionTools.clearCollector();
                         fashionTools.setCollector(collector);
                         fashionTools.setPreferenceProfile(profile);
-                        String fallbackResult = fashionTools.searchProducts(searchKeyword, null, null, colorFilter, sizeFilter);
+                        String fallbackResult = fashionTools.searchProducts(searchKeyword, null, null, colorFilter,
+                                sizeFilter);
 
                         if (!collector.getProducts().isEmpty()) {
                             String priceNote = formatPriceRange(minPrice, maxPrice);
@@ -757,14 +912,56 @@ public class ChatbotServiceImpl implements ChatbotService {
                 || normalized.contains("combo nao hop");
     }
 
+    private boolean isConsultativeRecommendationTurn(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String normalized = VietnameseNormalizer.normalize(message).toLowerCase();
+        return normalized.contains("goi y")
+                || normalized.contains("tu van")
+                || normalized.contains("mac gi")
+                || normalized.contains("outfit")
+                || normalized.contains("set do")
+                || normalized.contains("ao")
+                || normalized.contains("quan")
+                || normalized.contains("vay")
+                || shouldUseSalesGuidance(message);
+    }
+
+    private boolean isDiscoveryFriendlyIntent(String intent) {
+        return intent == null
+                || "GENERAL".equals(intent)
+                || IntentClassifierService.SEARCH_PRODUCT.equals(intent);
+    }
+
+    private boolean containsHardCommerceSignal(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String normalized = VietnameseNormalizer.normalize(message);
+        return normalized.contains("review")
+                || normalized.contains("khuyen mai")
+                || normalized.contains("voucher")
+                || normalized.contains("don hang")
+                || normalized.contains("wishlist")
+                || normalized.contains("diem thuong")
+                || normalized.contains("san pham nay")
+                || normalized.contains("trong list nay")
+                || normalized.contains("size gi")
+                || normalized.contains("size nao");
+    }
+
     /**
      * Handle Cold Start (khởi động lạnh):
      * - Nếu user nói generic ("áo", "quần", "váy") → hỏi chi tiết loại sản phẩm
-     * - Nếu user nói specific ("áo thun", "quần jean") → không cần hỏi, xử lý bình thường
-     * - Returns ChatResponse nếu Cold Start cần hỏi thêm, null nếu có thể xử lý bình thường
+     * - Nếu user nói specific ("áo thun", "quần jean") → không cần hỏi, xử lý bình
+     * thường
+     * - Returns ChatResponse nếu Cold Start cần hỏi thêm, null nếu có thể xử lý
+     * bình thường
      */
     private ChatResponse handleColdStart(String sessionId, String message, ChatSession session) {
-        if (message == null || message.isBlank()) return null;
+        if (message == null || message.isBlank())
+            return null;
 
         if (isStrongDirectSizeIntent(message)) {
             return null;
@@ -774,7 +971,7 @@ public class ChatbotServiceImpl implements ChatbotService {
         if (hasShoppingConstraints(message)) {
             return null;
         }
-        
+
         // Nếu search keyword không phải generic (đã đủ cụ thể), không cần hỏi thêm
         if (!isGenericGarmentKeyword(searchKeyword)) {
             return null; // Xử lý bình thường
@@ -790,7 +987,7 @@ public class ChatbotServiceImpl implements ChatbotService {
         String reply = "Dạ, bạn muốn " + garmentCategory + " gì ạ? " + suggestions;
 
         log.info("Cold start: asking for product type clarification for: {}", garmentCategory);
-        
+
         return ChatResponse.builder()
                 .sessionId(sessionId)
                 .intent("COLD_START_CLARIFY")
@@ -805,7 +1002,8 @@ public class ChatbotServiceImpl implements ChatbotService {
 
     /**
      * Build product type options cho user chọn.
-     * VD: garment="áo" → "áo thun, áo sơ mi, áo khoác, áo polo, áo hoodie, hay loại khác?"
+     * VD: garment="áo" → "áo thun, áo sơ mi, áo khoác, áo polo, áo hoodie, hay loại
+     * khác?"
      */
     private String buildProductTypeOptions(String garmentCategory) {
         String normalized = normalizeText(garmentCategory);
@@ -839,13 +1037,14 @@ public class ChatbotServiceImpl implements ChatbotService {
                 || normalized.contains("size nao")
                 || normalized.matches(".*\\b(xs|s|m|l|xl|xxl)\\s+hay\\s+(xs|s|m|l|xl|xxl)\\b.*");
         boolean hasGarment = !extractGarmentKeyword(message).isBlank()
-                || containsAnyKeyword(normalized, "ao so mi", "ao thun", "ao khoac", "blazer", "quan jean", "quan tay", "vay", "dam");
+                || containsAnyKeyword(normalized, "ao so mi", "ao thun", "ao khoac", "blazer", "quan jean", "quan tay",
+                        "vay", "dam");
         return (hasMeasurement || hasSizeLanguage) && hasGarment;
     }
 
     private ChatResponse buildSizeConsultationResponse(String sessionId, String message,
-                                                       ChatSession session, ToolResultCollector collector,
-                                                       String intent, double confidence) {
+            ChatSession session, ToolResultCollector collector,
+            String intent, double confidence) {
         return ChatResponse.builder()
                 .sessionId(sessionId)
                 .intent(intent)
@@ -891,8 +1090,8 @@ public class ChatbotServiceImpl implements ChatbotService {
         }
 
         SizeAdvisorService.GarmentType type = sizeAdvisorService.detectGarmentType(message);
-        SizeFitAdvisoryService.SizeFitAdvice advice =
-                sizeFitAdvisoryService.advise(merged, type, garmentKeyword == null ? message : garmentKeyword, profile);
+        SizeFitAdvisoryService.SizeFitAdvice advice = sizeFitAdvisoryService.advise(merged, type,
+                garmentKeyword == null ? message : garmentKeyword, profile);
         collector.setSizeRecommendation(advice.recommendedSize());
 
         if (garmentKeyword != null && !garmentKeyword.isBlank()) {
@@ -901,7 +1100,8 @@ public class ChatbotServiceImpl implements ChatbotService {
                 fashionTools.setPreferenceProfile(profile);
                 fashionTools.setCurrentUserId(session.getUserId());
                 Double maxPrice = parseBudget(profile.getBudget());
-                fashionTools.searchProducts(garmentKeyword, null, maxPrice != null ? maxPrice.longValue() : null, null, null);
+                fashionTools.searchProducts(garmentKeyword, null, maxPrice != null ? maxPrice.longValue() : null, null,
+                        null);
             } catch (Exception ex) {
                 log.debug("Auto product search after size advice skipped: {}", ex.getMessage());
             } finally {
@@ -929,10 +1129,39 @@ public class ChatbotServiceImpl implements ChatbotService {
     // ========== EXPLICIT PRODUCT CHECK / DEICTIC HANDLING ==========
 
     private ChatResponse handleDeicticReference(String sessionId,
-                                                String message,
-                                                ChatSession session,
-                                                ToolResultCollector collector) {
-        if (!isDeicticReference(message)) return null;
+            String message,
+            ChatSession session,
+            ToolResultCollector collector) {
+        if (!isDeicticReference(message))
+            return null;
+
+        ChatSession.SelectedProductContextSnapshot selected = session != null
+                && session.getPreferenceProfile() != null
+                        ? session.getPreferenceProfile().getSelectedProductContext()
+                        : null;
+        if (selected != null && selected.getProductId() != null && !selected.getProductId().isBlank()) {
+            ChatResponse.ProductSuggestion selectedSuggestion = ChatResponse.ProductSuggestion.builder()
+                    .productId(selected.getProductId())
+                    .name(selected.getProductName())
+                    .category(selected.getCategory())
+                    .categoryGender(selected.getCategoryGender())
+                    .link(selected.getLink())
+                    .price(selected.getPrice())
+                    .reason("Sản phẩm bạn vừa chọn")
+                    .build();
+            collector.addProducts(List.of(selectedSuggestion));
+            String reply = buildSingleDeicticReply(selectedSuggestion);
+            return ChatResponse.builder()
+                    .sessionId(sessionId)
+                    .intent(IntentClassifierService.SEARCH_PRODUCT)
+                    .confidence(0.93d)
+                    .reply(reply)
+                    .suggestions(List.of(selectedSuggestion))
+                    .promotions(List.of())
+                    .profile(session.getPreferenceProfile())
+                    .createdAt(Instant.now())
+                    .build();
+        }
 
         List<ChatSession.ProductSuggestionSnapshot> recent = getLastSuggestedProducts(session);
         if (recent.isEmpty()) {
@@ -986,10 +1215,84 @@ public class ChatbotServiceImpl implements ChatbotService {
                 .build();
     }
 
+    private ChatResponse handleCurrentListRankingFollowUp(String sessionId,
+            String message,
+            ChatSession session,
+            ToolResultCollector collector) {
+        if (!isCurrentListRankingFollowUp(message)) {
+            return null;
+        }
+
+        List<ChatSession.ProductSuggestionSnapshot> recent = getLastSuggestedProducts(session);
+        if (recent.isEmpty()) {
+            return null;
+        }
+
+        List<ChatResponse.ProductSuggestion> suggestions = mapSnapshots(recent);
+        collector.addProducts(suggestions);
+        CompareEngine.CompareResult compareResult = compareEngine.compare(suggestions);
+        ChatResponse.ProductSuggestion safestPick = compareResult.saferChoice();
+        if (safestPick == null) {
+            return null;
+        }
+
+        String reply = "Mình chưa có số lượt mua chính xác theo từng mẫu trong list này. "
+                + "Nếu cần chốt nhanh, mình ưu tiên **" + safestPick.getName()
+                + "** vì đây là phương án an toàn, dễ mặc và dễ phối nhất trong danh sách hiện tại.";
+        if (safestPick.getPrice() != null && !safestPick.getPrice().isBlank()) {
+            reply += " Giá hiện tại là " + safestPick.getPrice() + ".";
+        }
+        reply += " Nếu muốn, mình có thể chọn thêm 1 mẫu nổi bật hơn để bạn so nhanh.";
+
+        return ChatResponse.builder()
+                .sessionId(sessionId)
+                .intent(IntentClassifierService.SEARCH_PRODUCT)
+                .confidence(0.87d)
+                .reply(reply)
+                .suggestions(suggestions)
+                .promotions(List.of())
+                .profile(session.getPreferenceProfile())
+                .createdAt(Instant.now())
+                .build();
+    }
+
+    private ChatResponse handleCurrentListComparisonFollowUp(String sessionId,
+            String message,
+            ChatSession session,
+            ToolResultCollector collector) {
+        if (!isCurrentListComparisonFollowUp(message)) {
+            return null;
+        }
+
+        List<ChatSession.ProductSuggestionSnapshot> recent = getLastSuggestedProducts(session);
+        if (recent.isEmpty()) {
+            return null;
+        }
+
+        List<ChatResponse.ProductSuggestion> suggestions = mapSnapshots(recent);
+        collector.addProducts(suggestions);
+        CompareEngine.CompareResult compareResult = compareEngine.compare(suggestions);
+        if (compareResult.saferChoice() == null) {
+            return null;
+        }
+
+        String reply = fashionResponseComposer.composeComparisonReply(session.getPreferenceProfile(), compareResult);
+        return ChatResponse.builder()
+                .sessionId(sessionId)
+                .intent(IntentClassifierService.SEARCH_PRODUCT)
+                .confidence(0.89d)
+                .reply(reply)
+                .suggestions(suggestions)
+                .promotions(List.of())
+                .profile(session.getPreferenceProfile())
+                .createdAt(Instant.now())
+                .build();
+    }
+
     private ChatResponse handleExplicitProductLookup(String sessionId,
-                                                     String message,
-                                                     ChatSession session,
-                                                     ToolResultCollector collector) {
+            String message,
+            ChatSession session,
+            ToolResultCollector collector) {
         String normalized = VietnameseNormalizer.normalize(message == null ? "" : message);
         if (isRefinementFollowUp(message, normalized)
                 && session != null
@@ -999,7 +1302,8 @@ public class ChatbotServiceImpl implements ChatbotService {
             return null;
         }
 
-        if (!isExplicitProductCheck(message)) return null;
+        if (!isExplicitProductCheck(message))
+            return null;
 
         String searchKeyword = extractProductSearchKeyword(message);
         if (searchKeyword.isBlank()) {
@@ -1120,7 +1424,8 @@ public class ChatbotServiceImpl implements ChatbotService {
         List<ChatSession.ChatMessage> messages = session.getMessages();
         for (int i = messages.size() - 1; i >= 0; i--) {
             ChatSession.ChatMessage msg = messages.get(i);
-            if (msg == null || msg.getSender() != ChatSession.Sender.BOT) continue;
+            if (msg == null || msg.getSender() != ChatSession.Sender.BOT)
+                continue;
             if (msg.getSuggestions() != null && !msg.getSuggestions().isEmpty()) {
                 return msg.getSuggestions();
             }
@@ -1131,7 +1436,8 @@ public class ChatbotServiceImpl implements ChatbotService {
     private List<ChatResponse.ProductSuggestion> mapSnapshots(List<ChatSession.ProductSuggestionSnapshot> snapshots) {
         List<ChatResponse.ProductSuggestion> results = new ArrayList<>();
         for (ChatSession.ProductSuggestionSnapshot snapshot : snapshots) {
-            if (snapshot == null) continue;
+            if (snapshot == null)
+                continue;
             results.add(ChatResponse.ProductSuggestion.builder()
                     .productId(snapshot.getProductId())
                     .name(snapshot.getName())
@@ -1173,18 +1479,84 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     private boolean isDeicticReference(String message) {
-        if (message == null || message.isBlank()) return false;
+        if (message == null || message.isBlank())
+            return false;
         String normalized = VietnameseNormalizer.normalize(message);
         return normalized.contains("cai nay")
-            || normalized.contains("mau nay")
-            || normalized.contains("san pham nay")
-            || normalized.contains("sp nay")
-            || normalized.contains("mon nay")
-            || normalized.matches(".*\\b(ao|quan|vay|dam)\\s+nay\\b.*");
+                || normalized.contains("mau nay")
+                || normalized.contains("san pham nay")
+                || normalized.contains("sp nay")
+                || normalized.contains("mon nay")
+                || normalized.matches(".*\\b(ao|quan|vay|dam)\\s+nay\\b.*");
+    }
+
+    private boolean isCurrentListRankingFollowUp(String message) {
+        if (message == null || message.isBlank())
+            return false;
+        String normalized = VietnameseNormalizer.normalize(message);
+        boolean mentionsCurrentList = normalized.contains("trong list nay")
+                || normalized.contains("trong danh sach nay")
+                || normalized.contains("trong list do")
+                || normalized.contains("trong danh sach do");
+        boolean asksTopPick = normalized.contains("nhieu luot mua nhat")
+                || normalized.contains("ban chay nhat")
+                || normalized.contains("dang mua nhat")
+                || normalized.contains("best seller");
+        return mentionsCurrentList && asksTopPick;
+    }
+
+    private boolean isCurrentListComparisonFollowUp(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String normalized = VietnameseNormalizer.normalize(message);
+        boolean mentionsCurrentList = normalized.contains("trong list nay")
+                || normalized.contains("trong danh sach nay")
+                || normalized.contains("trong list do")
+                || normalized.contains("trong danh sach do")
+                || normalized.contains("trong nhom nay");
+        boolean asksDecision = normalized.contains("nen chon")
+                || normalized.contains("phan van")
+                || normalized.contains("so sanh")
+                || normalized.contains("dang tien hon")
+                || normalized.contains("an toan hon")
+                || normalized.contains("de mac hon")
+                || normalized.contains("de phoi hon")
+                || normalized.contains("noi bat hon");
+        return mentionsCurrentList && asksDecision;
+    }
+
+    private ChatResponse.ProductSuggestion pickSafestSuggestion(List<ChatResponse.ProductSuggestion> suggestions) {
+        ChatResponse.ProductSuggestion best = null;
+        int bestScore = Integer.MIN_VALUE;
+        for (ChatResponse.ProductSuggestion suggestion : suggestions) {
+            int score = 0;
+            String normalized = normalizeText(
+                    (suggestion.getName() == null ? "" : suggestion.getName()) + " "
+                            + (suggestion.getCategory() == null ? "" : suggestion.getCategory()));
+            if (suggestion.getAvailableSizes() != null && !suggestion.getAvailableSizes().isEmpty()) {
+                score += 3;
+            }
+            if (normalized.contains("basic") || normalized.contains("regular") || normalized.contains("linen")) {
+                score += 2;
+            }
+            if (normalized.contains("dang ten") || normalized.contains("oxford") || normalized.contains("truon")) {
+                score += 2;
+            }
+            if (normalized.contains("soc") || normalized.contains("tay phong") || normalized.contains("cut out")) {
+                score -= 1;
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                best = suggestion;
+            }
+        }
+        return best;
     }
 
     private boolean isExplicitProductCheck(String message) {
-        if (message == null || message.isBlank()) return false;
+        if (message == null || message.isBlank())
+            return false;
         String normalized = VietnameseNormalizer.normalize(message);
         String searchKeyword = extractProductSearchKeyword(message);
 
@@ -1244,7 +1616,8 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     private boolean wantsSimilarSuggestion(String message) {
-        if (message == null || message.isBlank()) return false;
+        if (message == null || message.isBlank())
+            return false;
         String normalized = VietnameseNormalizer.normalize(message);
         return normalized.contains("tuong tu")
                 || normalized.contains("gan giong")
@@ -1255,7 +1628,8 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     private boolean isGenericGarmentKeyword(String keyword) {
-        if (keyword == null || keyword.isBlank()) return false;
+        if (keyword == null || keyword.isBlank())
+            return false;
         String normalized = VietnameseNormalizer.normalize(keyword);
         String[] baseGarments = {
                 "ao", "ao thun", "ao so mi", "ao khoac", "ao polo", "ao hoodie", "ao len",
@@ -1264,10 +1638,12 @@ public class ChatbotServiceImpl implements ChatbotService {
         };
 
         for (String garment : baseGarments) {
-            if (normalized.equals(garment)) return true;
+            if (normalized.equals(garment))
+                return true;
             if (normalized.startsWith(garment + " ")) {
                 String rest = normalized.substring(garment.length()).trim();
-                if (rest.isBlank()) return true;
+                if (rest.isBlank())
+                    return true;
                 String[] tokens = rest.split("\\s+");
                 boolean descriptorOnly = true;
                 for (String token : tokens) {
@@ -1276,7 +1652,8 @@ public class ChatbotServiceImpl implements ChatbotService {
                         break;
                     }
                 }
-                if (descriptorOnly) return true;
+                if (descriptorOnly)
+                    return true;
             }
         }
         return false;
@@ -1288,17 +1665,18 @@ public class ChatbotServiceImpl implements ChatbotService {
      * → Profile lưu clarifiedProductTypes = {"áo thun"} → dùng trong câu tiếp theo
      */
     private String buildClarificationContext(ChatSession.PreferenceProfile profile) {
-        if (profile == null || profile.getClarifiedProductTypes() == null || profile.getClarifiedProductTypes().isEmpty()) {
+        if (profile == null || profile.getClarifiedProductTypes() == null
+                || profile.getClarifiedProductTypes().isEmpty()) {
             return "";
         }
-        
+
         List<String> types = new ArrayList<>(profile.getClarifiedProductTypes());
         String recent = types.get(types.size() - 1); // Lấy loại sản phẩm được làm rõ gần nhất
-        
+
         if (recent == null || recent.isBlank()) {
             return "";
         }
-        
+
         Instant queryTime = profile.getLastProductQueryTime();
         if (queryTime != null) {
             long elapsedMinutes = java.time.temporal.ChronoUnit.MINUTES.between(queryTime, Instant.now());
@@ -1307,7 +1685,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                 return "";
             }
         }
-        
+
         return "Bạn đang tìm " + recent + ". ";
     }
 
@@ -1327,7 +1705,8 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     private String buildProfileContext(ChatSession.PreferenceProfile profile) {
-        if (profile == null) return "";
+        if (profile == null)
+            return "";
         List<String> parts = new ArrayList<>();
 
         if (profile.getPreferredSizes() != null && !profile.getPreferredSizes().isEmpty()) {
@@ -1366,6 +1745,22 @@ public class ChatbotServiceImpl implements ChatbotService {
         }
         if (profile.getTargetGender() != null && !profile.getTargetGender().isBlank()) {
             parts.add("Nhom gioi tinh dang chon: " + profile.getTargetGender());
+        }
+        if (profile.getSalesStage() != null) {
+            parts.add("Giai doan tu van: " + profile.getSalesStage().name());
+        }
+        if (profile.getStylingSlots() != null) {
+            if (profile.getStylingSlots().getOccasion() != null && !profile.getStylingSlots().getOccasion().isBlank()) {
+                parts.add("Dip mac suy ra: " + profile.getStylingSlots().getOccasion());
+            }
+            if (profile.getStylingSlots().getStyleVibe() != null
+                    && !profile.getStylingSlots().getStyleVibe().isBlank()) {
+                parts.add("Vibe uu tien: " + profile.getStylingSlots().getStyleVibe());
+            }
+            if (profile.getStylingSlots().getProductType() != null
+                    && !profile.getStylingSlots().getProductType().isBlank()) {
+                parts.add("Nhom san pham dang quan tam: " + profile.getStylingSlots().getProductType());
+            }
         }
 
         String measurement = buildMeasurementContext(profile);
@@ -1410,16 +1805,25 @@ public class ChatbotServiceImpl implements ChatbotService {
 
     private String buildMeasurementContext(ChatSession.PreferenceProfile profile) {
         List<String> items = new ArrayList<>();
-        if (profile.getLastHeightCm() != null) items.add("cao " + profile.getLastHeightCm() + "cm");
-        if (profile.getLastWeightKg() != null) items.add("nặng " + profile.getLastWeightKg() + "kg");
-        if (profile.getLastChestCm() != null) items.add("ngực " + profile.getLastChestCm() + "cm");
-        if (profile.getLastWaistCm() != null) items.add("eo " + profile.getLastWaistCm() + "cm");
-        if (profile.getLastHipCm() != null) items.add("hông " + profile.getLastHipCm() + "cm");
+        if (profile.getLastHeightCm() != null)
+            items.add("cao " + profile.getLastHeightCm() + "cm");
+        if (profile.getLastWeightKg() != null)
+            items.add("nặng " + profile.getLastWeightKg() + "kg");
+        if (profile.getLastChestCm() != null)
+            items.add("ngực " + profile.getLastChestCm() + "cm");
+        if (profile.getLastWaistCm() != null)
+            items.add("eo " + profile.getLastWaistCm() + "cm");
+        if (profile.getLastHipCm() != null)
+            items.add("hông " + profile.getLastHipCm() + "cm");
         return items.isEmpty() ? "" : "Số đo gần nhất: " + String.join(", ", items);
     }
 
     private boolean hasActiveConversationState(ChatSession.PreferenceProfile profile) {
-        if (profile == null || profile.getConversationFlow() == null || profile.getConversationFlow().isBlank()) {
+        boolean hasLegacyFlow = profile != null
+                && profile.getConversationFlow() != null
+                && !profile.getConversationFlow().isBlank();
+        boolean hasSalesStage = profile != null && profile.getSalesStage() != null;
+        if (!hasLegacyFlow && !hasSalesStage) {
             return false;
         }
         Instant updatedAt = profile.getConversationStateUpdatedAt();
@@ -1454,7 +1858,8 @@ public class ChatbotServiceImpl implements ChatbotService {
         boolean quickChoiceFollowUp = containsAnyKeyword(normalizedMessage,
                 "mau nay", "mau kia", "loai nay", "loai kia", "cai nay", "cai kia",
                 "phuong an nay", "phuong an kia", "vay thi", "the con", "neu vay", "ok vay");
-        return budgetFollowUp || sizeFollowUp || measurementFollowUp || fitFollowUp || colorFollowUp || quickChoiceFollowUp;
+        return budgetFollowUp || sizeFollowUp || measurementFollowUp || fitFollowUp || colorFollowUp
+                || quickChoiceFollowUp;
     }
 
     private boolean isSizeFitFollowUp(String normalizedMessage) {
@@ -1463,9 +1868,9 @@ public class ChatbotServiceImpl implements ChatbotService {
         }
         return normalizedMessage.matches(".*\\b(xs|s|m|l|xl|xxl)\\s*(hay|hoac|vs|voi)\\s*(xs|s|m|l|xl|xxl)\\b.*")
                 || containsAnyKeyword(normalizedMessage,
-                "phan van size", "size nao hop", "size nao on", "size nao dep",
-                "om hay rong", "fit nao hop", "vai rong", "nguc day", "mong to", "dui to",
-                "mac rong", "mac om", "vua van", "thoai mai hon");
+                        "phan van size", "size nao hop", "size nao on", "size nao dep",
+                        "om hay rong", "fit nao hop", "vai rong", "nguc day", "mong to", "dui to",
+                        "mac rong", "mac om", "vua van", "thoai mai hon");
     }
 
     private void refreshProductQueryContext(ChatSession.PreferenceProfile profile, String message) {
@@ -1494,7 +1899,8 @@ public class ChatbotServiceImpl implements ChatbotService {
         if (extracted != null && !extracted.isBlank() && !isGenericBudgetOnlyFollowUp(message)) {
             return extracted;
         }
-        if (profile != null && profile.getLastProductCategoryQueried() != null && !profile.getLastProductCategoryQueried().isBlank()) {
+        if (profile != null && profile.getLastProductCategoryQueried() != null
+                && !profile.getLastProductCategoryQueried().isBlank()) {
             return profile.getLastProductCategoryQueried();
         }
         return extracted;
@@ -1505,17 +1911,28 @@ public class ChatbotServiceImpl implements ChatbotService {
             return null;
         }
         String normalized = VietnameseNormalizer.normalize(message);
-        if (normalized.contains("mau den") || normalized.contains("den khong") || normalized.contains("tone den")) return "đen";
-        if (normalized.contains("mau trang") || normalized.contains("trang khong") || normalized.contains("tone trang")) return "trắng";
-        if (normalized.contains("mau xanh") || normalized.contains("xanh khong") || normalized.contains("tone xanh")) return "xanh";
-        if (normalized.contains("mau do") || normalized.contains("do khong") || normalized.contains("tone do")) return "đỏ";
-        if (normalized.contains("mau hong") || normalized.contains("hong khong")) return "hồng";
-        if (normalized.contains("mau vang") || normalized.contains("vang khong")) return "vàng";
-        if (normalized.contains("mau nau") || normalized.contains("nau khong")) return "nâu";
-        if (normalized.contains("mau be") || normalized.contains("be khong")) return "be";
-        if (normalized.contains("mau xam") || normalized.contains("xam khong") || normalized.contains("ghi khong")) return "xám";
-        if (normalized.contains("mau navy") || normalized.contains("navy khong")) return "navy";
-        if (normalized.contains("mau kem") || normalized.contains("kem khong")) return "kem";
+        if (normalized.contains("mau den") || normalized.contains("den khong") || normalized.contains("tone den"))
+            return "đen";
+        if (normalized.contains("mau trang") || normalized.contains("trang khong") || normalized.contains("tone trang"))
+            return "trắng";
+        if (normalized.contains("mau xanh") || normalized.contains("xanh khong") || normalized.contains("tone xanh"))
+            return "xanh";
+        if (normalized.contains("mau do") || normalized.contains("do khong") || normalized.contains("tone do"))
+            return "đỏ";
+        if (normalized.contains("mau hong") || normalized.contains("hong khong"))
+            return "hồng";
+        if (normalized.contains("mau vang") || normalized.contains("vang khong"))
+            return "vàng";
+        if (normalized.contains("mau nau") || normalized.contains("nau khong"))
+            return "nâu";
+        if (normalized.contains("mau be") || normalized.contains("be khong"))
+            return "be";
+        if (normalized.contains("mau xam") || normalized.contains("xam khong") || normalized.contains("ghi khong"))
+            return "xám";
+        if (normalized.contains("mau navy") || normalized.contains("navy khong"))
+            return "navy";
+        if (normalized.contains("mau kem") || normalized.contains("kem khong"))
+            return "kem";
 
         if (isRefinementFollowUp(message, normalized)
                 && profile != null
@@ -1546,7 +1963,7 @@ public class ChatbotServiceImpl implements ChatbotService {
 
                 String rememberedCategory = profile.getLastProductCategoryQueried();
                 if (rememberedCategory != null && !rememberedCategory.isBlank()) {
-                    return runHeuristicProductRefresh(sessionId, rememberedCategory, session);
+                    return productQueryHandler.refreshForGenderContext(sessionId, rememberedCategory, session);
                 }
                 return ChatResponse.builder()
                         .sessionId(sessionId)
@@ -1716,17 +2133,21 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     private void updateBudgetFromMessage(ChatSession.PreferenceProfile profile, String message) {
-        if (profile == null || message == null || message.isBlank()) return;
+        if (profile == null || message == null || message.isBlank())
+            return;
         String normalized = VietnameseNormalizer.normalize(message);
-        if (!hasPriceSignal(normalized)) return;
+        if (!hasPriceSignal(normalized))
+            return;
         Double[] priceRange = parsePriceRangeFromMessage(message);
         Double maxPrice = priceRange[1];
-        if (maxPrice == null) return;
+        if (maxPrice == null)
+            return;
         profile.setBudget(String.valueOf(maxPrice.longValue()));
     }
 
     private boolean hasPriceSignal(String normalizedMessage) {
-        if (normalizedMessage == null || normalizedMessage.isBlank()) return false;
+        if (normalizedMessage == null || normalizedMessage.isBlank())
+            return false;
         return normalizedMessage.contains("gia")
                 || normalizedMessage.contains("ngan sach")
                 || normalizedMessage.contains("budget")
@@ -1735,7 +2156,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                 || normalizedMessage.contains("khoang")
                 || normalizedMessage.contains("trieu")
                 || normalizedMessage.contains("vnd")
-            || normalizedMessage.contains("dong");
+                || normalizedMessage.contains("dong");
     }
 
     // ========== PRICE PARSING HELPERS ==========
@@ -1743,12 +2164,13 @@ public class ChatbotServiceImpl implements ChatbotService {
     /**
      * Parse khoảng giá từ tin nhắn tiếng Việt.
      * VD: "quần jean từ 300 đến 500k" → [300000, 500000]
-     *     "dưới 2 triệu"             → [null, 2000000]
-     *     "áo sơ mi 1.500.000"       → [null, 1500000]
+     * "dưới 2 triệu" → [null, 2000000]
+     * "áo sơ mi 1.500.000" → [null, 1500000]
      * Returns: Double[]{minPrice, maxPrice}
      */
     private Double[] parsePriceRangeFromMessage(String message) {
-        if (message == null || message.isBlank()) return new Double[]{null, null};
+        if (message == null || message.isBlank())
+            return new Double[] { null, null };
 
         String normalized = java.text.Normalizer.normalize(message.toLowerCase(), java.text.Normalizer.Form.NFD)
                 .replaceAll("\\p{M}", "")
@@ -1762,8 +2184,7 @@ public class ChatbotServiceImpl implements ChatbotService {
         // Extract number+unit patterns: "300k", "1.5 triệu", "1.500.000", "500 nghin"
         Pattern pricePattern = Pattern.compile(
                 "(\\d{1,3}(?:\\.\\d{3}){1,2}|\\d+(?:[.,]\\d+)?)\\s*(k|tr(?:ieu)?|trieu|nghin|nghìn|dong|d|vnd)?",
-                Pattern.CASE_INSENSITIVE
-        );
+                Pattern.CASE_INSENSITIVE);
         Matcher matcher = pricePattern.matcher(normalized);
 
         List<Double> convertedPrices = new ArrayList<>();
@@ -1780,7 +2201,8 @@ public class ChatbotServiceImpl implements ChatbotService {
                 } else {
                     value = Double.parseDouble(rawNumber.replace(",", "."));
 
-                    if ("k".equalsIgnoreCase(unit) || "nghin".equalsIgnoreCase(unit) || "nghìn".equalsIgnoreCase(unit)) {
+                    if ("k".equalsIgnoreCase(unit) || "nghin".equalsIgnoreCase(unit)
+                            || "nghìn".equalsIgnoreCase(unit)) {
                         value *= 1_000;
                     } else if (unit != null && unit.toLowerCase().startsWith("tr")) {
                         value *= 1_000_000;
@@ -1789,7 +2211,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                         if (value < 10) {
                             value *= 1_000_000; // "2 triệu" written as "2"
                         } else if (value < 1000) {
-                            value *= 1_000;     // "300" → 300k
+                            value *= 1_000; // "300" → 300k
                         }
                         // >= 1000: treat as raw VND (e.g., "500000")
                     }
@@ -1799,10 +2221,12 @@ public class ChatbotServiceImpl implements ChatbotService {
                 }
 
                 convertedPrices.add(value);
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException ignored) {
+            }
         }
 
-        if (convertedPrices.isEmpty()) return new Double[]{null, null};
+        if (convertedPrices.isEmpty())
+            return new Double[] { null, null };
 
         boolean hasLowerBound = normalized.contains("tren") || normalized.matches(".*\\btu\\b.*");
         boolean hasUpperBound = normalized.contains("duoi") || normalized.matches(".*\\b(den|toi)\\b.*");
@@ -1815,32 +2239,34 @@ public class ChatbotServiceImpl implements ChatbotService {
             // Heuristic: if first is much smaller than second, they might share units
             if (first < 1000 && second >= 1000) {
                 double ratio = second / first;
-                if (ratio > 500) first *= 1000; // "300 đến 500k" → 300*1000=300k
+                if (ratio > 500)
+                    first *= 1000; // "300 đến 500k" → 300*1000=300k
             }
             double min = Math.min(first, second);
             double max = Math.max(first, second);
-            return new Double[]{min, max};
+            return new Double[] { min, max };
         }
 
         // Single price: "trên 2 triệu" → [2,000,000, null]
         Double singlePrice = convertedPrices.stream().max(Double::compareTo).orElse(null);
-        if (singlePrice == null) return new Double[]{null, null};
+        if (singlePrice == null)
+            return new Double[] { null, null };
 
         if (hasLowerBound && !hasUpperBound) {
-            return new Double[]{singlePrice, null};
+            return new Double[] { singlePrice, null };
         }
         if (hasUpperBound && !hasLowerBound) {
-            return new Double[]{null, singlePrice};
+            return new Double[] { null, singlePrice };
         }
 
         // Default to upper bound if intent is unclear
-        return new Double[]{null, singlePrice};
+        return new Double[] { null, singlePrice };
     }
 
     /**
      * Format price range for display in Vietnamese.
      * VD: [300000, 500000] → "từ 300.000đ đến 500.000đ"
-     *     [null, 2000000]  → "dưới 2.000.000đ"
+     * [null, 2000000] → "dưới 2.000.000đ"
      */
     private String formatPriceRange(Double min, Double max) {
         java.text.DecimalFormat fmt = new java.text.DecimalFormat("#,###");
@@ -1861,11 +2287,11 @@ public class ChatbotServiceImpl implements ChatbotService {
      * Returns null if no order number found.
      */
     private String extractOrderNumber(String message) {
-        if (message == null) return null;
+        if (message == null)
+            return null;
         // Match ORD-xxx, ORD_xxx, or ORD followed by digits
         java.util.regex.Matcher matcher = Pattern.compile(
-                "(?i)(ORD[-_]?\\d{5,}|#\\d{5,})", Pattern.CASE_INSENSITIVE
-        ).matcher(message);
+                "(?i)(ORD[-_]?\\d{5,}|#\\d{5,})", Pattern.CASE_INSENSITIVE).matcher(message);
         if (matcher.find()) {
             return matcher.group(1).toUpperCase();
         }
@@ -1877,14 +2303,17 @@ public class ChatbotServiceImpl implements ChatbotService {
      * Strips numbers/punctuation first, then Vietnamese stop words.
      */
     private String extractProductSearchKeyword(String message) {
-        if (message == null) return "";
+        if (message == null)
+            return "";
 
         String quoted = extractQuotedKeyword(message);
-        if (!quoted.isBlank()) return quoted;
+        if (!quoted.isBlank())
+            return quoted;
 
         String normalized = VietnameseNormalizer.normalize(message);
         String garment = mapToCanonicalGarment(normalized);
-        if (!garment.isBlank()) return garment;
+        if (!garment.isBlank())
+            return garment;
 
         // Strip numbers and punctuation FIRST (trước khi xóa stop words)
         String cleaned = normalized
@@ -1895,18 +2324,22 @@ public class ChatbotServiceImpl implements ChatbotService {
 
         // Strip non-accent stop words
         cleaned = cleaned
-                .replaceAll("\\b(tu|van|tu van|tim|cho|minh|mua|xem|cua|hang|co|ban|nao|giup|voi|toi|thoi|nhe|nha|vay|thi|con|nua|duoc|khong|la|cai|mot|so|mot so|vai|xin|gi|gia|ve|tu van|tu van ve|tu van cho|minh|dong|trieu|nghin|k|tr)\\b", "")
+                .replaceAll(
+                        "\\b(tu|van|tu van|tim|cho|minh|mua|xem|cua|hang|co|ban|nao|giup|voi|toi|thoi|nhe|nha|vay|thi|con|nua|duoc|khong|la|cai|mot|so|mot so|vai|xin|gi|gia|ve|tu van|tu van ve|tu van cho|minh|dong|trieu|nghin|k|tr)\\b",
+                        "")
                 .replaceAll("\\s+", " ")
                 .trim();
 
         String fallbackGarment = mapToCanonicalGarment(cleaned);
-        if (!fallbackGarment.isBlank()) return fallbackGarment;
+        if (!fallbackGarment.isBlank())
+            return fallbackGarment;
 
         return cleaned.isEmpty() ? message : cleaned;
     }
 
     private String extractQuotedKeyword(String message) {
-        if (message == null) return "";
+        if (message == null)
+            return "";
         Matcher matcher = Pattern.compile("[\"']([^\"']+)[\"']").matcher(message);
         String best = "";
         while (matcher.find()) {
@@ -1919,39 +2352,59 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     private String mapToCanonicalGarment(String normalized) {
-        if (normalized == null || normalized.isBlank()) return "";
+        if (normalized == null || normalized.isBlank())
+            return "";
 
         String n = normalized;
-        if (n.contains("ao khoac") || n.contains("jacket") || n.contains("blazer") || n.contains("coat")) return "áo khoác";
-        if (n.contains("ao thun") || n.contains("t-shirt") || n.contains("tee")) return "áo thun";
-        if (n.contains("ao so mi") || n.contains("shirt")) return "áo sơ mi";
-        if (n.contains("ao polo")) return "áo polo";
-        if (n.contains("ao hoodie") || n.contains("hoodie")) return "áo hoodie";
-        if (n.contains("ao len") || n.contains("sweater")) return "áo len";
+        if (n.contains("ao khoac") || n.contains("jacket") || n.contains("blazer") || n.contains("coat"))
+            return "áo khoác";
+        if (n.contains("ao thun") || n.contains("t-shirt") || n.contains("tee"))
+            return "áo thun";
+        if (n.contains("ao so mi") || n.contains("shirt"))
+            return "áo sơ mi";
+        if (n.contains("ao polo"))
+            return "áo polo";
+        if (n.contains("ao hoodie") || n.contains("hoodie"))
+            return "áo hoodie";
+        if (n.contains("ao len") || n.contains("sweater"))
+            return "áo len";
 
-        if (n.contains("quan jean") || n.contains("jeans") || n.contains("denim")) return "quần jean";
-        if (n.contains("quan tay")) return "quần tây";
-        if (n.contains("quan short") || n.contains("short")) return "quần short";
-        if (n.contains("quan dai")) return "quần dài";
+        if (n.contains("quan jean") || n.contains("jeans") || n.contains("denim"))
+            return "quần jean";
+        if (n.contains("quan tay"))
+            return "quần tây";
+        if (n.contains("quan short") || n.contains("short"))
+            return "quần short";
+        if (n.contains("quan dai"))
+            return "quần dài";
 
-        if (n.contains("chan vay") || n.contains("skirt")) return "chân váy";
-        if (n.contains("dam") || n.contains("dress")) return "đầm";
-        if (n.contains("vay")) return "váy";
-        if (n.contains("ao dai")) return "áo dài";
+        if (n.contains("chan vay") || n.contains("skirt"))
+            return "chân váy";
+        if (n.contains("dam") || n.contains("dress"))
+            return "đầm";
+        if (n.contains("vay"))
+            return "váy";
+        if (n.contains("ao dai"))
+            return "áo dài";
 
-        if (n.contains("giay") || n.contains("shoes")) return "giày";
-        if (n.contains("tui") || n.contains("bag")) return "túi";
-        if (n.contains("non") || n.contains("hat") || n.contains("cap")) return "nón";
+        if (n.contains("giay") || n.contains("shoes"))
+            return "giày";
+        if (n.contains("tui") || n.contains("bag"))
+            return "túi";
+        if (n.contains("non") || n.contains("hat") || n.contains("cap"))
+            return "nón";
 
         return "";
     }
 
     /**
-     * Trích xuất keyword loại đồ từ tin nhắn để search sản phẩm sau khi tư vấn size.
+     * Trích xuất keyword loại đồ từ tin nhắn để search sản phẩm sau khi tư vấn
+     * size.
      * VD: "mình mặc áo thun size gì" → "ao thun"
      */
     private String extractGarmentKeyword(String message) {
-        if (message == null) return "";
+        if (message == null)
+            return "";
         String normalized = java.text.Normalizer.normalize(message.toLowerCase(), java.text.Normalizer.Form.NFD)
                 .replaceAll("\\p{M}", "").replace('\u0111', 'd');
         // Tìm cụm từ chỉ loại đồ
@@ -1961,38 +2414,54 @@ public class ChatbotServiceImpl implements ChatbotService {
                 "vay", "dam", "chan vay", "ao dai"
         };
         for (String pattern : garmentPatterns) {
-            if (normalized.contains(pattern)) return pattern;
+            if (normalized.contains(pattern))
+                return pattern;
         }
         // Fallback: tìm keyword đơn
-        if (normalized.contains("ao")) return "ao";
-        if (normalized.contains("quan")) return "quan";
-        if (normalized.contains("vay") && !normalized.contains("vay neu")) return "vay";
-        if (normalized.contains("dam")) return "dam";
+        if (normalized.contains("ao"))
+            return "ao";
+        if (normalized.contains("quan"))
+            return "quan";
+        if (normalized.contains("vay") && !normalized.contains("vay neu"))
+            return "vay";
+        if (normalized.contains("dam"))
+            return "dam";
         return "";
     }
 
     private String extractOccasion(String message) {
-        if (message == null) return "he";
+        if (message == null)
+            return "he";
         String n = message.toLowerCase();
-        if (n.contains("di lam") || n.contains("cong so")) return "di_lam";
-        if (n.contains("di tiec") || n.contains("tiec")) return "di_tiec";
-        if (n.contains("du lich")) return "du_lich";
-        if (n.contains("mua dong") || n.contains("dong")) return "dong";
-        if (n.contains("mua thu") || n.contains("thu")) return "thu";
+        if (n.contains("di lam") || n.contains("cong so"))
+            return "di_lam";
+        if (n.contains("di tiec") || n.contains("tiec"))
+            return "di_tiec";
+        if (n.contains("du lich"))
+            return "du_lich";
+        if (n.contains("mua dong") || n.contains("dong"))
+            return "dong";
+        if (n.contains("mua thu") || n.contains("thu"))
+            return "thu";
         return "he";
     }
 
     private String extractStyle(String message) {
-        if (message == null) return null;
+        if (message == null)
+            return null;
         String n = message.toLowerCase();
-        if (n.contains("thanh lich") || n.contains("sang trong")) return "thanh_lich";
-        if (n.contains("casual") || n.contains("thoai mai")) return "casual";
-        if (n.contains("sporty") || n.contains("the thao")) return "sporty";
+        if (n.contains("thanh lich") || n.contains("sang trong"))
+            return "thanh_lich";
+        if (n.contains("casual") || n.contains("thoai mai"))
+            return "casual";
+        if (n.contains("sporty") || n.contains("the thao"))
+            return "sporty";
         return null;
     }
 
     private String extractSizeFilter(String message) {
-        if (message == null || message.isBlank()) return null;
+        if (message == null || message.isBlank())
+            return null;
         String normalized = VietnameseNormalizer.normalize(message);
         Matcher matcher = Pattern.compile("\\bsize\\s*[:=]?\\s*(xs|s|m|l|xl|xxl|\\d{2})\\b")
                 .matcher(normalized);
@@ -2003,7 +2472,8 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     private boolean shouldBrowseProducts(String message) {
-        if (message == null || message.isBlank()) return false;
+        if (message == null || message.isBlank())
+            return false;
         String normalized = VietnameseNormalizer.normalize(message);
         return normalized.contains("tu van")
                 || normalized.contains("goi y")
@@ -2023,7 +2493,8 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     private boolean shouldListProductTypes(String message, String searchKeyword) {
-        if (message == null || message.isBlank()) return false;
+        if (message == null || message.isBlank())
+            return false;
         String normalized = VietnameseNormalizer.normalize(message);
         boolean askingCatalog = normalized.contains("co nhung loai")
                 || normalized.contains("loai nao")
@@ -2032,7 +2503,8 @@ public class ChatbotServiceImpl implements ChatbotService {
                 || normalized.contains("co gi")
                 || normalized.contains("danh muc")
                 || normalized.contains("ban gi");
-        boolean genericKeyword = searchKeyword == null || searchKeyword.isBlank() || isGenericGarmentKeyword(searchKeyword);
+        boolean genericKeyword = searchKeyword == null || searchKeyword.isBlank()
+                || isGenericGarmentKeyword(searchKeyword);
         boolean hasConstraints = hasPriceSignal(normalized)
                 || extractSizeFilter(message) != null
                 || normalized.contains("mau");
@@ -2041,19 +2513,21 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     private boolean hasShoppingConstraints(String message) {
-        if (message == null || message.isBlank()) return false;
+        if (message == null || message.isBlank())
+            return false;
         String normalized = VietnameseNormalizer.normalize(message);
         return hasPriceSignal(normalized)
                 || extractSizeFilter(message) != null
                 || containsAnyKeyword(normalized,
-                "den", "trang", "xanh", "do", "hong", "vang", "nau", "be", "xam", "ghi",
-                "di lam", "di choi", "di tiec", "cong so", "du lich",
-                "casual", "sporty", "thanh lich", "sang trong", "oversize", "slim fit",
-                "cotton", "linen", "jean", "kaki", "form", "chat lieu");
+                        "den", "trang", "xanh", "do", "hong", "vang", "nau", "be", "xam", "ghi",
+                        "di lam", "di choi", "di tiec", "cong so", "du lich",
+                        "casual", "sporty", "thanh lich", "sang trong", "oversize", "slim fit",
+                        "cotton", "linen", "jean", "kaki", "form", "chat lieu");
     }
 
     private boolean containsAnyKeyword(String text, String... keywords) {
-        if (text == null || text.isBlank()) return false;
+        if (text == null || text.isBlank())
+            return false;
         for (String keyword : keywords) {
             if (text.contains(keyword)) {
                 return true;
@@ -2067,8 +2541,10 @@ public class ChatbotServiceImpl implements ChatbotService {
         if (normalized.isBlank() && message != null) {
             normalized = VietnameseNormalizer.normalize(message);
         }
-        if (normalized.contains("ao")) return "áo";
-        if (normalized.contains("quan")) return "quần";
+        if (normalized.contains("ao"))
+            return "áo";
+        if (normalized.contains("quan"))
+            return "quần";
         if (normalized.contains("vay") || normalized.contains("dam") || normalized.contains("chan vay")) {
             return "váy";
         }
@@ -2082,7 +2558,8 @@ public class ChatbotServiceImpl implements ChatbotService {
      * Parse budget string from Personalization panel into maxPrice (Double).
      */
     private Double parseBudget(String budget) {
-        if (budget == null || budget.isBlank()) return null;
+        if (budget == null || budget.isBlank())
+            return null;
         String cleaned = budget.toLowerCase()
                 .replaceAll("[^0-9kmtrd.]", " ")
                 .trim();
@@ -2093,10 +2570,14 @@ public class ChatbotServiceImpl implements ChatbotService {
             try {
                 double value = Double.parseDouble(m.group(1).replace(".", "").replace(",", ""));
                 String unit = m.group(2);
-                if ("k".equals(unit)) value *= 1_000;
-                else if ("tr".equals(unit) || "trieu".equals(unit)) value *= 1_000_000;
-                if (maxPrice == null || value > maxPrice) maxPrice = value;
-            } catch (NumberFormatException ignored) {}
+                if ("k".equals(unit))
+                    value *= 1_000;
+                else if ("tr".equals(unit) || "trieu".equals(unit))
+                    value *= 1_000_000;
+                if (maxPrice == null || value > maxPrice)
+                    maxPrice = value;
+            } catch (NumberFormatException ignored) {
+            }
         }
         return maxPrice;
     }
@@ -2171,7 +2652,7 @@ public class ChatbotServiceImpl implements ChatbotService {
 
         // === Task 4: Persist profile for long-term memory ===
         profileEnrichmentService.persistProfileAsync(session.getUserId(), session.getPreferenceProfile());
-        
+
         // === Update Cold Start clarifications if needed ===
         // Nếu intent là COLD_START_CLARIFY, lưu loại sản phẩm được làm rõ vào profile
         if ("COLD_START_CLARIFY".equals(response.getIntent())) {
@@ -2187,7 +2668,8 @@ public class ChatbotServiceImpl implements ChatbotService {
         }
     }
 
-    private void updateConversationState(ChatSession.PreferenceProfile profile, String userMessage, ChatResponse response) {
+    private void updateConversationState(ChatSession.PreferenceProfile profile, String userMessage,
+            ChatResponse response) {
         if (profile == null || response == null) {
             return;
         }
@@ -2214,7 +2696,8 @@ public class ChatbotServiceImpl implements ChatbotService {
             return;
         }
 
-        if (IntentClassifierService.SEARCH_PRODUCT.equals(intent) || IntentClassifierService.CONSULT_SEASON.equals(intent)) {
+        if (IntentClassifierService.SEARCH_PRODUCT.equals(intent)
+                || IntentClassifierService.CONSULT_SEASON.equals(intent)) {
             profile.setConversationFlow(FLOW_PRODUCT_DISCOVERY);
             if (response.getSuggestions() == null || response.getSuggestions().isEmpty()) {
                 profile.setPendingQuestionType(PENDING_BUDGET);
@@ -2254,6 +2737,14 @@ public class ChatbotServiceImpl implements ChatbotService {
         profile.setPendingQuestionType(null);
         profile.setPendingTargetGender(null);
         profile.setConversationStateUpdatedAt(null);
+        profile.setSalesStage(null);
+        profile.setStageEntryAt(null);
+        profile.setLastAskedSlot(null);
+        profile.setSlotConfidence(null);
+        profile.setStylingSlots(null);
+        if (profile.getAskedSlots() != null) {
+            profile.getAskedSlots().clear();
+        }
     }
 
     /**
@@ -2261,29 +2752,45 @@ public class ChatbotServiceImpl implements ChatbotService {
      * VD: "áo thun" → "áo thun", "thun" → "áo thun"
      */
     private String extractProductTypeFromClarification(String userText) {
-        if (userText == null || userText.isBlank()) return null;
-        
+        if (userText == null || userText.isBlank())
+            return null;
+
         String normalized = VietnameseNormalizer.normalize(userText);
-        
+
         // Matching các loại sản phẩm phổ biến
-        if (normalized.contains("ao thun")) return "áo thun";
-        if (normalized.contains("ao so mi")) return "áo sơ mi";
-        if (normalized.contains("ao khoac")) return "áo khoác";
-        if (normalized.contains("ao polo")) return "áo polo";
-        if (normalized.contains("ao hoodie")) return "áo hoodie";
-        if (normalized.contains("ao len")) return "áo len";
-        
-        if (normalized.contains("quan jean")) return "quần jean";
-        if (normalized.contains("quan tay")) return "quần tây";
-        if (normalized.contains("quan short")) return "quần short";
-        if (normalized.contains("quan dai")) return "quần dài";
-        
-        if (normalized.contains("vay")) return "váy";
-        if (normalized.contains("dam")) return "đầm";
-        if (normalized.contains("chan vay")) return "chân váy";
-        if (normalized.contains("giay")) return "giày";
-        if (normalized.contains("tui")) return "túi";
-        
+        if (normalized.contains("ao thun"))
+            return "áo thun";
+        if (normalized.contains("ao so mi"))
+            return "áo sơ mi";
+        if (normalized.contains("ao khoac"))
+            return "áo khoác";
+        if (normalized.contains("ao polo"))
+            return "áo polo";
+        if (normalized.contains("ao hoodie"))
+            return "áo hoodie";
+        if (normalized.contains("ao len"))
+            return "áo len";
+
+        if (normalized.contains("quan jean"))
+            return "quần jean";
+        if (normalized.contains("quan tay"))
+            return "quần tây";
+        if (normalized.contains("quan short"))
+            return "quần short";
+        if (normalized.contains("quan dai"))
+            return "quần dài";
+
+        if (normalized.contains("vay"))
+            return "váy";
+        if (normalized.contains("dam"))
+            return "đầm";
+        if (normalized.contains("chan vay"))
+            return "chân váy";
+        if (normalized.contains("giay"))
+            return "giày";
+        if (normalized.contains("tui"))
+            return "túi";
+
         return null;
     }
 
@@ -2307,7 +2814,8 @@ public class ChatbotServiceImpl implements ChatbotService {
             log.warn("Use in-memory chat session: {}", ex.getMessage());
         }
 
-        // === Task 4: Bootstrap new session with persisted profile for returning users ===
+        // === Task 4: Bootstrap new session with persisted profile for returning users
+        // ===
         ChatSession.PreferenceProfile persistedProfile = profileEnrichmentService.loadPersistedProfile(userId);
 
         return ChatSession.builder()
@@ -2321,7 +2829,8 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     private void mergePreferences(ChatSession session, ChatRequest.UserPreferences preferences) {
-        if (preferences == null) return;
+        if (preferences == null)
+            return;
         ChatSession.PreferenceProfile profile = session.getPreferenceProfile();
         if (profile == null) {
             profile = ChatSession.PreferenceProfile.empty();
@@ -2341,6 +2850,38 @@ public class ChatbotServiceImpl implements ChatbotService {
         }
     }
 
+    private void applySelectedProductContext(ChatSession.PreferenceProfile profile,
+            ChatRequest.SelectedProductContext selectedProductContext) {
+        if (profile == null || selectedProductContext == null) {
+            return;
+        }
+        if (selectedProductContext.getProductId() == null || selectedProductContext.getProductId().isBlank()) {
+            return;
+        }
+
+        // Persist the clicked-card reference so later turns can bind to the exact
+        // chosen item instead of guessing from the last carousel text.
+        profile.setSelectedProductContext(ChatSession.SelectedProductContextSnapshot.builder()
+                .productId(selectedProductContext.getProductId())
+                .productName(selectedProductContext.getProductName())
+                .category(selectedProductContext.getCategory())
+                .categoryGender(selectedProductContext.getCategoryGender())
+                .price(selectedProductContext.getPrice())
+                .link(selectedProductContext.getLink())
+                .sourceMessageId(selectedProductContext.getSourceMessageId())
+                .selectedAt(Instant.now())
+                .build());
+
+        if (selectedProductContext.getCategory() != null && !selectedProductContext.getCategory().isBlank()) {
+            profile.setLastProductCategoryQueried(selectedProductContext.getCategory());
+            profile.setLastProductQueryTime(Instant.now());
+        }
+        if (selectedProductContext.getCategoryGender() != null
+                && !selectedProductContext.getCategoryGender().isBlank()) {
+            profile.setTargetGender(selectedProductContext.getCategoryGender().trim().toLowerCase());
+        }
+    }
+
     private String resolveUserId(String userIdHeader, String sessionId) {
         if (userIdHeader != null && !userIdHeader.isBlank()) {
             return userIdHeader.trim();
@@ -2353,11 +2894,11 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     private ChatResponse buildLoginRequiredResponse(String sessionId,
-                                                    String intent,
-                                                    double confidence,
-                                                    ToolResultCollector collector,
-                                                    ChatSession session,
-                                                    String reply) {
+            String intent,
+            double confidence,
+            ToolResultCollector collector,
+            ChatSession session,
+            String reply) {
         return ChatResponse.builder()
                 .sessionId(sessionId)
                 .intent(intent)
@@ -2379,6 +2920,10 @@ public class ChatbotServiceImpl implements ChatbotService {
         if (response == null) {
             return null;
         }
+        response.setReply(fashionResponseComposer.appendStageAwareClose(
+                response.getReply(),
+                response.getSuggestions(),
+                response.getProfile()));
         ToolResultCollector effectiveCollector = collectorFromResponse(response, collector);
         String sanitizedReply = responseGuardrail.validateAndSanitize(response.getReply(), effectiveCollector);
         response.setReply(sanitizedReply);
@@ -2408,7 +2953,8 @@ public class ChatbotServiceImpl implements ChatbotService {
      */
     @SuppressWarnings("unchecked")
     private String fetchActiveCartContext(String userId) {
-        if (userId == null || userId.startsWith("guest-")) return "";
+        if (userId == null || userId.startsWith("guest-"))
+            return "";
 
         try {
             Map<String, Object> cartData = webClient.get()
@@ -2420,14 +2966,17 @@ public class ChatbotServiceImpl implements ChatbotService {
                     .timeout(Duration.ofSeconds(5))
                     .block();
 
-            if (cartData == null) return "";
+            if (cartData == null)
+                return "";
 
             Object items = cartData.get("items");
-            if (!(items instanceof List<?> itemList) || itemList.isEmpty()) return "";
+            if (!(items instanceof List<?> itemList) || itemList.isEmpty())
+                return "";
 
             StringBuilder context = new StringBuilder("Khách hàng đang có trong giỏ: ");
             for (int i = 0; i < itemList.size(); i++) {
-                if (!(itemList.get(i) instanceof Map<?, ?> item)) continue;
+                if (!(itemList.get(i) instanceof Map<?, ?> item))
+                    continue;
 
                 String name = stringVal(item.get("productName"));
                 String size = stringVal(item.get("size"));
@@ -2435,19 +2984,28 @@ public class ChatbotServiceImpl implements ChatbotService {
                 String qty = stringVal(item.get("quantity"));
                 String price = stringVal(item.get("price"));
 
-                if (name.isBlank()) continue;
+                if (name.isBlank())
+                    continue;
 
                 context.append(name);
                 boolean hasDetails = !size.isBlank() || !color.isBlank();
-                if (hasDetails) context.append(" (");
-                if (!size.isBlank()) context.append("Size ").append(size);
-                if (!size.isBlank() && !color.isBlank()) context.append(", ");
-                if (!color.isBlank()) context.append("Màu ").append(color);
-                if (hasDetails) context.append(")");
-                if (!qty.isBlank()) context.append(" x").append(qty);
-                if (!price.isBlank()) context.append(" - ").append(price).append("đ");
+                if (hasDetails)
+                    context.append(" (");
+                if (!size.isBlank())
+                    context.append("Size ").append(size);
+                if (!size.isBlank() && !color.isBlank())
+                    context.append(", ");
+                if (!color.isBlank())
+                    context.append("Màu ").append(color);
+                if (hasDetails)
+                    context.append(")");
+                if (!qty.isBlank())
+                    context.append(" x").append(qty);
+                if (!price.isBlank())
+                    context.append(" - ").append(price).append("đ");
 
-                if (i < itemList.size() - 1) context.append("; ");
+                if (i < itemList.size() - 1)
+                    context.append("; ");
             }
             context.append(". Hãy ưu tiên gợi ý sản phẩm phối hợp với các sản phẩm này.");
 

@@ -15,6 +15,7 @@ export default function ChatbotPage() {
     sessionId,
     messages,
     preferences,
+    setSelectedProductContext,
     updatePreferences,
     sendMessage,
     startNewSession,
@@ -72,6 +73,15 @@ export default function ChatbotPage() {
         surface,
         position,
       }
+      setSelectedProductContext({
+        productId: item?.productId || '',
+        productName: item?.name || '',
+        category: item?.category || '',
+        categoryGender: item?.categoryGender || '',
+        price: item?.price || '',
+        link: item?.link || '',
+        sourceMessageId,
+      })
       chatbotService.saveProductAttribution(item?.productId, attribution)
 
       await chatbotService.sendFeedbackEvent({

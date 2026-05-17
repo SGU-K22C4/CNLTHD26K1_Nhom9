@@ -2,6 +2,9 @@ package com.fashion.chatbotservice.service.impl;
 
 import com.fashion.chatbotservice.dto.ChatResponse;
 import com.fashion.chatbotservice.model.ChatSession;
+import com.fashion.chatbotservice.product.ProductMetadataEnrichmentService;
+import com.fashion.chatbotservice.product.ProductMetadataProfile;
+import com.fashion.chatbotservice.product.ProductScoringService;
 import com.fashion.chatbotservice.service.ProductRecommendationService;
 import com.fashion.chatbotservice.service.ProductTaxonomyService;
 import com.fashion.chatbotservice.util.VietnameseNormalizer;
@@ -22,6 +25,8 @@ import java.util.Set;
 public class ProductRecommendationServiceImpl implements ProductRecommendationService {
 
     private final ProductTaxonomyService productTaxonomyService;
+    private final ProductMetadataEnrichmentService productMetadataEnrichmentService;
+    private final ProductScoringService productScoringService;
 
     @Override
     public List<ChatResponse.ProductSuggestion> rankSuggestions(
@@ -53,6 +58,7 @@ public class ProductRecommendationServiceImpl implements ProductRecommendationSe
             List<String> reasons = new ArrayList<>();
             String haystack = normalizeText(stringValue(suggestion.getName()) + " " + stringValue(suggestion.getCategory()));
             Set<String> taxonomyLabels = productTaxonomyService.inferTaxonomyLabels(haystack);
+            ProductMetadataProfile metadata = productMetadataEnrichmentService.enrich(suggestion);
 
             if (!searchTokens.isEmpty()) {
                 int tokenHits = 0;
@@ -169,6 +175,18 @@ public class ProductRecommendationServiceImpl implements ProductRecommendationSe
                     reasons.add("Có điểm nhấn hơn trong outfit");
                 }
             }
+
+            ProductScoringService.ScoreResult metadataScore = productScoringService.score(
+                    suggestion,
+                    metadata,
+                    profile,
+                    search,
+                    minPrice,
+                    preferredMaxPrice,
+                    color,
+                    size);
+            score += metadataScore.score();
+            reasons.addAll(metadataScore.reasons());
 
             suggestion.setReason(buildBusinessReason(reasons));
             scored.add(new ScoredSuggestion(suggestion, score, index++));

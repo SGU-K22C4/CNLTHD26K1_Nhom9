@@ -11,7 +11,18 @@ import com.fashion.chatbotservice.service.SizeFitAdvisoryService;
 import com.fashion.chatbotservice.util.VietnameseNormalizer;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
+import io.github.resilience4j.bulkhead.Bulkhead;
+import io.github.resilience4j.bulkhead.BulkheadRegistry;
+import io.github.resilience4j.bulkhead.BulkheadFullException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryRegistry;
+import io.github.resilience4j.timelimiter.TimeLimiter;
+import io.github.resilience4j.timelimiter.TimeLimiterRegistry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -31,6 +42,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.function.Supplier;
 
 /**
  * Tất cả @Tool methods mà LangChain4j agent có thể gọi.
@@ -51,6 +65,11 @@ public class FashionTools {
     private final ProductRecommendationService productRecommendationService;
     private final ProductTaxonomyService productTaxonomyService;
     private final SizeFitAdvisoryService sizeFitAdvisoryService;
+    private CircuitBreakerRegistry circuitBreakerRegistry = CircuitBreakerRegistry.ofDefaults();
+    private RetryRegistry retryRegistry = RetryRegistry.ofDefaults();
+    private TimeLimiterRegistry timeLimiterRegistry = TimeLimiterRegistry.ofDefaults();
+    private BulkheadRegistry bulkheadRegistry = BulkheadRegistry.ofDefaults();
+    private ExecutorService resilienceExecutorService;
 
     @Value("${chatbot.product-service-url:http://localhost:8080}")
     private String productServiceUrl;
@@ -291,6 +310,39 @@ public class FashionTools {
         this.currentUserIdHolder.set(userId);
     }
 
+    @Autowired(required = false)
+    public void setCircuitBreakerRegistry(CircuitBreakerRegistry circuitBreakerRegistry) {
+        if (circuitBreakerRegistry != null) {
+            this.circuitBreakerRegistry = circuitBreakerRegistry;
+        }
+    }
+
+    @Autowired(required = false)
+    public void setRetryRegistry(RetryRegistry retryRegistry) {
+        if (retryRegistry != null) {
+            this.retryRegistry = retryRegistry;
+        }
+    }
+
+    @Autowired(required = false)
+    public void setTimeLimiterRegistry(TimeLimiterRegistry timeLimiterRegistry) {
+        if (timeLimiterRegistry != null) {
+            this.timeLimiterRegistry = timeLimiterRegistry;
+        }
+    }
+
+    @Autowired(required = false)
+    public void setBulkheadRegistry(BulkheadRegistry bulkheadRegistry) {
+        if (bulkheadRegistry != null) {
+            this.bulkheadRegistry = bulkheadRegistry;
+        }
+    }
+
+    @Autowired(required = false)
+    public void setResilienceExecutorService(ExecutorService resilienceExecutorService) {
+        this.resilienceExecutorService = resilienceExecutorService;
+    }
+
     private ToolResultCollector collector() {
         return collectorHolder.get();
     }
@@ -310,6 +362,34 @@ public class FashionTools {
     private void markToolFailure() {
         if (collector() != null) {
             collector().markToolFailure();
+        }
+    }
+
+    private <T> T executeResilient(String backendName, Supplier<T> supplier) throws Exception {
+        CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker(backendName);
+        Retry retry = retryRegistry.retry(backendName);
+        TimeLimiter timeLimiter = timeLimiterRegistry.timeLimiter(backendName);
+        Bulkhead bulkhead = bulkheadRegistry.bulkhead(backendName);
+
+        java.util.concurrent.Callable<T> guardedCallable =
+                Retry.decorateCallable(retry,
+                        CircuitBreaker.decorateCallable(circuitBreaker,
+                                Bulkhead.decorateCallable(bulkhead, supplier::get)));
+
+        ExecutorService executor = resilienceExecutorService;
+        if (executor == null) {
+            return guardedCallable.call();
+        }
+
+        Future<T> future = executor.submit(guardedCallable);
+        try {
+            return timeLimiter.executeFutureSupplier(() -> future);
+        } catch (CallNotPermittedException | BulkheadFullException ex) {
+            future.cancel(true);
+            throw ex;
+        } catch (Exception ex) {
+            future.cancel(true);
+            throw ex;
         }
     }
 
@@ -362,6 +442,61 @@ public class FashionTools {
             @P("Màu sắc nếu user đề cập (VD: 'đen', 'trắng'). null nếu không đề cập.") String color,
             @P("Size nếu user có đề cập (VD: 'S', 'M', 'L', 'XL'). null nếu không đề cập.") String size) {
         return searchProductsInternal(search, minPrice, maxPrice, color, size, false);
+    }
+
+    /**
+     * Fetches canonical product detail by product id. This is used for follow-up
+     * questions after the user explicitly selects a card, so later turns bind to
+     * a concrete product instead of relying on fuzzy text matching.
+     */
+    public String getProductDetail(String productId) {
+        try {
+            log.info("Tool: getProductDetail(productId={})", productId);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = executeResilient("product-service", () -> webClient.get()
+                    .uri(productServiceUrl + "/api/v1/products/" + productId)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(TOOL_TIMEOUT)
+                    .block());
+
+            if (payload == null || payload.isEmpty()) {
+                markToolFailure();
+                return "Mình chưa lấy được thông tin chi tiết sản phẩm lúc này.";
+            }
+
+            ChatResponse.ProductSuggestion suggestion = mapProductDetail(payload);
+            if (suggestion != null && collector() != null) {
+                collector().addProducts(List.of(suggestion));
+            }
+
+            String name = stringValue(payload.get("name"));
+            String description = stringValue(payload.get("description"));
+            String category = stringValue(payload.get("categoryName"));
+            String price = suggestion != null ? stringValue(suggestion.getPrice()) : "";
+            String sizes = suggestion != null ? joinOrFallback(suggestion.getAvailableSizes(), "chưa rõ size") : "chưa rõ size";
+            String colors = suggestion != null ? joinOrFallback(suggestion.getAvailableColors(), "chưa rõ màu") : "chưa rõ màu";
+
+            StringBuilder result = new StringBuilder();
+            result.append("Thông tin chi tiết sản phẩm ").append(name.isBlank() ? "này" : name).append(":\n");
+            if (!category.isBlank()) {
+                result.append("- Danh mục: ").append(category).append("\n");
+            }
+            if (!price.isBlank()) {
+                result.append("- Giá: ").append(price).append("\n");
+            }
+            result.append("- Size còn: ").append(sizes).append("\n");
+            result.append("- Màu sắc: ").append(colors).append("\n");
+            if (!description.isBlank()) {
+                result.append("- Mô tả: ").append(description);
+            }
+            return result.toString().trim();
+        } catch (Throwable ex) {
+            log.error("getProductDetail failed", ex);
+            markToolFailure();
+            return "Mình chưa thể lấy thông tin chi tiết sản phẩm lúc này. Bạn thử lại sau nhé!";
+        }
     }
 
     @Tool("""
@@ -550,13 +685,18 @@ public class FashionTools {
         if (minPrice != null) uri.append("&minPrice=").append(minPrice);
         if (maxPrice != null) uri.append("&maxPrice=").append(maxPrice);
 
-        Map<String, Object> payload = webClient.get()
-                .uri(uri.toString())
-                .accept(MediaType.APPLICATION_JSON)
-                .retrieve()
-                .bodyToMono(Map.class)
-                .timeout(TOOL_TIMEOUT)
-                .block();
+        Map<String, Object> payload;
+        try {
+            payload = executeResilient("product-service", () -> webClient.get()
+                    .uri(uri.toString())
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(TOOL_TIMEOUT)
+                    .block());
+        } catch (Exception ex) {
+            throw new RuntimeException("Product search failed", ex);
+        }
 
         return mapProductPage(payload);
     }
@@ -1094,13 +1234,17 @@ public class FashionTools {
         if (minPrice != null) uri.append("&minPrice=").append(minPrice);
         if (maxPrice != null) uri.append("&maxPrice=").append(maxPrice);
 
-        return webClient.get()
-                .uri(uri.toString())
-                .accept(MediaType.APPLICATION_JSON)
-                .retrieve()
-                .bodyToMono(Map.class)
-                .timeout(TOOL_TIMEOUT)
-                .block();
+        try {
+            return executeResilient("product-service", () -> webClient.get()
+                    .uri(uri.toString())
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(TOOL_TIMEOUT)
+                    .block());
+        } catch (Exception ex) {
+            throw new RuntimeException("Product browse failed", ex);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -1458,13 +1602,14 @@ public class FashionTools {
             if (userId != null && !userId.isBlank()) {
                 request = request.header("X-User-Id", userId);
             }
+            var finalRequest = request;
 
             @SuppressWarnings("unchecked")
-            Map<String, Object> order = request
+            Map<String, Object> order = executeResilient("order-service", () -> finalRequest
                     .retrieve()
                     .bodyToMono(Map.class)
                     .timeout(TOOL_TIMEOUT)
-                    .block();
+                    .block());
 
             if (order == null) return "Không tìm thấy đơn hàng " + orderNumber;
 
@@ -1496,14 +1641,14 @@ public class FashionTools {
         try {
             log.info("Tool: validateCoupon(code={}, amount={})", code, orderAmount);
             @SuppressWarnings("unchecked")
-            Map<String, Object> result = webClient.post()
+            Map<String, Object> result = executeResilient("promotion-service", () -> webClient.post()
                     .uri(promotionServiceUrl + "/api/v1/promotions/validate?code={code}&orderAmount={amount}",
                             code, orderAmount)
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .bodyToMono(Map.class)
                     .timeout(TOOL_TIMEOUT)
-                    .block();
+                    .block());
 
             if (result == null) return "Không thể kiểm tra mã " + code;
 
@@ -1529,13 +1674,13 @@ public class FashionTools {
         try {
             log.info("Tool: getActivePromotions()");
             @SuppressWarnings("unchecked")
-            Object payload = webClient.get()
+            Object payload = executeResilient("promotion-service", () -> webClient.get()
                     .uri(promotionServiceUrl + "/api/v1/promotions/active")
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .bodyToMono(Object.class)
                     .timeout(TOOL_TIMEOUT)
-                    .block();
+                    .block());
 
             List<ChatResponse.PromotionSuggestion> promos = mapPromotions(payload);
             if (collector() != null) collector().addPromotions(promos);
@@ -1753,14 +1898,14 @@ public class FashionTools {
                 return "Bạn cần đăng nhập để xem danh sách yêu thích nhé.";
             }
             @SuppressWarnings("unchecked")
-            Map<String, Object> page = webClient.get()
+            Map<String, Object> page = executeResilient("product-service", () -> webClient.get()
                     .uri(productServiceUrl + "/api/v1/wishlists?page=0&size=10")
                     .header("X-User-Id", userId)
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .bodyToMono(Map.class)
                     .timeout(TOOL_TIMEOUT)
-                    .block();
+                    .block());
 
             List<ChatResponse.ProductSuggestion> products = mapProductPage(page);
             if (collector() != null) collector().addProducts(products);
@@ -1814,14 +1959,14 @@ public class FashionTools {
                 return "Bạn cần đăng nhập để kiểm tra điểm thưởng và quyền lợi thành viên nhé.";
             }
             @SuppressWarnings("unchecked")
-            Map<String, Object> wallet = webClient.get()
+            Map<String, Object> wallet = executeResilient("promotion-service", () -> webClient.get()
                     .uri(promotionServiceUrl + "/api/v1/promotions/loyalty/wallet")
                     .header("X-User-Id", userId)
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .bodyToMono(Map.class)
                     .timeout(TOOL_TIMEOUT)
-                    .block();
+                    .block());
 
             if (wallet == null) return "Không tìm thấy thông tin tài khoản điểm thưởng của bạn.";
 
@@ -1876,13 +2021,13 @@ public class FashionTools {
         try {
             log.info("Tool: getProductReviews(productId={})", productId);
             @SuppressWarnings("unchecked")
-            Map<String, Object> stats = webClient.get()
+            Map<String, Object> stats = executeResilient("review-service", () -> webClient.get()
                     .uri(reviewServiceUrl + "/api/v1/reviews/product/" + productId + "/stats")
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .bodyToMono(Map.class)
                     .timeout(TOOL_TIMEOUT)
-                    .block();
+                    .block());
 
             if (stats == null) return "Sản phẩm này chưa có đánh giá nào.";
 
@@ -2120,6 +2265,74 @@ public class FashionTools {
     }
 
     @SuppressWarnings("unchecked")
+    private ChatResponse.ProductSuggestion mapProductDetail(Map<String, Object> payload) {
+        if (payload == null || payload.isEmpty()) {
+            return null;
+        }
+
+        String productId = stringValue(payload.get("id"));
+        String name = stringValue(payload.get("name"));
+        String category = stringValue(payload.get("categoryName"));
+        String categoryGender = stringValue(payload.get("categoryGender"));
+        BigDecimal minPrice = null;
+        String imageUrl = "";
+        Set<String> availableSizes = new LinkedHashSet<>();
+        Set<String> availableColors = new LinkedHashSet<>();
+
+        Object variants = payload.get("variants");
+        if (variants instanceof List<?> variantList) {
+            for (Object variantObj : variantList) {
+                if (!(variantObj instanceof Map<?, ?> variant)) continue;
+
+                String colorName = stringValue(variant.get("colorName"));
+                if (!colorName.isBlank()) {
+                    availableColors.add(colorName);
+                }
+
+                BigDecimal price = toBigDecimal(variant.get("price"));
+                if (price != null && (minPrice == null || price.compareTo(minPrice) < 0)) {
+                    minPrice = price;
+                }
+
+                if (imageUrl.isBlank()) {
+                    Object images = variant.get("images");
+                    if (images instanceof List<?> imgList && !imgList.isEmpty()) {
+                        Object firstImg = imgList.get(0);
+                        if (firstImg instanceof Map<?, ?> imgMap) {
+                            imageUrl = stringValue(imgMap.get("imageUrl"));
+                        }
+                    }
+                }
+
+                Object sizes = variant.get("sizes");
+                if (sizes instanceof List<?> sizeList) {
+                    for (Object sizeObj : sizeList) {
+                        if (!(sizeObj instanceof Map<?, ?> sizeItem)) continue;
+                        int quantity = toInt(sizeItem.get("quantity"));
+                        String status = stringValue(sizeItem.get("status"));
+                        if (quantity > 0 && !"hết hàng".equalsIgnoreCase(status)) {
+                            availableSizes.add(stringValue(sizeItem.get("sizeName")).toUpperCase(Locale.ROOT));
+                        }
+                    }
+                }
+            }
+        }
+
+        return ChatResponse.ProductSuggestion.builder()
+                .productId(productId)
+                .name(name)
+                .category(category)
+                .categoryGender(categoryGender)
+                .imageUrl(imageUrl)
+                .link(productId.isBlank() ? "" : "/products/" + productId)
+                .price(formatMoney(minPrice))
+                .availableSizes(new ArrayList<>(availableSizes))
+                .availableColors(new ArrayList<>(availableColors))
+                .reason("Chi tiết sản phẩm được người dùng chọn")
+                .build();
+    }
+
+    @SuppressWarnings("unchecked")
     private List<ChatResponse.PromotionSuggestion> mapPromotions(Object payload) {
         List<ChatResponse.PromotionSuggestion> promos = new ArrayList<>();
         if (!(payload instanceof List<?> list)) return promos;
@@ -2148,6 +2361,13 @@ public class FashionTools {
 
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private String joinOrFallback(List<String> values, String fallback) {
+        if (values == null || values.isEmpty()) {
+            return fallback;
+        }
+        return String.join(", ", values);
     }
 
     private int toInt(Object value) {

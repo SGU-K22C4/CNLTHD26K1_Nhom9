@@ -28,6 +28,16 @@ chatbot:
     shared-secret: ${INTERNAL_SERVICE_SHARED_SECRET:local-chatbot-internal-secret}
   security:
     allow-direct-user-header: ${CHATBOT_ALLOW_DIRECT_USER_HEADER:true}
+  resilience:
+    failure-rate-threshold: ${CHATBOT_RESILIENCE_FAILURE_RATE_THRESHOLD:50}
+    sliding-window-size: ${CHATBOT_RESILIENCE_SLIDING_WINDOW_SIZE:10}
+    minimum-number-of-calls: ${CHATBOT_RESILIENCE_MIN_CALLS:5}
+    wait-duration-ms: ${CHATBOT_RESILIENCE_WAIT_MS:250}
+    timeout-ms: ${CHATBOT_RESILIENCE_TIMEOUT_MS:3000}
+    bulkhead:
+      max-concurrent-calls: ${CHATBOT_RESILIENCE_MAX_CONCURRENT_CALLS:12}
+    retry:
+      max-attempts: ${CHATBOT_RESILIENCE_MAX_ATTEMPTS:2}
   knowledge:
     enabled: ${CHATBOT_KB_ENABLED:true}
     data-path: classpath:knowledge

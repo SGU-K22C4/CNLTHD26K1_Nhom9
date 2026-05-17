@@ -1,5 +1,7 @@
 package com.fashion.chatbotservice.model;
 
+import com.fashion.chatbotservice.conversation.SalesStage;
+import com.fashion.chatbotservice.conversation.StylingSlots;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -50,16 +52,16 @@ public class ChatSession {
         private IntentMeta intent;
         private Instant createdAt;
 
-        /** Product suggestions attached to BOT messages (persisted for session restore) */
+        /** Product suggestions attached to bot messages for session restore. */
         @Builder.Default
         private List<ProductSuggestionSnapshot> suggestions = new ArrayList<>();
 
-        /** Promotion suggestions attached to BOT messages */
+        /** Promotion suggestions attached to bot messages. */
         @Builder.Default
         private List<PromotionSuggestionSnapshot> promotions = new ArrayList<>();
     }
 
-    /** Lightweight snapshot of a product suggestion, stored in MongoDB */
+    /** Lightweight snapshot of a product suggestion stored in MongoDB. */
     @Data
     @Builder
     @NoArgsConstructor
@@ -76,7 +78,7 @@ public class ChatSession {
         private List<String> availableColors;
     }
 
-    /** Lightweight snapshot of a promotion suggestion */
+    /** Lightweight snapshot of a promotion suggestion. */
     @Data
     @Builder
     @NoArgsConstructor
@@ -87,6 +89,25 @@ public class ChatSession {
         private String discountValue;
         private String minOrderAmount;
         private String endDate;
+    }
+
+    /**
+     * Stores the last product card the user explicitly clicked so follow-up
+     * questions can bind to a concrete item instead of guessing from raw text.
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class SelectedProductContextSnapshot {
+        private String productId;
+        private String productName;
+        private String category;
+        private String categoryGender;
+        private String price;
+        private String link;
+        private String sourceMessageId;
+        private Instant selectedAt;
     }
 
     @Data
@@ -128,18 +149,18 @@ public class ChatSession {
         private String priceComfortZone;
         private String targetGender;
 
-        /** Lưu số đo cơ thể gần nhất để dùng cho câu tiếp theo (context memory) */
+        /** Last body measurements captured in conversation for later size turns. */
         private Integer lastHeightCm;
         private Integer lastWeightKg;
         private Integer lastChestCm;
         private Integer lastWaistCm;
         private Integer lastHipCm;
 
-        /** Lưu các loại sản phẩm đã được làm rõ trong Cold Start để dùng cho câu tiếp theo */
+        /** Product types clarified during cold start and reused in later turns. */
         @Builder.Default
         private Set<String> clarifiedProductTypes = new LinkedHashSet<>();
 
-        /** Lưu thông tin về lần cuối cùng user hỏi về loại sản phẩm nào (để tái sử dụng context) */
+        /** Last product category the user was clearly querying. */
         private String lastProductCategoryQueried;
         private Instant lastProductQueryTime;
 
@@ -154,6 +175,18 @@ public class ChatSession {
 
         /** Timestamp used to expire stale conversation state. */
         private Instant conversationStateUpdatedAt;
+
+        private SalesStage salesStage;
+        private Instant stageEntryAt;
+        private String lastAskedSlot;
+
+        @Builder.Default
+        private Set<String> askedSlots = new LinkedHashSet<>();
+
+        private Double slotConfidence;
+        private StylingSlots stylingSlots;
+
+        private SelectedProductContextSnapshot selectedProductContext;
 
         public static PreferenceProfile empty() {
             return PreferenceProfile.builder().build();

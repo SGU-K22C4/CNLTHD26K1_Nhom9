@@ -73,12 +73,13 @@ export const chatbotService = {
     return getStoredSessionId(resolvedUserId) || createSessionId(resolvedUserId)
   },
 
-  async send({ message, preferences }) {
+  async send({ message, preferences, selectedProductContext = null }) {
     const sessionId = this.getOrCreateSessionId(this._currentUserId)
     const payload = {
       message,
       sessionId,
       preferences,
+      selectedProductContext,
     }
 
     const response = await api.post('/api/v1/chatbot/chat', payload, {

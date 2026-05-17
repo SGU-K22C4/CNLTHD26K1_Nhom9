@@ -1,339 +1,495 @@
-# Chatbot Current Setup
+# Chatbot AI Current Setup
 
-## 1. Muc dich tai lieu
+## 1. Muc dich
 
-Tai lieu nay mo ta setup hien tai cua chatbot tu van ban hang trong du an theo runtime thuc te.
+Tai lieu nay tom tat nhanh chatbot AI tu van thoi trang hien tai:
 
-Muc tieu:
+- no manh o dau
+- no yeu o dau
+- runtime dang cau hinh the nao
+- kien truc gom nhung file/module gi
+- muon xay dung va nang cap no can nhung gi
 
-- giup AI va developer hieu nhanh chatbot FE + BE dang hoat dong the nao
-- chi ro model/provider dang dung that
-- mo ta luong tool-calling, memory, knowledge base, GraphRAG
-- danh dau cac diem lech giua config cu va runtime hien tai
+Tai lieu nay uu tien de dev moi doc nhanh va vao viec ngay.
 
-## 2. Tong quan vai tro cua chatbot
+---
 
-`chatbot-service` hien tai khong phai mot model AI train rieng trong repo, ma la mot lop orchestration gom:
+## 2. Danh gia nhanh hien trang
 
-- frontend widget + full chatbot page
-- backend Spring Boot API
-- LangChain4j agent
-- model provider theo OpenAI-compatible API
-- MongoDB luu session, knowledge, analytics, preference
-- tool-calling sang cac microservice khac de lay du lieu that
+### Diem manh
 
-No dong vai tro mot "AI Sales Advisor" cho website fashion, tap trung vao:
+- Da vuot muc "catalog biet noi", co flow tu van, compare va closing co ban.
+- Co memory + session + selected product context, nen hoi dap nhieu turn on hon truoc.
+- Co direct flow cho cac intent commerce quan trong, giam phu thuoc hoan toan vao agent.
+- Co knowledge ingestion + GraphRAG nhe de tra loi policy, FAQ, playbook ban hang.
+- Co scoring san pham theo:
+  - search context
+  - budget
+  - size / color
+  - metadata enrich
+  - occasion
+  - body-shape
+- Co guardrail hau kiem de giam hallucination ve gia, promo, ton kho, policy.
+- Co resilience cho downstream service.
 
-- tu van san pham
-- tu van size
-- goi y outfit
-- kiem tra khuyen mai
-- wishlist / loyalty / review
-- hoi dap policy va FAQ
+### Diem yeu
 
-## 3. Frontend setup hien tai
+- `ChatbotServiceImpl.java` va `FashionTools.java` van con nang, du da tach bot.
+- Agent van co rui ro `NPE / timeout / 524`, nen mot so turn van roi ve fallback.
+- Metadata san pham hien la enrich tam tu `title + category`, chua phai metadata that trong DB.
+- Phan stylist reasoning da tot hon, nhung chua sau o:
+  - compare 3+ san pham
+  - outfit-level recommendation
+  - objection handling sau
+- Monitoring quality signals chua lam.
 
-Frontend chatbot nam trong:
+### Muc do san sang
 
-- `ecommerce-frontend/src/modules/chatbot/components/ChatWidget.jsx`
-- `ecommerce-frontend/src/modules/chatbot/components/ChatMessage.jsx`
-- `ecommerce-frontend/src/modules/chatbot/hooks/useChatbot.js`
-- `ecommerce-frontend/src/modules/chatbot/services/chatbotService.js`
-- `ecommerce-frontend/src/modules/chatbot/pages/ChatbotPage.jsx`
+- Tot cho demo, iteration va UAT co huong.
+- Chua nen xem la AI sales advisor "hoan thien" neu chua co:
+  - quality analytics
+  - user feedback loop
+  - metadata san pham that
+  - giam loi agent runtime
 
-Flow FE hien tai:
+---
 
-1. `ChatWidget` duoc mount global trong `ecommerce-frontend/src/App.jsx`, nen chatbot mini-widget xuat hien toan site.
-2. Route `/chatbot` duoc khai bao trong `ecommerce-frontend/src/routes/AppRoutes.jsx` va dang bi bao ve boi `PrivateRoute`.
-3. Widget mini van cho phep chat nhanh ngay ca khi chua login, nhung full page chatbot thi yeu cau dang nhap.
-4. `chatbotService.js` luu `sessionId` vao `localStorage` theo key `chatbot_session_<userId>` hoac `chatbot_session_guest`.
-5. `useChatbot.js` tu hydrate lich su chat tu backend qua API `GET /api/v1/chatbot/sessions/{sessionId}` neu user da co session.
-6. Khi login/logout, hook chu dong reset session de tranh cross-contamination giua guest va user that.
-7. FE gui request chat qua `POST /api/v1/chatbot/chat`, kem `message`, `sessionId`, `preferences`.
-8. FE render text message, product suggestions, promotions va `missingFields` trong cung mot conversation stream.
+## 3. Runtime configuration hien tai
 
-Y nghia:
+### LLM runtime
 
-- FE da duoc thiet ke theo huong chat UI + product cards, khong chi la text bot thong thuong.
-- Session continuity phu thuoc vao `localStorage` + Mongo session store o backend.
-
-## 4. Backend API va orchestration
-
-Backend chatbot nam o:
-
-- `backend/services/chatbot-service`
-
-API chinh:
-
-- `POST /api/v1/chatbot/chat`
-- `GET /api/v1/chatbot/sessions/{sessionId}`
-
-`ChatbotController` chi la entrypoint mong, con orchestration chinh nam trong `ChatbotServiceImpl`.
-
-Flow backend thuc te:
-
-1. Nhan `message`, `sessionId`, `X-User-Id`.
-2. Tim session trong Mongo hoac tao session moi.
-3. Merge user preferences tu request vao `PreferenceProfile`.
-4. Detect cold start de hoi lam ro neu user hoi qua chung.
-5. Enrich profile tu:
-   - noi dung message
-   - purchase history
-   - wishlist
-   - user profile
-6. Classify out-of-domain som de chan query ngoai pham vi shop truoc khi goi LLM.
-7. Inject them context gio hang hien tai tu `cart-service`.
-8. Goi agent de model tu quyet dinh tool nao can dung.
-9. Validate reply qua guardrail.
-10. Persist user message + bot reply vao Mongo.
-11. Ghi analytics va cap nhat long-term preference profile.
-
-Can luu y:
-
-- Code hien tai uu tien duong `agentic AI`.
-- Heuristic fallback van ton tai, nhung chu yeu la safety net khi LLM/agent loi hoac tra ve rong.
-- Session user guest se duoc map thanh `guest-<prefix cua sessionId>` neu khong co `X-User-Id`.
-
-## 5. Model / provider dang dung that
-
-Day la diem de gay hieu nham neu chi doc file config repo cu.
-
-Runtime code hien tai dang dung:
-
-- `LangChain4j`
-- `OpenAiChatModel`
-- endpoint OpenAI-compatible
-
-File quyet dinh provider thuc te:
+File:
 
 - `backend/services/chatbot-service/src/main/java/com/fashion/chatbotservice/config/AgentConfig.java`
 - `backend/services/chatbot-service/src/main/resources/application.yml`
 
-Provider dang duoc code de chay:
+Runtime dang dung:
 
-- `ai.base-url`
-- `ai.api-key`
-- `ai.model`
+- `LangChain4j`
+- `OpenAiChatModel`
+- OpenAI-compatible endpoint
 
-Gia tri mac dinh hien tai:
+Gia tri mac dinh:
 
 - `AI_BASE_URL=https://llm.chiasegpu.vn/v1`
 - `AI_MODEL=deepseek-3.2`
-
-Dieu nay co nghia:
-
-- Chatbot hien tai khong con phu thuoc truc tiep vao `OllamaChatModel` trong runtime chinh.
-- No dang goi mot model ben ngoai thong qua OpenAI-compatible API.
-- Ve ban chat, day la inference orchestration + prompt + tools, khong phai custom-trained model duoc train trong chinh repo.
-
-## 6. Trang thai cua Ollama trong du an
-
-`Ollama` chua bien mat hoan toan khoi codebase, nhung hien tai dang o trang thai legacy / transition:
-
-- `pom.xml` van con dependency `langchain4j-ollama`
-- `backend/config-repo/chatbot-service.yml` van con block `ollama.*`
-- `application.yml` van giu comment config Ollama cu
-
-Nhung:
-
-- `AgentConfig` dang build `OpenAiChatModel`, khong build `OllamaChatModel`
-- runtime path chinh hien tai theo `ai.*`, khong theo `ollama.*`
-
-Ket luan:
-
-- neu AI hoac dev moi chi doc `config-repo/chatbot-service.yml`, rat de hieu sai rang chatbot dang chay bang Ollama
-- thuc te runtime da chuyen sang DeepSeek/OpenAI-compatible endpoint
-
-## 7. Tool-calling va du lieu realtime dang dung
-
-`FashionAgent` + `FashionTools` la trung tam cua kha nang tu van ban hang co du lieu that.
-
-Agent prompt buoc model phai:
-
-- goi tool truoc khi tra loi cac cau hoi ve san pham, gia, ton kho, order, promotion, review, loyalty
-- goi `searchKnowledge` truoc khi tra loi policy / FAQ
-- khong duoc bịa du lieu
-
-`FashionTools` hien tai goi toi cac service khac de lay du lieu runtime:
-
-- `product-service`
-- `promotion-service`
-- `order-service`
-- `cart-service`
-- `review-service`
-
-Nhom tool chinh hien co:
-
-- search product
-- strict product lookup
-- browse product
-- list product types
-- consult size
-- suggest outfit
-- check promotions
-- get loyalty benefits
-- get product reviews
-- compare products
-- save user preference
-- search knowledge
+- `AI_TIMEOUT_SECONDS=180`
+- `AI_MAX_TOKENS=4096`
 
 Y nghia:
 
-- chatbot nay la AI + rule + data integration, khong phai mot chat model doc lap
-- chat tra loi dung hay sai phu thuoc rat nhieu vao tinh trang cac service phia sau
+- Runtime chinh hien tai khong chay bang `OllamaChatModel`.
+- `ollama.*` con xuat hien o mot so config cu nhung khong phai path runtime chinh.
 
-## 8. MongoDB schema va vai tro cua tung collection
+### Backend service config
 
-`chatbot-service` dung MongoDB cho nhieu loai document hon review-service.
+File:
 
-Nhom document chinh:
+- `backend/services/chatbot-service/src/main/resources/application.yml`
+- `backend/config-repo/chatbot-service.yml`
 
-- `ChatSession`
-  - luu lich su hoi dap
-  - luu suggestion snapshots
-  - luu promotion snapshots
-  - luu `PreferenceProfile`
-- `UserPreferenceDocument`
-  - luu profile lau dai tach rieng khoi lifecycle cua session
-- `KnowledgeDocument`
-  - luu cac chunk FAQ / policy da ingest
-- `KnowledgeGraphNode`
-- `KnowledgeGraphEdge`
-  - phuc vu GraphRAG retrieval
-- `ChatAnalyticsDocument`
-  - luu telemetry ve trace, latency, tool usage, outcome
+Cac nhom config quan trong:
 
-Dieu nay co nghia:
+- `chatbot.product-service-url`
+- `chatbot.promotion-service-url`
+- `chatbot.order-service-url`
+- `chatbot.cart-service-url`
+- `chatbot.review-service-url`
+- `chatbot.use-agent`
+- `chatbot.memory.max-messages`
+- `chatbot.knowledge.*`
+- `chatbot.resilience.*`
+- `ai.*`
 
-- MongoDB cua chatbot khong chi luu chat history
-- no con dong vai tro memory store, knowledge store, analytics store va preference store
+### Data store
 
-## 9. Knowledge base va GraphRAG hien tai
+- MongoDB dung cho:
+  - session
+  - long-term preference
+  - knowledge chunks
+  - graph nodes / edges
+  - analytics
 
-Knowledge base local cua chatbot hien tai nam trong:
+---
 
-- `backend/services/chatbot-service/src/main/resources/knowledge/faq.md`
-- `backend/services/chatbot-service/src/main/resources/knowledge/policy.md`
+## 4. Kien truc tong quan
 
-Flow hien tai:
+Chatbot hien tai nen duoc hieu la:
 
-1. Khi service startup, `KnowledgeIngestionServiceImpl` doc cac file `.md`.
-2. File duoc chunk theo heading `##` / `###`.
-3. Chunk duoc luu vao Mongo `KnowledgeDocument`.
-4. `GraphRagServiceImpl` rebuild do thi node/edge dua tren:
-   - topic
-   - keyword
-   - quan he adjacent
-   - quan he related
-5. `KnowledgeBaseServiceImpl` search theo hybrid scoring:
-   - lexical overlap
-   - GraphRAG score
+`Frontend chat UI + Spring orchestration + LangChain4j agent + tools + Mongo memory + rule layers`
 
-Ket luan:
+Khong nen hieu no nhu:
 
-- chatbot hien tai co knowledge retrieval, nhung dang la lightweight GraphRAG tren Mongo
-- khong thay vector database hoac embedding retrieval chuyen biet trong setup hien tai
-- chat policy/FAQ phu thuoc vao chat luong cua 2 file markdown nay
+- mot model AI train rieng trong repo
+- hay mot prompt text don gian
 
-## 10. Ca nhan hoa va memory
+---
 
-Chatbot hien tai da co nhieu lop nho ngu canh:
+## 5. Cac module chinh va vi sao nen co
 
-- `MessageWindowChatMemory` trong LangChain4j
-- hydrate memory lai tu `ChatSession` trong Mongo
-- `PreferenceProfile` o trong session
-- `UserPreferenceDocument` de luu memory lau dai
-- enrich them context tu purchase history, wishlist, user profile, cart
+### 5.1 Entry / orchestration
 
-Tac dung thuc te:
+#### `controller/ChatbotController.java`
 
-- user quay lai co the duoc nho style, budget, size, focus
-- session moi van co the bootstrap tu profile da persist
-- model co them context gio hang khi tu van cross-sell / outfit
+Chuc nang:
 
-## 11. Nhung diem dang lech hoac can luu y
+- nhan request chat
+- lay session id / user context
+- goi service chinh
 
-1. `backend/config-repo/chatbot-service.yml` dang lech runtime
-   - file nay van noi theo `ollama.*`
-   - trong khi code runtime dang doc `ai.*`
+Vi sao nen co:
 
-2. URI MongoDB dang bi hardcode trong `chatbot-service-dev.yml` va `chatbot-service-prod.yml`
+- giu controller mong
+- tach HTTP layer khoi business flow
 
-## 12. Trang thai nang cap hien tai
+#### `service/impl/ChatbotServiceImpl.java`
 
-Chatbot hien tai khong con o muc "chat demo" nua. No da co:
+Chuc nang:
 
-- FE card-based chat UI de dung cho e-commerce
-- Mongo session + profile + knowledge + analytics
-- agent tools cho product / order / promotion / wishlist / loyalty / review
-- sales knowledge ingestion
-- business ranking cho suggestions
-- mot so co che giam drift multi-turn
+- orchestration trung tam
+- dieu phoi session, state, agent, direct flow, fallback, persistence
 
-Nhung danh gia thuc te hien tai van nen de o muc:
+Vi sao nen co:
 
-- `55% -> 65%`
+- day la noi gom toan bo "workflow chatbot"
+- cac module khac nen duoc goi tu day, khong nen de logic rach o controller
 
-No da:
+### 5.2 Agent + tool layer
 
-- hieu duoc kha nhieu cau hoi
-- tra loi duoc
-- co the tu van co logic hon truoc
+#### `agent/FashionAgent.java`
 
-Nhung chua:
+Chuc nang:
 
-- giu mach hoi thoai dai that on dinh
-- tu van outfit sau nhu stylist that
-- quyet dinh thu tu de xuat theo business signals manh
-- hoc duoc tu ket qua sau chat
+- contract cho LangChain4j AI service
 
-## 13. Nhan dinh kien truc
+Vi sao nen co:
 
-Kien truc hien tai van nen duoc giu:
+- giu prompt/agent boundary ro rang
 
-- `LangChain4j` orchestration
-- `FashionTools` cho data realtime
-- `MongoDB` cho session / knowledge / analytics
-- `knowledge markdown` de iteration nhanh
+#### `agent/FashionTools.java`
 
-Nhung neu muon chatbot hay hon ro ret, can them 3 lop nua:
+Chuc nang:
 
-1. Conversation state layer
-2. Recommendation service / scorer rieng
-3. Eval + feedback loop
+- tool-calling sang:
+  - product-service
+  - promotion-service
+  - order-service
+  - cart-service
+  - review-service
 
-Khong co 3 lop nay, chatbot se thuong bi:
+Vi sao nen co:
 
-- drift sau vai turn
-- de xuat khong that su "co chu dich ban hang"
-- kho do tien bo sau moi dot sua
-   - ve van hanh va bao mat, nen dua dan vao env var / secret thay vi de credential ro trong repo
+- chatbot ban hang can du lieu that
+- khong the chi dua vao model text
 
-3. `/chatbot` full page dang bat dang nhap, nhung `ChatWidget` mini van cho phep guest chat
-   - day la chu y quan trong khi mo rong logic guest/user va training data
+#### `agent/ResponseGuardrail.java`
 
-4. Knowledge base hien tai moi co `faq.md` va `policy.md`
-   - neu muon chatbot tu van ban hang sau hon, can bo sung them nguon knowledge co cau truc ro hon
+Chuc nang:
 
-5. Chatbot phu thuoc vao availability cua nhieu service phia sau
-   - product
-   - promotion
-   - order
-   - cart
-   - review
-   => chi can mot service loi la chat experience co the giam manh
+- hau kiem reply cuoi
+- sua/chan hallucination
 
-6. K8s / CI-CD chi thuc su an config Atlas moi sau khi manifest va workflow da duoc push va deploy
-   - neu chua push, pod co the van noi `mongo:27017` tu config cu
+Vi sao nen co:
 
-## 12. Ket luan nhanh cho AI va developer
+- LLM va fallback deu co the noi qua tu tin
+- day la lop bao hiem truoc khi tra response cho user
 
-Neu can hieu chatbot hien tai, dung doc no nhu mot model AI don le.
+### 5.3 Conversation flow
 
-Can doc theo cach sau:
+#### `conversation/SalesStage.java`
 
-1. FE chatbot la sessioned UI co product-card rendering.
-2. BE chatbot la orchestration layer Spring Boot + LangChain4j.
-3. Model runtime hien tai la DeepSeek qua OpenAI-compatible API, khong phai Ollama runtime chinh.
-4. MongoDB cua chatbot la storage da muc dich: session + memory + knowledge + analytics + preference.
-5. Gia tri that cua chatbot den tu tool-calling sang microservices va knowledge markdown, khong den tu training model trong repo.
+Chuc nang:
+
+- dinh nghia stage:
+  - `DISCOVERY`
+  - `FILTERING`
+  - `RECOMMENDING`
+  - `COMPARING`
+  - `CLOSING`
+
+Vi sao nen co:
+
+- chatbot can "biet dang o buoc nao"
+- tranh hoi lan man va recommend qua som
+
+#### `conversation/StylingSlots.java`
+
+Chuc nang:
+
+- luu slot tu van:
+  - gender
+  - occasion
+  - style vibe
+  - product type
+  - budget
+  - size
+  - fit
+  - color
+  - height / weight
+
+Vi sao nen co:
+
+- chatbot stylist phai dua tren slot ro rang, khong chi keyword search
+
+#### `conversation/impl/ConversationStateServiceImpl.java`
+
+Chuc nang:
+
+- quyet dinh chatbot nen:
+  - hoi gi tiep
+  - recommend chua
+  - chuyen stage nao
+
+Vi sao nen co:
+
+- day la "state machine" cua chat ban hang
+- quan trong hon viec prompt noi hay
+
+#### `conversation/impl/SlotFillingServiceImpl.java`
+
+Chuc nang:
+
+- rut slot tu message va profile
+
+Vi sao nen co:
+
+- neu khong co slot filling, chatbot se tiep tuc giong catalog search
+
+### 5.4 Product intelligence
+
+#### `product/ProductMetadataProfile.java`
+
+Chuc nang:
+
+- model metadata enrich tam cho san pham
+
+Vi sao nen co:
+
+- chatbot can ly do stylist:
+  - easy to match
+  - safe choice
+  - office
+  - date
+  - premium look
+
+#### `product/impl/ProductMetadataEnrichmentServiceImpl.java`
+
+Chuc nang:
+
+- enrich metadata tu `title + category`
+
+Vi sao nen co:
+
+- truoc khi co metadata that trong DB, day la cach tam de bot "co gu hon"
+
+#### `product/impl/ProductScoringServiceImpl.java`
+
+Chuc nang:
+
+- cham diem san pham theo:
+  - occasion
+  - style
+  - body shape
+  - budget
+  - size / color
+  - versatility
+
+Vi sao nen co:
+
+- recommendation phai dua tren score co ly do, khong chi search hit
+
+### 5.5 Stylist rule layer
+
+#### `styling/impl/BodyShapeAdvisorServiceImpl.java`
+
+Chuc nang:
+
+- rule theo dang nguoi:
+  - petite / thap
+  - gay
+  - dam nguoi
+  - fit preference
+
+Vi sao nen co:
+
+- body-shape reasoning khong nen de agent tu do tu nghi
+
+#### `styling/impl/OccasionAdvisorServiceImpl.java`
+
+Chuc nang:
+
+- rule theo dip mac:
+  - work
+  - date
+  - daily
+  - travel
+  - party light
+
+Vi sao nen co:
+
+- day la cot song cua stylist logic
+
+### 5.6 Sales layer
+
+#### `sales/impl/CompareEngineImpl.java`
+
+Chuc nang:
+
+- so sanh list gan nhat theo:
+  - safer choice
+  - stylish choice
+  - better value
+  - easier to style
+
+Vi sao nen co:
+
+- user mua hang thuong hoi:
+  - "nen chon cai nao"
+  - "mau nao an toan hon"
+  - "dang tien hon"
+
+#### `sales/impl/ClosingEngineImpl.java`
+
+Chuc nang:
+
+- tao soft close / decision close
+
+Vi sao nen co:
+
+- chatbot ban hang phai biet day user toi quyet dinh, khong chi tu van
+
+### 5.7 Response layer
+
+#### `response/FashionResponseComposer.java`
+
+Chuc nang:
+
+- compose reply theo style stylist:
+  - option 1/2/3
+  - ly do
+  - styling hint
+  - closing line
+
+Vi sao nen co:
+
+- giu format response on dinh
+- tranh de `ChatbotServiceImpl` noi text linh tinh
+
+---
+
+## 6. FE chatbot can nhung gi
+
+Frontend dang nam o:
+
+- `ecommerce-frontend/src/modules/chatbot/components/ChatWidget.jsx`
+- `.../ChatMessage.jsx`
+- `.../hooks/useChatbot.js`
+- `.../services/chatbotService.js`
+- `.../pages/ChatbotPage.jsx`
+
+Can co:
+
+- `sessionId`
+- render message + product cards
+- selected product context khi click card
+- hydrate session tu backend
+
+Vi sao nen co:
+
+- chatbot commerce khong the chi la textbox
+- card context la dieu kien quan trong de follow-up "mau nay", "san pham nay", "trong list nay"
+
+---
+
+## 7. Xay dung chatbot nay can nhung gi
+
+### Bat buoc
+
+- 1 LLM endpoint on dinh
+- MongoDB cho session / knowledge / analytics
+- microservice du lieu that:
+  - product
+  - promotion
+  - order
+  - cart
+  - review
+- knowledge markdown
+- state machine conversation
+- guardrail
+
+### Rat nen co
+
+- product metadata that trong DB
+- signal quality / analytics
+- eval set regression
+- feedback loop tu UAT / user behavior
+
+### Neu muon no thong minh hon nua
+
+- metadata san pham chuan schema
+- outfit builder theo set
+- objection handling sau
+- analytics quality signals
+- ranking theo click / conversion / order data that
+
+---
+
+## 8. Diem manh va diem yeu theo nghiep vu
+
+### Hien tai chatbot lam tot
+
+- loyalty / wishlist / promotion lookup
+- search product theo context
+- compare tren list gan nhat
+- selected product follow-up
+- consultative flow co ban
+- recommendation co ly do tot hon truoc
+
+### Hien tai chatbot chua that tot
+
+- van phu thuoc agent o mot so case phuc tap
+- title grounding chua the xem la perfect
+- metadata enrich van la heuristic tam
+- outfit-level reasoning chua sau
+- objection / upsell / cross-sell chua manh
+- chua co signal do "quality" sau moi dot sua
+
+---
+
+## 9. Cau hinh van hanh can nho
+
+- `ai.log-requests`, `ai.log-responses`
+  - dev co the bat
+  - production nen than trong
+
+- `chatbot.resilience.*`
+  - dang bao ve downstream call
+
+- `chatbot.use-agent`
+  - bat/tat direct agent path
+
+- `chatbot.memory.max-messages`
+  - gioi han chat memory window
+
+- `chatbot.knowledge.*`
+  - bat/tat knowledge + GraphRAG
+
+---
+
+## 10. Ket luan ngan
+
+Chatbot hien tai da co 4 lop quan trong:
+
+1. `Conversation flow`
+2. `Product intelligence`
+3. `Sales compare + close`
+4. `Body-shape + occasion rule layer`
+
+No da du de xem la mot nen chatbot sales advisor co huong ro.
+
+Nhung de len muc tot hon nua, uu tien tiep theo nen la:
+
+1. analytics quality signals
+2. metadata san pham that
+3. giam loi agent runtime
+4. objection / upsell / outfit intelligence

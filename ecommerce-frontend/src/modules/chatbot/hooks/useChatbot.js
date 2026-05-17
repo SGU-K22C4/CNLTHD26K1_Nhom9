@@ -82,6 +82,7 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
   const [messages, setMessages] = useState([DEFAULT_GREETING])
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES)
   const [sessionId, setSessionId] = useState(() => chatbotService.getOrCreateSessionId(userId))
+  const [selectedProductContext, setSelectedProductContext] = useState(null)
   const [isSending, setIsSending] = useState(false)
   const [isHydrating, setIsHydrating] = useState(false)
   const [error, setError] = useState('')
@@ -95,6 +96,7 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
       const newSessionId = chatbotService.getOrCreateSessionId(userId)
       setSessionId(newSessionId)
       setMessages([DEFAULT_GREETING])
+      setSelectedProductContext(null)
       setError('')
     }
   }, [userId])
@@ -182,6 +184,7 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
       const response = await chatbotService.send({
         message,
         preferences,
+        selectedProductContext,
       })
 
       if (response?.sessionId) {
@@ -223,7 +226,7 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
     } finally {
       setIsSending(false)
     }
-  }, [isSending, messages, preferences, sessionId])
+  }, [isSending, messages, preferences, selectedProductContext, sessionId])
 
   const updatePreferences = useCallback((nextPreferences) => {
     setPreferences((prev) => ({
@@ -240,6 +243,7 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
     const nextSession = chatbotService.getOrCreateSessionId(userId)
     setSessionId(nextSession)
     setMessages([DEFAULT_GREETING])
+    setSelectedProductContext(null)
     setError('')
   }, [userId])
 
@@ -249,11 +253,13 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
     sessionId,
     messages,
     preferences,
+    selectedProductContext,
     isSending,
     isHydrating,
     canSend,
     error,
     sendMessage,
+    setSelectedProductContext,
     updatePreferences,
     startNewSession,
   }

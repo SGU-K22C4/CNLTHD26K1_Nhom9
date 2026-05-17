@@ -6,6 +6,10 @@ spring:
 chatbot:
   security:
     allow-direct-user-header: true
+  resilience:
+    timeout-ms: 3500
+    retry:
+      max-attempts: 2
 
 ai:
   log-requests: true

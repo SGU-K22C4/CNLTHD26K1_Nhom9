@@ -38,6 +38,12 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
     @Value("${chatbot.order-service-url:http://localhost:8080}")
     private String orderServiceUrl;
 
+    @Value("${chatbot.product-service-url:http://localhost:8080}")
+    private String productServiceUrl;
+
+    @Value("${chatbot.user-service-url:http://localhost:8080}")
+    private String userServiceUrl;
+
     @Override
     public void enrichFromMessage(ChatSession.PreferenceProfile profile, String message) {
         if (profile == null || message == null) return;
@@ -47,8 +53,13 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
         extractSizePreference(profile, normalized);
         extractColorPreference(profile, normalized);
         extractCategoryPreference(profile, normalized);
+        extractOccasionPreference(profile, normalized);
+        extractFitPreference(profile, normalized);
+        extractTargetGender(profile, normalized);
         extractTonePreference(profile, normalized);
         extractFocusTags(profile, normalized);
+        inferPersona(profile, normalized);
+        refreshPriceComfortZone(profile);
     }
 
     @Override
@@ -97,6 +108,72 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
         }
     }
 
+    @Override
+    @SuppressWarnings("unchecked")
+    public void enrichFromWishlist(ChatSession.PreferenceProfile profile, String userId) {
+        if (profile == null || userId == null || userId.startsWith("guest-")) return;
+
+        if (!profile.getPreferredCategories().isEmpty()
+                && !profile.getPreferredColors().isEmpty()
+                && !profile.getPreferredSizes().isEmpty()) {
+            return;
+        }
+
+        try {
+            Map<String, Object> pageData = webClient.get()
+                    .uri(productServiceUrl + "/api/v1/wishlists?page=0&size=20")
+                    .headers(headers -> headers.add("X-User-Id", userId))
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+
+            if (pageData == null) return;
+
+            Object content = pageData.get("content");
+            if (!(content instanceof List<?> products)) return;
+
+            for (Object productObj : products) {
+                if (!(productObj instanceof Map<?, ?> product)) continue;
+                hydrateFromProductPayload(profile, product);
+            }
+        } catch (Exception ex) {
+            log.warn("Unable to hydrate profile from wishlist: {}", ex.getMessage());
+        }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public void enrichFromUserProfile(ChatSession.PreferenceProfile profile, String userId) {
+        if (profile == null || userId == null || userId.startsWith("guest-")) return;
+
+        try {
+            Map<String, Object> payload = webClient.get()
+                    .uri(userServiceUrl + "/api/v1/users/me")
+                    .headers(headers -> headers.add("X-User-Id", userId))
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+
+            if (payload == null) return;
+
+            String firstName = stringValue(payload.get("firstName"));
+            String lastName = stringValue(payload.get("lastName"));
+            if (!firstName.isBlank() || !lastName.isBlank()) {
+                profile.setPreferredTone("Professional");
+            }
+            if (profile.getTargetGender() == null || profile.getTargetGender().isBlank()) {
+                Integer gender = integerValue(payload.get("gender"));
+                if (gender != null) {
+                    profile.setTargetGender(gender == 0 ? "male" : "female");
+                }
+            }
+        } catch (Exception ex) {
+            log.debug("User profile enrichment skipped: {}", ex.getMessage());
+        }
+    }
+
     private void extractSizePreference(ChatSession.PreferenceProfile profile, String normalized) {
         Matcher sizeMatcher = SIZE_PATTERN.matcher(normalized);
         if (sizeMatcher.find()) {
@@ -119,6 +196,41 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
         if (normalized.contains("dam")) profile.getPreferredCategories().add("đầm");
     }
 
+    private void extractOccasionPreference(ChatSession.PreferenceProfile profile, String normalized) {
+        if (normalized.contains("di lam") || normalized.contains("cong so") || normalized.contains("van phong")) {
+            profile.getPreferredOccasions().add("office");
+        }
+        if (normalized.contains("di choi") || normalized.contains("hang ngay")
+                || normalized.contains("cuoi tuan") || normalized.contains("cafe")
+                || normalized.contains("casual")) {
+            profile.getPreferredOccasions().add("casual");
+        }
+        if (normalized.contains("du tiec") || normalized.contains("su kien")) {
+            profile.getPreferredOccasions().add("party");
+        }
+        if (normalized.contains("du lich") || normalized.contains("travel")) {
+            profile.getPreferredOccasions().add("travel");
+        }
+    }
+
+    private void extractFitPreference(ChatSession.PreferenceProfile profile, String normalized) {
+        if (normalized.contains("oversize") || normalized.contains("rong") || normalized.contains("thoai mai")) {
+            profile.setFitPreference("relaxed");
+        }
+        if (normalized.contains("slim fit") || normalized.contains("om") || normalized.contains("vua van")) {
+            profile.setFitPreference("fitted");
+        }
+    }
+
+    private void extractTargetGender(ChatSession.PreferenceProfile profile, String normalized) {
+        if (normalized.contains("do nam") || normalized.contains("cho nam") || normalized.contains("ban trai")) {
+            profile.setTargetGender("male");
+        }
+        if (normalized.contains("do nu") || normalized.contains("cho nu") || normalized.contains("ban gai")) {
+            profile.setTargetGender("female");
+        }
+    }
+
     private void extractTonePreference(ChatSession.PreferenceProfile profile, String normalized) {
         if (normalized.contains("than thien") || normalized.contains("friendly")) {
             profile.setPreferredTone("Friendly");
@@ -137,8 +249,100 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
         }
     }
 
+    private void inferPersona(ChatSession.PreferenceProfile profile, String normalized) {
+        if (normalized.contains("van phong") || normalized.contains("cong so") || normalized.contains("hop")) {
+            profile.setCustomerPersona("Office Worker");
+            return;
+        }
+        if (normalized.contains("trend") || normalized.contains("ca tinh") || normalized.contains("stylist")) {
+            profile.setCustomerPersona("Young Professional");
+            return;
+        }
+        if (normalized.contains("hang ngay") || normalized.contains("cuoi tuan")
+                || normalized.contains("du lich") || normalized.contains("thoai mai")) {
+            profile.setCustomerPersona("Casual Shopper");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void hydrateFromProductPayload(ChatSession.PreferenceProfile profile, Map<?, ?> product) {
+        String categoryName = stringValue(product.get("categoryName"));
+        if (!categoryName.isBlank()) {
+            profile.getPreferredCategories().add(categoryName);
+        }
+
+        Object variants = product.get("variants");
+        if (!(variants instanceof List<?> variantList)) return;
+
+        for (Object variantObj : variantList) {
+            if (!(variantObj instanceof Map<?, ?> variant)) continue;
+            String color = stringValue(variant.get("colorName"));
+            if (!color.isBlank()) {
+                profile.getPreferredColors().add(color);
+            }
+            Object sizes = variant.get("sizes");
+            if (!(sizes instanceof List<?> sizeList)) continue;
+            for (Object sizeObj : sizeList) {
+                if (!(sizeObj instanceof Map<?, ?> sizeItem)) continue;
+                String sizeName = stringValue(sizeItem.get("sizeName"));
+                if (!sizeName.isBlank()) {
+                    profile.getPreferredSizes().add(sizeName.toUpperCase(Locale.ROOT));
+                }
+            }
+        }
+    }
+
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private Integer integerValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value).trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private void refreshPriceComfortZone(ChatSession.PreferenceProfile profile) {
+        Long maxBudget = parseBudget(profile.getBudget());
+        if (maxBudget == null) return;
+        if (maxBudget < 599_000L) {
+            profile.setPriceComfortZone("soft");
+        } else if (maxBudget <= 1_299_000L) {
+            profile.setPriceComfortZone("mid");
+        } else {
+            profile.setPriceComfortZone("premium");
+        }
+    }
+
+    private Long parseBudget(String budget) {
+        if (budget == null || budget.isBlank()) return null;
+        String cleaned = budget.toLowerCase(Locale.ROOT)
+                .replaceAll("[^0-9kmtrd.]", " ")
+                .trim();
+        Matcher matcher = Pattern.compile("([0-9][0-9.,]*)\\s*(k|tr|trieu|d|dong)?").matcher(cleaned);
+        Long maxPrice = null;
+        while (matcher.find()) {
+            try {
+                double value = Double.parseDouble(matcher.group(1).replace(".", "").replace(",", ""));
+                String unit = matcher.group(2);
+                if ("k".equals(unit)) value *= 1_000;
+                else if ("tr".equals(unit) || "trieu".equals(unit)) value *= 1_000_000;
+                long vnd = Math.round(value);
+                if (maxPrice == null || vnd > maxPrice) {
+                    maxPrice = vnd;
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return maxPrice;
     }
 
     // ========== LONG-TERM PROFILE PERSISTENCE (Task 4) ==========

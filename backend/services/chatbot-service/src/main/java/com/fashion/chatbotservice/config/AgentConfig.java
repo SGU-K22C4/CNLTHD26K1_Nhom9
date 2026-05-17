@@ -2,75 +2,125 @@ package com.fashion.chatbotservice.config;
 
 import com.fashion.chatbotservice.agent.FashionAgent;
 import com.fashion.chatbotservice.agent.FashionTools;
+import com.fashion.chatbotservice.model.ChatSession;
+import com.fashion.chatbotservice.repository.ChatSessionRepository;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 // FallbackChatLanguageModel is defined in this package (custom implementation for LangChain4j 0.36.x)
 import dev.langchain4j.service.AiServices;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Wiring LangChain4j components: model, memory, tools → FashionAgent.
- * Uses Ollama (OpenAI-compatible API) as LLM provider.
- * Supports both local Ollama (localhost:11434) and cloud Ollama endpoints.
+ * Uses DeepSeek via OpenAI-compatible endpoint.
  */
 @Configuration
+@RequiredArgsConstructor
+@Slf4j
 public class AgentConfig {
 
-    @Value("${openrouter.api-key:}")
-    private String apiKey;
+    private final ChatSessionRepository chatSessionRepository;
 
-    @Value("${openrouter.base-url:https://openrouter.ai/api/v1}")
+    @Value("${ai.base-url}")
     private String baseUrl;
 
-    @Value("${openrouter.model:openai/gpt-4o-mini}")
+    @Value("${ai.api-key}")
+    private String apiKey;
+
+    @Value("${ai.model:deepseek-3.2}")
     private String modelName;
 
-    @Value("${openrouter.max-tokens:600}")
+    @Value("${ai.timeout-seconds:120}")
+    private int timeoutSeconds;
+
+    @Value("${ai.max-tokens:1000}")
     private int maxTokens;
+
+    @Value("${ai.log-requests:true}")
+    private boolean logRequests;
+
+    @Value("${ai.log-responses:true}")
+    private boolean logResponses;
 
     @Value("${chatbot.memory.max-messages:20}")
     private int maxMessages;
 
     @Bean
     public ChatLanguageModel chatLanguageModel() {
-        // Model chính (Ollama - chạy local hoặc cloud, miễn phí không giới hạn)
-        ChatLanguageModel primaryModel = OpenAiChatModel.builder()
-                .apiKey(apiKey)
+        log.info("Initializing ChatLanguageModel: url={}, model={}, timeout={}s, maxTokens={}",
+                baseUrl, modelName, timeoutSeconds, maxTokens);
+        return OpenAiChatModel.builder()
                 .baseUrl(baseUrl)
-                .modelName(modelName) // Ví dụ: qwen2.5:7b (Ollama)
-                .maxTokens(maxTokens)
-                .temperature(0.3)
-                .timeout(Duration.ofSeconds(60)) // Ollama local có thể chậm hơn cloud
-                .logRequests(true)
-                .logResponses(true)
-                .build();
-
-        // Model dự phòng (Ollama fallback - model nhẹ hơn nếu model chính quá tải)
-        ChatLanguageModel fallbackModel = OpenAiChatModel.builder()
                 .apiKey(apiKey)
-                .baseUrl(baseUrl)
-                .modelName("llama3.1:8b") // Model dự phòng nhẹ của Ollama
+                .modelName(modelName)
+                .temperature(0.1)          // Lower = more deterministic tool calling
                 .maxTokens(maxTokens)
-                .temperature(0.3)
-                .timeout(Duration.ofSeconds(30))
+                .timeout(Duration.ofSeconds(timeoutSeconds))
+                .logRequests(logRequests)
+                .logResponses(logResponses)
                 .build();
-
-        // Tự động chuyển sang fallbackModel nếu primaryModel fail (Timeout, model not found...)
-        return new FallbackChatLanguageModel(primaryModel, fallbackModel);
     }
+
+    private final Map<String, MessageWindowChatMemory> chatMemoryStore = new ConcurrentHashMap<>();
 
     @Bean
     public ChatMemoryProvider chatMemoryProvider() {
-        return sessionId -> MessageWindowChatMemory.builder()
-                .id(sessionId)
-                .maxMessages(maxMessages)
-                .build();
+        return sessionId -> chatMemoryStore.computeIfAbsent(String.valueOf(sessionId), id -> {
+            MessageWindowChatMemory memory = MessageWindowChatMemory.builder()
+                    .id(id)
+                    .maxMessages(maxMessages)
+                    .build();
+            hydrateMemory(memory, id);
+            return memory;
+        });
+    }
+
+    /**
+     * Xóa chat memory của một session (dùng khi memory bị corrupted).
+     */
+    public void clearSessionMemory(String sessionId) {
+        if (sessionId != null) {
+            chatMemoryStore.remove(sessionId);
+            log.info("Cleared corrupted chat memory for session: {}", sessionId);
+        }
+    }
+
+    private void hydrateMemory(MessageWindowChatMemory memory, String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return;
+        try {
+            chatSessionRepository.findBySessionId(sessionId)
+                    .map(ChatSession::getMessages)
+                    .filter(messages -> messages != null && !messages.isEmpty())
+                    .ifPresent(messages -> addMessagesToMemory(memory, messages));
+        } catch (Exception ex) {
+            log.warn("Skip chat memory hydration for session {}: {}", sessionId, ex.getMessage());
+        }
+    }
+
+    private void addMessagesToMemory(MessageWindowChatMemory memory, List<ChatSession.ChatMessage> messages) {
+        int start = Math.max(0, messages.size() - maxMessages);
+        for (int i = start; i < messages.size(); i++) {
+            ChatSession.ChatMessage msg = messages.get(i);
+            if (msg == null || msg.getContent() == null || msg.getContent().isBlank()) continue;
+            if (msg.getSender() == ChatSession.Sender.USER) {
+                memory.add(UserMessage.from(msg.getContent()));
+            } else {
+                memory.add(AiMessage.from(msg.getContent()));
+            }
+        }
     }
 
     @Bean

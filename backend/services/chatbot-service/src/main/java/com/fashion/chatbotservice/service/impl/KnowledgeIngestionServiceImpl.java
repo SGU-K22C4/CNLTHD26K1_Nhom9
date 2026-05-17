@@ -2,6 +2,7 @@ package com.fashion.chatbotservice.service.impl;
 
 import com.fashion.chatbotservice.model.KnowledgeDocument;
 import com.fashion.chatbotservice.repository.KnowledgeDocumentRepository;
+import com.fashion.chatbotservice.service.GraphRagService;
 import com.fashion.chatbotservice.service.KnowledgeIngestionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Đọc và chunk tài liệu từ resources/knowledge/ rồi lưu vào MongoDB.
@@ -28,6 +30,7 @@ import java.util.List;
 public class KnowledgeIngestionServiceImpl implements KnowledgeIngestionService {
 
     private final KnowledgeDocumentRepository repository;
+    private final GraphRagService graphRagService;
 
     @Value("${chatbot.knowledge.enabled:true}")
     private boolean knowledgeEnabled;
@@ -52,6 +55,7 @@ public class KnowledgeIngestionServiceImpl implements KnowledgeIngestionService 
     public int ingestAll() {
         PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
         int totalChunks = 0;
+        List<KnowledgeDocument> ingestedDocuments = new ArrayList<>();
 
         try {
             Resource[] resources = resolver.getResources(dataPath + "/*.md");
@@ -64,10 +68,13 @@ public class KnowledgeIngestionServiceImpl implements KnowledgeIngestionService 
 
                 repository.deleteBySource(filename);
                 repository.saveAll(chunks);
+                ingestedDocuments.addAll(chunks);
 
                 totalChunks += chunks.size();
                 log.info("Ingested {} chunks from {}", chunks.size(), filename);
             }
+
+            graphRagService.rebuildGraph(ingestedDocuments);
         } catch (Exception ex) {
             log.error("Failed to ingest knowledge base: {}", ex.getMessage());
         }
@@ -128,6 +135,7 @@ public class KnowledgeIngestionServiceImpl implements KnowledgeIngestionService 
 
     private KnowledgeDocument buildChunk(String source, String title, String topic, String content) {
         return KnowledgeDocument.builder()
+                .id(UUID.randomUUID().toString())
                 .source(source)
                 .title(title)
                 .topic(topic)

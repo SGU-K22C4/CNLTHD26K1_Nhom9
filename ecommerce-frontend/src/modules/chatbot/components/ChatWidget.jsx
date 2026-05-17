@@ -21,7 +21,7 @@ export default function ChatWidget() {
     error,
   } = useChatbot({ autoLoadHistory: true })
 
-  const visibleMessages = useMemo(() => messages.slice(-20), [messages])
+  const visibleMessages = useMemo(() => messages.slice(-14), [messages])
 
   useEffect(() => {
     if (!messageListRef.current || !open) return
@@ -35,11 +35,11 @@ export default function ChatWidget() {
   return (
     <div className="fixed bottom-5 right-5 z-40">
       {open && (
-        <div className="mb-3 w-[360px] overflow-hidden rounded-2xl border border-[#dddddd] bg-[#f6f6f6] shadow-2xl">
-          <div className="flex items-center justify-between border-b border-[#e2e2e2] bg-white px-4 py-3">
+        <div className="mb-3 w-[380px] max-w-[calc(100vw-24px)] overflow-hidden rounded-[28px] border border-[#e4d8ca] bg-[#fbf7f1] shadow-[0_24px_80px_rgba(24,18,15,0.18)]">
+          <div className="flex items-center justify-between border-b border-[#eadfce] bg-[#fffaf4] px-5 py-4">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6e6e6e]">The Digital Curator</p>
-              <p className="text-sm font-semibold text-[#1f1f1f]">Stylist Concierge</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8c7a67]">The Digital Curator</p>
+              <p className="text-lg font-semibold text-[#201a15]">Stylist Concierge</p>
             </div>
 
             <div className="flex items-center gap-1">
@@ -47,7 +47,7 @@ export default function ChatWidget() {
                 <button
                   type="button"
                   onClick={() => window.open('/chatbot', '_blank', 'noopener,noreferrer')}
-                  className="rounded-md p-1.5 text-[#505050] transition hover:bg-[#f1f1f1]"
+                  className="rounded-full p-2 text-[#5a4d42] transition hover:bg-[#f3eadf]"
                   aria-label="Mở tab chatbot"
                 >
                   <ExternalLink size={15} />
@@ -57,7 +57,7 @@ export default function ChatWidget() {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-md p-1.5 text-[#505050] transition hover:bg-[#f1f1f1]"
+                className="rounded-full p-2 text-[#5a4d42] transition hover:bg-[#f3eadf]"
                 aria-label="Thu gọn chatbot"
               >
                 <Minus size={15} />
@@ -67,10 +67,10 @@ export default function ChatWidget() {
 
           <div
             ref={messageListRef}
-            className="max-h-[420px] space-y-3 overflow-y-auto px-3 py-3"
+            className="max-h-[520px] space-y-4 overflow-y-auto px-4 py-4"
           >
             {!isLoggedIn && (
-              <div className="rounded-lg border border-[#d9ddff] bg-[#f4f6ff] px-3 py-2 text-xs text-[#38408f]">
+              <div className="rounded-2xl border border-[#e4dbce] bg-white px-4 py-3 text-xs leading-6 text-[#5d5045]">
                 Bạn đang dùng chế độ chat nhanh. Muốn mở trang tùy chỉnh AI theo tone, style và focus, vui lòng
                 {' '}
                 <button
@@ -89,18 +89,18 @@ export default function ChatWidget() {
             ))}
 
             {error && (
-              <div className="rounded-lg border border-[#ffd2d2] bg-[#fff4f4] px-3 py-2 text-xs text-[#8f3b3b]">
+              <div className="rounded-2xl border border-[#ffd2d2] bg-[#fff4f4] px-3 py-2 text-xs text-[#8f3b3b]">
                 {error}
               </div>
             )}
           </div>
 
-          <div className="border-t border-[#e2e2e2] bg-white p-3">
+          <div className="border-t border-[#eadfce] bg-[#fffaf4] p-4">
             <ChatInput
               onSend={sendMessage}
               disabled={isSending}
               compact
-              placeholder={isSending ? 'Đang xử lý...' : 'Nhập câu hỏi mua sắm...'}
+              placeholder={isSending ? 'Đang xử lý...' : 'Nhập nhu cầu mua sắm...'}
             />
           </div>
         </div>
@@ -109,7 +109,7 @@ export default function ChatWidget() {
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-2 rounded-full border border-[#171717] bg-[#151515] px-4 py-3 text-white shadow-xl transition hover:bg-black"
+        className="flex items-center gap-2 rounded-full border border-[#1b1613] bg-[#17120f] px-4 py-3 text-white shadow-xl transition hover:bg-[#090909]"
       >
         <MessageCircle size={18} />
         <span className="text-xs font-semibold uppercase tracking-[0.12em]">AI Stylist</span>

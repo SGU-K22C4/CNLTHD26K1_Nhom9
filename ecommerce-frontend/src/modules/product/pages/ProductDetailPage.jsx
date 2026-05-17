@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
 import { productService } from '../services/productService'
 import ProductGallery from '../components/ProductGallery'
 import SizeSelector from '../components/SizeSelector'
@@ -10,6 +10,7 @@ import { useCartContext } from '../../cart/hooks/useCartContext'
 import { useWishlistContext } from '../../wishlist/context/useWishlistContext'
 import ProductReviewSection from '../../review/components/ProductReviewSection'
 import { useAuth } from '../../auth/hooks/useAuth'
+import { chatbotService } from '../../chatbot/services/chatbotService'
 
 const PRIMARY = '#5A6D57'
 
@@ -76,6 +77,7 @@ function DetailRow({ label, content, defaultOpen = false }) {
 export default function ProductDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { addItem, openDrawer } = useCartContext()
   const { user } = useAuth()
 
@@ -92,6 +94,8 @@ export default function ProductDetailPage() {
 
   const { isWishlisted, toggleWishlist } = useWishlistContext()
   const wishlisted = product ? isWishlisted(product.id) : false
+
+  const chatbotAttribution = location.state?.chatbotAttribution || chatbotService.getProductAttribution(id)
 
   useEffect(() => {
     let isMounted = true
@@ -202,6 +206,34 @@ export default function ProductDetailPage() {
     try {
       setAddedToCart(true)
       await addItem({ variantSizeId, quantity: qty })
+      if (chatbotAttribution?.sessionId) {
+        chatbotService.sendFeedbackEvent({
+          sessionId: chatbotAttribution.sessionId,
+          eventType: 'add_to_cart_success',
+          sourceMessageId: chatbotAttribution.sourceMessageId,
+          productId: String(product.id),
+          productName: product.name,
+          metadata: {
+            surface: chatbotAttribution.surface || 'product_detail',
+            quantity: qty,
+            selectedSize,
+            selectedColor,
+            variantSizeId,
+          },
+        }).catch((trackingError) => {
+          console.debug('track add_to_cart_success failed', trackingError)
+        })
+        chatbotService.saveCheckoutAttribution(id, {
+          ...chatbotAttribution,
+          productId: String(product.id),
+          productName: product.name,
+          quantity: qty,
+          selectedSize,
+          selectedColor,
+          variantSizeId,
+        })
+        chatbotService.clearProductAttribution(id)
+      }
       openDrawer(e)
       setTimeout(() => setAddedToCart(false), 2000)
     } catch (err) {

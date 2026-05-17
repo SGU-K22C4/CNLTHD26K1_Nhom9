@@ -19,7 +19,7 @@ export default function ChatInput({
   }
 
   return (
-    <div className={`flex items-end gap-2 rounded-xl border border-[#d3d3d3] bg-white px-3 py-2 ${compact ? 'min-h-14' : 'min-h-16'}`}>
+    <div className={`flex items-end gap-2 rounded-[20px] border border-[#ddd2c4] bg-[#fffdf9] px-3 py-2 shadow-sm ${compact ? 'min-h-14' : 'min-h-16'}`}>
       <textarea
         value={value}
         onChange={(event) => setValue(event.target.value)}
@@ -32,14 +32,14 @@ export default function ChatInput({
         disabled={disabled}
         rows={1}
         placeholder={placeholder}
-        className="max-h-36 min-h-8 flex-1 resize-none bg-transparent text-sm text-[#252525] outline-none placeholder:text-[#9a9a9a]"
+        className="max-h-36 min-h-8 flex-1 resize-none bg-transparent text-sm leading-6 text-[#25201a] outline-none placeholder:text-[#9f9486]"
       />
 
       <button
         type="button"
         onClick={submit}
         disabled={disabled || !value.trim()}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[#141414] text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-[#c8c8c8]"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#18120f] text-white transition hover:bg-[#090909] disabled:cursor-not-allowed disabled:bg-[#c8c1b8]"
         aria-label="Gửi tin nhắn"
       >
         <SendHorizonal size={16} />

@@ -1,12 +1,13 @@
 # ============================================================================
-# Kubernetes Database StatefulSets — Fashion E-commerce
-# All databases use StatefulSet (not Deployment) for stable network identity
-# and persistent storage. Optimized for student VPS (replicas: 1).
+# Kubernetes Database StatefulSets - Fashion E-commerce
+# Only in-cluster stateful dependencies that are still part of the runtime
+# should live here. MongoDB is intentionally excluded because review-service
+# and chatbot-service now use MongoDB Atlas via Kubernetes Secrets.
 # ============================================================================
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 1. MySQL 8.0 — Used by: user, product, order, promotion services
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ----------------------------------------------------------------------------
+# 1. MySQL 8.0 - Used by: user, product, order, promotion services
+# ----------------------------------------------------------------------------
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -82,16 +83,16 @@ metadata:
   labels:
     app: mysql
 spec:
-  clusterIP: None  # Headless service for StatefulSet
+  clusterIP: None
   selector:
     app: mysql
   ports:
     - port: 3306
       targetPort: 3306
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 2. Redis 7.0 — Used by: cart-service (TTL-based cart storage)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ----------------------------------------------------------------------------
+# 2. Redis 7.0 - Used by: cart-service
+# ----------------------------------------------------------------------------
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -168,84 +169,9 @@ spec:
     - port: 6379
       targetPort: 6379
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 3. MongoDB 7.0 — Used by: review-service, chatbot-service
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
----
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: mongo
-  namespace: fashion
-  labels:
-    app: mongo
-spec:
-  serviceName: mongo
-  replicas: 1
-  selector:
-    matchLabels:
-      app: mongo
-  template:
-    metadata:
-      labels:
-        app: mongo
-    spec:
-      containers:
-        - name: mongo
-          image: mongo:7.0
-          ports:
-            - containerPort: 27017
-          resources:
-            requests:
-              memory: "256Mi"
-              cpu: "200m"
-            limits:
-              memory: "512Mi"
-              cpu: "500m"
-          volumeMounts:
-            - name: mongo-data
-              mountPath: /data/db
-          livenessProbe:
-            exec:
-              command: ["mongosh", "--eval", "db.adminCommand('ping')"]
-            initialDelaySeconds: 60
-            periodSeconds: 15
-            timeoutSeconds: 5
-            failureThreshold: 5
-          readinessProbe:
-            exec:
-              command: ["mongosh", "--eval", "db.adminCommand('ping')"]
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
-  volumeClaimTemplates:
-    - metadata:
-        name: mongo-data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 5Gi
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: mongo
-  namespace: fashion
-  labels:
-    app: mongo
-spec:
-  clusterIP: None
-  selector:
-    app: mongo
-  ports:
-    - port: 27017
-      targetPort: 27017
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 4. Kafka (KRaft mode — NO ZooKeeper) — Used by: order, product services
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ----------------------------------------------------------------------------
+# 3. Kafka (KRaft mode - no ZooKeeper) - Used by: order, product services
+# ----------------------------------------------------------------------------
 ---
 apiVersion: apps/v1
 kind: StatefulSet

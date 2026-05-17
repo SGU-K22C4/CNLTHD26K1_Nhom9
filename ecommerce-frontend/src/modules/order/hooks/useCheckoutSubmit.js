@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { orderService } from '../services/orderService'
 import { paymentService } from '../services/paymentService'
+import { chatbotService } from '../../chatbot/services/chatbotService'
 
 /**
  * Build the order payload matching the DB Order entity structure.
@@ -41,6 +42,22 @@ export function buildOrderPayload(form, items, appliedPoints) {
 export function useCheckoutSubmit() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  const buildAttributionMetadata = (items, form, savedOrder, attributedItems = []) => ({
+    paymentMethod: form.paymentMethod,
+    orderId: savedOrder?.id || '',
+    orderNumber: savedOrder?.orderNumber || '',
+    totalItems: items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0),
+    subtotal: items.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.quantity) || 0)), 0),
+    attributedProductIds: attributedItems.map((item) => item?.productId).filter(Boolean),
+    attributedItems: attributedItems.map((item) => ({
+      productId: item?.productId || '',
+      productName: item?.productName || '',
+      sourceMessageId: item?.sourceMessageId || '',
+      surface: item?.surface || '',
+      quantity: item?.quantity || 1,
+    })),
+  })
+
   /**
    * Submit the checkout form.
    * @param {Object} params
@@ -74,7 +91,18 @@ export function useCheckoutSubmit() {
     try {
       setIsSubmitting(true)
       const payload = buildOrderPayload(form, items, appliedPoints)
+      const chatbotAttributions = chatbotService.getCheckoutAttributions()
       const savedOrder = await orderService.create(payload)
+
+      if (chatbotAttributions.length > 0) {
+        const primaryAttribution = chatbotAttributions[0]
+        await chatbotService.sendFeedbackEvent({
+          sessionId: primaryAttribution.sessionId,
+          eventType: 'checkout_submit',
+          sourceMessageId: primaryAttribution.sourceMessageId,
+          metadata: buildAttributionMetadata(items, form, savedOrder, chatbotAttributions),
+        })
+      }
 
       // If VNPAY, redirect to VNPay payment page
       if (form.paymentMethod === 'VNPAY') {
@@ -85,7 +113,21 @@ export function useCheckoutSubmit() {
 
       // COD or other methods: clear cart and go to order detail page
       await clearCart()
+<<<<<<< HEAD
       navigate(`/orders/${savedOrder.id}?from=cod`, { replace: true })
+=======
+      if (chatbotAttributions.length > 0) {
+        const primaryAttribution = chatbotAttributions[0]
+        await chatbotService.sendFeedbackEvent({
+          sessionId: primaryAttribution.sessionId,
+          eventType: 'order_success',
+          sourceMessageId: primaryAttribution.sourceMessageId,
+          metadata: buildAttributionMetadata(items, form, savedOrder, chatbotAttributions),
+        })
+        chatbotService.clearCheckoutAttributions()
+      }
+      navigate(`/orders/${savedOrder.id}?from=payment`, { replace: true })
+>>>>>>> 8ccf7462979161fd5856974a61fdbce9f9d55be0
     } catch (err) {
       console.error('Submit order failed:', err)
       alert(err?.message || 'Tạo đơn hàng thất bại. Vui lòng thử lại.')

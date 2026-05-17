@@ -1,6 +1,15 @@
 import axios from 'axios';
 import { API_CONFIG } from '@/config/api.config';
 
+const AUTH_CLEARED_EVENT = 'auth:cleared';
+
+function clearAuthSession() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('userInfo');
+  window.dispatchEvent(new Event(AUTH_CLEARED_EVENT));
+}
+
 const api = axios.create({
   baseURL: API_CONFIG.BASE_URL,
   timeout: API_CONFIG.TIMEOUT,

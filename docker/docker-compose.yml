@@ -36,20 +36,6 @@ services:
       timeout: 3s
       retries: 5
 
-  mongo:
-    image: mongo:7.0
-    container_name: fashion_mongo
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   kafka:
     image: confluentinc/cp-kafka:7.6.1
     container_name: fashion_kafka
@@ -231,15 +217,13 @@ services:
     restart: unless-stopped
     environment:
       - SERVER_PORT=8086
-      - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/fashion_review_db
+      - SPRING_CLOUD_CONFIG_ENABLED=false
+      - SPRING_DATA_MONGODB_URI=${REVIEW_MONGODB_URI:-mongodb+srv://monimal1:huytran123@monimal1.meiqp1v.mongodb.net/fashion_review_db?retryWrites=true&w=majority&appName=monimal1}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
-      - SPRING_CLOUD_CONFIG_ENABLED=false
+
       - ORDER_SERVICE_URL=http://order-service:8084
       - PROMOTION_SERVICE_URL=http://promotion-service:8085
-    depends_on:
-      mongo:
-        condition: service_healthy
 
   chatbot-service:
     build:
@@ -249,20 +233,19 @@ services:
     restart: unless-stopped
     environment:
       - SERVER_PORT=8087
-      - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/fashion_chatbot_db
-      - OLLAMA_API_KEY=${OLLAMA_API_KEY:?OLLAMA_API_KEY is required}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434/v1}
+      - SPRING_CLOUD_CONFIG_ENABLED=false
+      - SPRING_DATA_MONGODB_URI=${CHATBOT_MONGODB_URI:-mongodb+srv://monimal1:huytran123@monimal1.meiqp1v.mongodb.net/fashion_chatbot_db?retryWrites=true&w=majority&appName=monimal1}
+      - AI_API_KEY=${AI_API_KEY:?AI_API_KEY is required}
+      - AI_MODEL=${AI_MODEL:-deepseek-3.2}
+      - AI_BASE_URL=${AI_BASE_URL:-https://llm.chiasegpu.vn/v1}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
-      - SPRING_CLOUD_CONFIG_ENABLED=false
+
       - PRODUCT_SERVICE_URL=http://product-service:8082
       - PROMOTION_SERVICE_URL=http://promotion-service:8085
       - ORDER_SERVICE_URL=http://order-service:8084
       - CART_SERVICE_URL=http://cart-service:8083
-    depends_on:
-      mongo:
-        condition: service_healthy
+      - REVIEW_SERVICE_URL=http://review-service:8086
 
   # ── Kong Gateway (replaces Spring Cloud API Gateway) ─────────────────────
   # DB-less mode: all config loaded from kong.yml declarative file.
@@ -302,7 +285,6 @@ services:
     depends_on:
       - mysql
       - redis
-      - mongo
       # - user-service
       # - product-service
       # - cart-service
@@ -314,5 +296,4 @@ services:
 volumes:
   mysql_data:
   redis_data:
-  mongo_data:
   kafka_data:

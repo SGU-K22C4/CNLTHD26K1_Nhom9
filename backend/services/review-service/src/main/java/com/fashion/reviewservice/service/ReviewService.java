@@ -16,7 +16,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -102,7 +102,9 @@ public class ReviewService {
             throw new IllegalArgumentException("Bạn đã đánh giá sản phẩm này trong đơn hàng đã chọn");
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        // Use Instant so MongoDB BSON Date maps directly without reflective access
+        // into java.time.LocalDateTime on Java 21+.
+        Instant now = Instant.now();
         Review review = Review.builder()
                 .reviewId(UUID.randomUUID().toString())
                 .userId(normalizedUserId)

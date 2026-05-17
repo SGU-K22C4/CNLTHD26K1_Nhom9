@@ -1,7 +1,8 @@
-import { createContext, useState, useCallback } from 'react';
+import { createContext, useState, useCallback, useEffect } from 'react';
 import { authService } from '../services/authService';
 
 const AuthContext = createContext(null);
+const AUTH_CLEARED_EVENT = 'auth:cleared';
 
 function getStoredUser() {
     try {

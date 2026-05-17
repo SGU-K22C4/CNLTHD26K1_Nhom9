@@ -91,14 +91,20 @@ public class OutfitRuleEngineImpl implements OutfitRuleEngine {
         if (normalized.contains("di lam") || normalized.contains("cong so")) {
             queries.add("áo sơ mi");
             queries.add("quần tây");
+            queries.add("blazer");
+            queries.add("chân váy midi");
         }
         if (normalized.contains("di tiec") || normalized.contains("su kien")) {
             queries.add("đầm");
             queries.add("áo khoác");
+            queries.add("áo kiểu");
+            queries.add("chân váy midi");
         }
         if (normalized.contains("du lich") || normalized.contains("di choi")) {
             queries.add("áo phông");
             queries.add("quần jeans");
+            queries.add("linen");
+            queries.add("áo khoác nhẹ");
         }
     }
 
@@ -106,13 +112,21 @@ public class OutfitRuleEngineImpl implements OutfitRuleEngine {
         if (normalized.contains("thanh lich") || normalized.contains("elegant")) {
             queries.add("áo sơ mi");
             queries.add("đầm");
+            queries.add("blazer");
         }
         if (normalized.contains("casual") || normalized.contains("thoai mai")) {
             queries.add("áo phông");
             queries.add("jeans");
+            queries.add("linen");
         }
         if (normalized.contains("sporty") || normalized.contains("the thao")) {
             queries.add("hoodie");
+            queries.add("áo thun");
+        }
+        if (normalized.contains("minimal") || normalized.contains("basic")) {
+            queries.add("áo sơ mi");
+            queries.add("áo thun");
+            queries.add("quần tây");
         }
     }
 }

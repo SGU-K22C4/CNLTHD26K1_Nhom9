@@ -572,8 +572,8 @@ spec:
               value: "8086"
             - name: SPRING_DATA_MONGODB_URI
               valueFrom:
-                configMapKeyRef:
-                  name: fashion-config
+                secretKeyRef:
+                  name: fashion-secrets
                   key: REVIEW_MONGODB_URI
             - name: JWT_SECRET
               valueFrom:
@@ -659,24 +659,24 @@ spec:
               value: "8087"
             - name: SPRING_DATA_MONGODB_URI
               valueFrom:
-                configMapKeyRef:
-                  name: fashion-config
+                secretKeyRef:
+                  name: fashion-secrets
                   key: CHATBOT_MONGODB_URI
-            - name: OLLAMA_API_KEY
+            - name: AI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: fashion-secrets
-                  key: OLLAMA_API_KEY
-            - name: OLLAMA_MODEL
+                  key: AI_API_KEY
+            - name: AI_MODEL
               valueFrom:
                 configMapKeyRef:
                   name: fashion-config
-                  key: OLLAMA_MODEL
-            - name: OLLAMA_BASE_URL
+                  key: AI_MODEL
+            - name: AI_BASE_URL
               valueFrom:
                 configMapKeyRef:
                   name: fashion-config
-                  key: OLLAMA_BASE_URL
+                  key: AI_BASE_URL
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
@@ -702,6 +702,11 @@ spec:
                 configMapKeyRef:
                   name: fashion-config
                   key: CART_SERVICE_URL
+            - name: REVIEW_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fashion-config
+                  key: REVIEW_SERVICE_URL
             - name: SPRING_CLOUD_CONFIG_ENABLED
               value: "false"
             - name: JAVA_OPTS

@@ -92,7 +92,28 @@ public class IntentClassifierServiceImpl implements IntentClassifierService {
             return new IntentScore(ASK_PROMOTION, 0.9d);
         }
 
-        // 4. Size — CHỈ khi có keyword ĐẶC THÙ về số đo
+        // 4. Wishlist
+        if (containsAnyWord(normalizedMessage,
+                "wishlist", "yeu thich", "da luu", "sp da luu", "san pham da luu",
+                "trong wishlist", "danh sach yeu thich")) {
+            return new IntentScore(WISHLIST_RECOMMENDATION, 0.93d);
+        }
+
+        // 5. Loyalty / tri ân
+        if (containsAnyWord(normalizedMessage,
+                "diem thuong", "diem tich luy", "loyalty", "hang thanh vien",
+                "quyen loi thanh vien", "tri an", "member", "vip")) {
+            return new IntentScore(LOYALTY_BENEFIT, 0.91d);
+        }
+
+        boolean hasFashionKeyword = containsAnyWord(normalizedMessage,
+                "ao", "quan", "vay", "dam", "giay", "tui", "khoac", "so mi", "thun", "jean", "polo");
+        boolean hasExplicitSizeSelection = normalizedMessage.matches(".*\\bsize\\s*(xs|s|m|l|xl|xxl|\\d{2})\\b.*");
+        if (hasFashionKeyword && hasExplicitSizeSelection) {
+            return new IntentScore(SEARCH_PRODUCT, 0.9d);
+        }
+
+        // 6. Size — CHỈ khi có keyword ĐẶC THÙ về số đo
         boolean hasSizeKeyword = containsAnyWord(normalizedMessage,
                 "size", "so do", "vong nguc", "vong eo", "vong hong", "can nang", "chieu cao");
         boolean hasMeasurement = normalizedMessage.matches(".*\\d+\\s*(cm|kg|m\\d).*")
@@ -101,13 +122,13 @@ public class IntentClassifierServiceImpl implements IntentClassifierService {
             return new IntentScore(CONSULT_SIZE, 0.88d);
         }
 
-        // 5. Outfit theo mùa / dịp
+        // 7. Outfit theo mùa / dịp
         if (containsAnyWord(normalizedMessage,
                 "outfit", "phoi do", "mua he", "mua dong", "mua thu", "mua xuan", "trend", "di lam", "cong so", "di tiec", "su kien")) {
             return new IntentScore(CONSULT_SEASON, 0.86d);
         }
 
-        // 6. Tìm sản phẩm — keyword các loại đồ thời trang
+        // 8. Tìm sản phẩm — keyword các loại đồ thời trang
         if (containsAnyWord(normalizedMessage,
                 "tim", "co ban", "san pham", "ao", "quan", "vay", "dam", "giay",
                 "tui", "non", "mu", "khoac", "so mi", "thun", "jean", "con hang",
@@ -115,7 +136,7 @@ public class IntentClassifierServiceImpl implements IntentClassifierService {
             return new IntentScore(SEARCH_PRODUCT, 0.85d);
         }
 
-        // 7. Chào hỏi / cảm ơn / tạm biệt
+        // 9. Chào hỏi / cảm ơn / tạm biệt
         if (containsAnyWord(normalizedMessage,
                 "xin chao", "chao ban", "hello", "hi", "hey",
                 "cam on", "thank", "thanks",
@@ -228,6 +249,28 @@ public class IntentClassifierServiceImpl implements IntentClassifierService {
                     .createdAt(Instant.now())
                     .build(),
                 IntentTrainingData.builder()
+                    .intentName(WISHLIST_RECOMMENDATION)
+                    .examples(List.of(
+                        "trong wishlist cua toi co gi",
+                        "san pham toi da luu",
+                        "wishlist cua toi",
+                        "goi y theo wishlist"
+                    ))
+                    .responseTemplate("Mình sẽ mở wishlist và chọn giúp bạn các mẫu đáng chú ý.")
+                    .createdAt(Instant.now())
+                    .build(),
+                IntentTrainingData.builder()
+                    .intentName(LOYALTY_BENEFIT)
+                    .examples(List.of(
+                        "toi con bao nhieu diem",
+                        "hang thanh vien cua toi",
+                        "quyen loi loyalty",
+                        "diem thuong cua toi"
+                    ))
+                    .responseTemplate("Mình sẽ kiểm tra điểm thưởng và quyền lợi thành viên cho bạn.")
+                    .createdAt(Instant.now())
+                    .build(),
+                IntentTrainingData.builder()
                     .intentName(SEARCH_PRODUCT)
                     .examples(List.of(
                         "tim ao khoac trang",
@@ -312,6 +355,8 @@ public class IntentClassifierServiceImpl implements IntentClassifierService {
         defaults.put(CONSULT_SIZE, List.of("tu van size", "size nao vua", "so do co the"));
         defaults.put(CONSULT_SEASON, List.of("goi y theo mua", "phoi do", "outfit di lam", "trend"));
         defaults.put(ASK_PROMOTION, List.of("khuyen mai", "giam gia", "coupon", "deal"));
+        defaults.put(WISHLIST_RECOMMENDATION, List.of("wishlist cua toi", "trong wishlist co gi", "san pham da luu", "do yeu thich"));
+        defaults.put(LOYALTY_BENEFIT, List.of("diem thuong", "hang thanh vien", "loyalty", "quyen loi vip"));
         defaults.put(SEARCH_PRODUCT, List.of("tim ao", "co ban quan", "san pham", "dam du tiec", "ao khoac"));
         defaults.put(CHECK_ORDER, List.of("kiem tra don", "don hang", "trang thai don", "giao hang", "theo doi don"));
         defaults.put(GREETING, List.of("xin chao", "hello", "cam on", "ban la ai", "tam biet"));

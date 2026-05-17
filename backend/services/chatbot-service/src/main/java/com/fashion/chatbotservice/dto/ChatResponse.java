@@ -34,6 +34,7 @@ public class ChatResponse {
         private String productId;
         private String name;
         private String category;
+        private String categoryGender;
         private String imageUrl;
         private String link;
         private String price;

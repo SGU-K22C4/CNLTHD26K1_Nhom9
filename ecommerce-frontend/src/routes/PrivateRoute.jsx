@@ -1,5 +1,4 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { useAuth } from '../modules/auth/hooks/useAuth';
 
 /**
  * PrivateRoute — Chỉ user đã đăng nhập mới vào được.
@@ -9,11 +8,10 @@ import { useAuth } from '../modules/auth/hooks/useAuth';
  *   2. <PrivateRoute><CartPage /></PrivateRoute>                              (Children pattern)
  */
 export default function PrivateRoute({ children }) {
-  const { user } = useAuth();
   const location = useLocation();
   const hasAccessToken = Boolean(localStorage.getItem('accessToken'));
 
-  if (!user && !hasAccessToken) {
+  if (!hasAccessToken) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
@@ -26,10 +24,9 @@ export default function PrivateRoute({ children }) {
  * Nếu đã đăng nhập mà cố vào, đá về trang chủ.
  */
 export function GuestOnlyRoute() {
-  const { user } = useAuth();
   const hasAccessToken = Boolean(localStorage.getItem('accessToken'));
 
-  if (user || hasAccessToken) {
+  if (hasAccessToken) {
     return <Navigate to="/" replace />;
   }
 

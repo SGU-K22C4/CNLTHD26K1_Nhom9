@@ -12,12 +12,19 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.io.IOException;
 import java.util.Collections;
 
 @Component
 public class KongHeaderAuthFilter extends OncePerRequestFilter {
+
+    @Value("${security.internal.caller:chatbot-service}")
+    private String trustedInternalCaller;
+
+    @Value("${security.internal.shared-secret:local-chatbot-internal-secret}")
+    private String trustedInternalSharedSecret;
 
     @Override
     protected void doFilterInternal(
@@ -29,6 +36,8 @@ public class KongHeaderAuthFilter extends OncePerRequestFilter {
         String userId = request.getHeader("X-User-Id");
         String userRole = request.getHeader("X-User-Role");
         String username = request.getHeader("X-Consumer-Username");
+        String internalCaller = request.getHeader("X-Internal-Caller");
+        String internalAuth = request.getHeader("X-Internal-Auth");
 
         // 2. Chặn Request nội bộ: Nếu các context Header tồn tại thì ta cấp quyền cho
         // User
@@ -42,6 +51,19 @@ public class KongHeaderAuthFilter extends OncePerRequestFilter {
             // suất cực lớn)
             UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                     username, null, Collections.singletonList(authority));
+
+            authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(authToken);
+        }
+
+        // Internal trusted caller path for chatbot-service -> user-service.
+        if (userId != null
+                && trustedInternalCaller.equals(internalCaller)
+                && trustedInternalSharedSecret.equals(internalAuth)
+                && SecurityContextHolder.getContext().getAuthentication() == null) {
+
+            UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                    userId, null, Collections.singletonList(new SimpleGrantedAuthority("ROLE_INTERNAL_SERVICE")));
 
             authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authToken);

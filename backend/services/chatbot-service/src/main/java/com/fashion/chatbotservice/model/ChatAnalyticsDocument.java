@@ -43,6 +43,12 @@ public class ChatAnalyticsDocument {
     private String intent;
     private double confidence;
 
+    private String eventType;
+    private String sourceMessageId;
+    private String productId;
+    private String productName;
+    private Map<String, Object> metadata;
+
     private List<String> toolsCalled;
     private Map<String, Long> toolDurations;
 

@@ -41,3 +41,6 @@ __pycache__/
 *.swp
 *.swo
 docker/.env
+
+k8s/fashion-microservices-kubeconfig.yaml
+backend/common/Local Disk (C) - Shortcut.lnk

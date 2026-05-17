@@ -57,7 +57,6 @@ public class Order {
 
     private String couponCode;
 
-    // Shipping info
     private String recipientName;
     private String recipientPhone;
     private String shippingAddress;
@@ -70,14 +69,10 @@ public class Order {
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
     @Builder.Default
-    private PaymentStatus paymentStatus = PaymentStatus.PENDING;
+    private PaymentStatus paymentStatus = PaymentStatus.UNPAID;
 
     private String note;
 
-    /**
-     * Saga latch: tracks inventory reservation result independently of order status.
-     * null = result not yet received, true = reserved successfully, false = reservation failed.
-     */
     @Column(name = "inventory_reserved")
     private Boolean inventoryReserved;
 
@@ -102,6 +97,6 @@ public class Order {
     }
 
     public enum PaymentStatus {
-        PENDING, PAID, FAILED, REFUNDED
+        UNPAID, PENDING, PAID, FAILED, REFUNDED
     }
 }

@@ -21,6 +21,8 @@ public class UpdateProfileRequest {
     @Size(max = 20)
     private String phone;
 
+    private Integer gender;
+
     /**
      * Frontend profile form currently submits firstName/lastName separately,
      * while older clients may still send fullName. Accept both shapes.

@@ -61,6 +61,26 @@ public class ProductController {
         return ResponseEntity.ok(productService.getById(id));
     }
 
+    @GetMapping("/admin/list")
+    public ResponseEntity<Page<ProductResponse>> getAdminProducts(
+            @RequestHeader("X-User-Role") String userRole,
+            @RequestParam(required = false) String categoryId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir
+    ) {
+        assertAdminRole(userRole);
+        Sort sort = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
+        return ResponseEntity.ok(
+                productService.getAdminProducts(categoryId, search, minPrice, maxPrice, status, PageRequest.of(page, size, sort))
+        );
+    }
+
     @PostMapping
     public ResponseEntity<ProductResponse> create(
             @RequestHeader("X-User-Role") String userRole,

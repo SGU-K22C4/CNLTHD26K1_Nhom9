@@ -123,7 +123,7 @@ export function useCheckoutSubmit() {
         })
         chatbotService.clearCheckoutAttributions()
       }
-      navigate(`/orders/${savedOrder.id}?from=payment`, { replace: true })
+      navigate(`/orders/${savedOrder.id}?from=cod`, { replace: true })
     } catch (err) {
       console.error('Submit order failed:', err)
       alert(err?.message || 'Tạo đơn hàng thất bại. Vui lòng thử lại.')

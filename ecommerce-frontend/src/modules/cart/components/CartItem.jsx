@@ -22,7 +22,13 @@ export default function CartItem({ item, onRemove, onUpdateQuantity }) {
 
       {/* LEFT — product image */}
       <div className="w-[80px] shrink-0 overflow-hidden bg-gray-100">
-        <img src={image} alt={name} className="w-full h-full object-cover" />
+        {image ? (
+          <img src={image} alt={name} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full min-h-[80px] flex items-center justify-center text-[10px] text-gray-400">
+            No image
+          </div>
+        )}
       </div>
 
       {/* RIGHT — all info, price, quantity */}

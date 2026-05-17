@@ -4,6 +4,7 @@ import com.fashion.userservice.dto.request.AddressRequest;
 import com.fashion.userservice.dto.request.ChangePasswordRequest;
 import com.fashion.userservice.dto.request.UpdateProfileRequest;
 import com.fashion.userservice.dto.response.AddressResponse;
+import com.fashion.userservice.dto.response.AdminUserResponse;
 import com.fashion.userservice.dto.response.UserProfileResponse;
 import com.fashion.userservice.entity.Address;
 import com.fashion.userservice.entity.User;
@@ -11,11 +12,16 @@ import com.fashion.userservice.exception.ResourceNotFoundException;
 import com.fashion.userservice.repository.AddressRepository;
 import com.fashion.userservice.repository.RefreshTokenRepository;
 import com.fashion.userservice.repository.UserRepository;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -32,11 +38,47 @@ public class UserService {
         return toProfileResponse(user);
     }
 
+    @Transactional(readOnly = true)
+    public Page<AdminUserResponse> getAdminUsers(String keyword, String status, String role, Pageable pageable) {
+        if (status != null && !status.isBlank() && !"active".equalsIgnoreCase(status.trim())) {
+            return Page.empty(pageable);
+        }
+
+        Specification<User> specification = (root, query, criteriaBuilder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            if (keyword != null && !keyword.isBlank()) {
+                String likeKeyword = "%" + keyword.trim().toLowerCase() + "%";
+                predicates.add(criteriaBuilder.or(
+                        criteriaBuilder.like(criteriaBuilder.lower(root.get("email")), likeKeyword),
+                        criteriaBuilder.like(criteriaBuilder.lower(root.get("fullName")), likeKeyword),
+                        criteriaBuilder.like(criteriaBuilder.lower(root.get("phone")), likeKeyword)
+                ));
+            }
+
+            if (role != null && !role.isBlank()) {
+                try {
+                    User.Role parsedRole = User.Role.valueOf(role.trim().toUpperCase());
+                    predicates.add(criteriaBuilder.equal(root.get("role"), parsedRole));
+                } catch (IllegalArgumentException ignored) {
+                    return criteriaBuilder.disjunction();
+                }
+            }
+
+            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+        };
+
+        return userRepository.findAll(specification, pageable).map(this::toAdminUserResponse);
+    }
+
     @Transactional
     public UserProfileResponse updateProfile(String userId, UpdateProfileRequest request) {
         User user = findUserById(userId);
         user.setFullName(request.resolveFullName());
         user.setPhone(request.resolvePhone());
+        if (request.getGender() != null) {
+            user.setGender(request.getGender());
+        }
         userRepository.save(user);
         return toProfileResponse(user);
     }
@@ -55,8 +97,6 @@ public class UserService {
         refreshTokenRepository.revokeAllByUserId(userId);
     }
 
-    // ─── Address ───────────────────────────────────────────────────────────────
-
     public List<AddressResponse> getAddresses(String userId) {
         return addressRepository.findByUserId(userId)
                 .stream()
@@ -68,7 +108,6 @@ public class UserService {
     public AddressResponse addAddress(String userId, AddressRequest request) {
         User user = findUserById(userId);
 
-        // If first address, set as default
         boolean isFirst = addressRepository.countByUserId(userId) == 0;
         if (request.isDefault() || isFirst) {
             clearDefaultAddresses(userId);
@@ -114,8 +153,6 @@ public class UserService {
         addressRepository.delete(address);
     }
 
-    // ─── Private helpers ───────────────────────────────────────────────────────
-
     private User findUserById(String userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
@@ -139,13 +176,30 @@ public class UserService {
                 .phoneNumber(user.getPhone())
                 .avatarUrl(user.getAvatar())
                 .role(user.getRole().name())
+                .gender(user.getGender())
                 .build();
     }
 
-    /**
-     * The database stores a single full_name column, but the storefront profile
-     * screen edits first and last name separately.
-     */
+    private AdminUserResponse toAdminUserResponse(User user) {
+        String username = user.getEmail() != null && user.getEmail().contains("@")
+                ? user.getEmail().substring(0, user.getEmail().indexOf('@'))
+                : user.getEmail();
+
+        return AdminUserResponse.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .fullName(user.getFullName())
+                .username(username)
+                .phoneNumber(user.getPhone())
+                .role(user.getRole().name())
+                .status("Active")
+                .enabled(true)
+                .isBlocked(false)
+                .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
+                .build();
+    }
+
     private String[] splitFullName(String fullName) {
         if (fullName == null || fullName.isBlank()) {
             return new String[]{"", ""};

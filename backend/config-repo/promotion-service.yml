@@ -28,3 +28,10 @@ loyalty:
   point-to-vnd: ${LOYALTY_POINT_TO_VND:100}
   order-point-percent: ${LOYALTY_ORDER_POINT_PERCENT:0.01}
   review-bonus-points: ${LOYALTY_REVIEW_BONUS_POINTS:10}
+
+app:
+  kafka:
+    saga:
+      retry-attempts: ${SAGA_RETRY_ATTEMPTS:4}
+      retry-delay-ms: ${SAGA_RETRY_DELAY_MS:1000}
+      retry-multiplier: ${SAGA_RETRY_MULTIPLIER:2.0}

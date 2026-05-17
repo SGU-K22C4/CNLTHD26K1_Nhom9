@@ -112,6 +112,9 @@ services:
       - MAIL_FROM=${MAIL_FROM:-no-reply@localhost}
       - EMAIL_VERIFICATION_REQUIRED=${EMAIL_VERIFICATION_REQUIRED:-true}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - ADMIN_BOOTSTRAP_EMAIL=${ADMIN_BOOTSTRAP_EMAIL:-}
+      - ADMIN_BOOTSTRAP_PASSWORD=${ADMIN_BOOTSTRAP_PASSWORD:-}
+      - ADMIN_BOOTSTRAP_FULL_NAME=${ADMIN_BOOTSTRAP_FULL_NAME:-System Admin}
     depends_on:
       mysql:
         condition: service_healthy

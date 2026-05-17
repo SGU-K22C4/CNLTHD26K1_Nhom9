@@ -2,6 +2,7 @@ package com.fashion.productservice.saga;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fashion.common.event.InventoryReservationResultEvent;
+import com.fashion.common.event.OrderCancelledEvent;
 import com.fashion.common.event.OrderCreatedEvent;
 import com.fashion.common.event.OrderItemEvent;
 import com.fashion.common.event.SagaTopics;
@@ -87,6 +88,50 @@ public class InventorySagaConsumer {
                 .build());
     }
 
+    // ── ORDER_CANCELLED → Restore inventory ─────────────────────────────────
+    @RetryableTopic(
+            attempts = "${app.kafka.saga.retry-attempts:4}",
+            backoff = @Backoff(
+                    delayExpression = "${app.kafka.saga.retry-delay-ms:1000}",
+                    multiplierExpression = "${app.kafka.saga.retry-multiplier:2.0}"
+            ),
+            retryTopicSuffix = ".retry",
+            dltTopicSuffix = ".dlt",
+            topicSuffixingStrategy = TopicSuffixingStrategy.SUFFIX_WITH_INDEX_VALUE,
+            autoCreateTopics = "true"
+    )
+    @KafkaListener(topics = SagaTopics.ORDER_CANCELLED, groupId = "${spring.application.name}-inventory-restore")
+    @Transactional
+    public void handleOrderCancelled(String payload) {
+        OrderCancelledEvent event = parseOrderCancelledEvent(payload);
+        if (event.getOrderId() == null) {
+            log.warn("Ignoring ORDER_CANCELLED event with null orderId");
+            return;
+        }
+        if (event.getItems() == null || event.getItems().isEmpty()) {
+            log.info("ORDER_CANCELLED orderId={} has no items, skipping inventory restore", event.getOrderId());
+            return;
+        }
+
+        log.info("Restoring inventory for cancelled orderId={}", event.getOrderId());
+
+        for (OrderItemEvent item : event.getItems()) {
+            VariantSize size = findVariantSizeForUpdate(item);
+            if (size == null) {
+                log.warn("Cannot restore inventory: variant size not found for productId={}, color={}, size={}",
+                        item.getProductId(), item.getColor(), item.getSize());
+                continue;
+            }
+            size.setQuantity(size.getQuantity() + item.getQuantity());
+            if (size.getQuantity() > 0) {
+                size.setStatus("Con hang");
+            }
+            variantSizeSagaRepository.save(size);
+        }
+
+        log.info("Inventory restored successfully for cancelled orderId={}", event.getOrderId());
+    }
+
     private VariantSize findVariantSizeForUpdate(OrderItemEvent item) {
         String color = item.getColor() == null ? "" : item.getColor().trim();
         String size = item.getSize() == null ? "" : item.getSize().trim();
@@ -134,4 +179,13 @@ public class InventorySagaConsumer {
             throw new IllegalStateException("Invalid OrderCreatedEvent payload", e);
         }
     }
+
+    private OrderCancelledEvent parseOrderCancelledEvent(String payload) {
+        try {
+            return objectMapper.readValue(payload, OrderCancelledEvent.class);
+        } catch (Exception e) {
+            throw new IllegalStateException("Invalid OrderCancelledEvent payload", e);
+        }
+    }
 }
+

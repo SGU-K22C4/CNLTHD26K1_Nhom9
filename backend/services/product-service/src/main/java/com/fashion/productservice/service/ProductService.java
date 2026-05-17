@@ -13,6 +13,11 @@ public interface ProductService {
                                  BigDecimal minPrice, BigDecimal maxPrice,
                                  Pageable pageable);
 
+    Page<ProductResponse> getAdminProducts(String categoryId, String search,
+                                           BigDecimal minPrice, BigDecimal maxPrice,
+                                           String status,
+                                           Pageable pageable);
+
     ProductResponse getById(String id);
 
     Page<ProductResponse> getFeatured(Pageable pageable);

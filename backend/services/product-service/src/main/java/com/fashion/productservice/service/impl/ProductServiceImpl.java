@@ -40,6 +40,16 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
+    public Page<ProductResponse> getAdminProducts(String categoryId, String search,
+            BigDecimal minPrice, BigDecimal maxPrice,
+            String status,
+            Pageable pageable) {
+        return productRepository.searchAdmin(categoryId, search, minPrice, maxPrice, status, pageable)
+                .map(productMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public ProductResponse getById(String id) {
         return productRepository.findById(id)
                 .map(productMapper::toResponse)

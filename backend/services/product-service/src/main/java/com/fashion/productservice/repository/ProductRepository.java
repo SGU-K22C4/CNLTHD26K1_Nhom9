@@ -23,7 +23,7 @@ public interface ProductRepository extends JpaRepository<Product, String> {
                 SELECT DISTINCT p FROM Product p
                 WHERE p.visible = true
                     AND (:categoryId IS NULL OR p.category.id = :categoryId)
-          AND (:search IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%')))
+                    AND (:search IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%')))
                     AND (:minPrice IS NULL OR EXISTS (
                                 SELECT v1.id FROM ProductVariant v1
                                 WHERE v1.product = p AND v1.price >= :minPrice
@@ -34,10 +34,46 @@ public interface ProductRepository extends JpaRepository<Product, String> {
                     ))
     """)
     Page<Product> search(
-                        @Param("categoryId") String categoryId,
+            @Param("categoryId") String categoryId,
             @Param("search") String search,
             @Param("minPrice") BigDecimal minPrice,
             @Param("maxPrice") BigDecimal maxPrice,
+            Pageable pageable
+    );
+
+    @Query("""
+                SELECT DISTINCT p FROM Product p
+                WHERE (:categoryId IS NULL OR p.category.id = :categoryId)
+                    AND (:search IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%')))
+                    AND (:minPrice IS NULL OR EXISTS (
+                                SELECT v1.id FROM ProductVariant v1
+                                WHERE v1.product = p AND v1.price >= :minPrice
+                    ))
+                    AND (:maxPrice IS NULL OR EXISTS (
+                                SELECT v2.id FROM ProductVariant v2
+                                WHERE v2.product = p AND v2.price <= :maxPrice
+                    ))
+                    AND (
+                        :status IS NULL
+                        OR (:status = 'Hidden' AND p.visible = false)
+                        OR (:status = 'Active' AND p.visible = true AND EXISTS (
+                                SELECT s1.id FROM VariantSize s1
+                                JOIN s1.variant v3
+                                WHERE v3.product = p AND s1.quantity > 0
+                        ))
+                        OR (:status = 'Out of stock' AND p.visible = true AND NOT EXISTS (
+                                SELECT s2.id FROM VariantSize s2
+                                JOIN s2.variant v4
+                                WHERE v4.product = p AND s2.quantity > 0
+                        ))
+                    )
+    """)
+    Page<Product> searchAdmin(
+            @Param("categoryId") String categoryId,
+            @Param("search") String search,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
+            @Param("status") String status,
             Pageable pageable
     );
 }

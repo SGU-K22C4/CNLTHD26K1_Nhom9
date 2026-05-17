@@ -4,7 +4,7 @@ import com.fashion.reviewservice.entity.Review;
 import lombok.Builder;
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,8 +24,8 @@ public class ReviewResponse {
     private List<String> images;
     private List<String> imageUrls;
     private boolean visible;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private Instant createdAt;
+    private Instant updatedAt;
 
     public static ReviewResponse from(Review review) {
         List<String> imageList = review.getImages() == null

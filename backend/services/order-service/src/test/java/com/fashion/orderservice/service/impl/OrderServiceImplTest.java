@@ -175,10 +175,10 @@ class OrderServiceImplTest {
         OrderResponse response = orderService.cancelOrder(1L, "user123");
 
         assertEquals("CANCELLED", response.getStatus());
-        assertEquals("user123", loyaltyServiceClient.lastRefundUserId);
-        assertEquals("1", loyaltyServiceClient.lastRefundOrderId);
         assertNotNull(sagaEventPublisher.cancelledEvent);
         assertEquals(1L, sagaEventPublisher.cancelledEvent.getOrderId());
+        assertEquals("user123", sagaEventPublisher.cancelledEvent.getUserId());
+        assertEquals(100, sagaEventPublisher.cancelledEvent.getUsedPoints());
     }
 
     @Test

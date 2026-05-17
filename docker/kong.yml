@@ -61,6 +61,14 @@ services:
           - name: jwt-auth
             config:
               jwt_secret: "${JWT_SECRET}"
+      - name: admin-user-route
+        paths:
+          - /api/v1/admin/users
+        strip_path: false
+        plugins:
+          - name: jwt-auth
+            config:
+              jwt_secret: "${JWT_SECRET}"
 
   - name: product-service
     url: http://product-service:8082
@@ -112,6 +120,14 @@ services:
       - name: order-route
         paths:
           - /api/v1/orders
+        strip_path: false
+        plugins:
+          - name: jwt-auth
+            config:
+              jwt_secret: "${JWT_SECRET}"
+      - name: admin-order-route
+        paths:
+          - /api/v1/admin/orders
         strip_path: false
         plugins:
           - name: jwt-auth
@@ -182,3 +198,7 @@ services:
           - name: jwt-auth
             config:
               jwt_secret: "${JWT_SECRET}"
+
+
+
+

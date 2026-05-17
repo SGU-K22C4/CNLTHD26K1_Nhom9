@@ -62,6 +62,7 @@ export default function OrderDetailPage() {
   const printRef = useRef(null)
 
   const isFromPayment = searchParams.get('from') === 'payment'
+  const isFromCod = searchParams.get('from') === 'cod'
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -85,6 +86,26 @@ export default function OrderDetailPage() {
     if (orderId) fetchOrder()
   }, [orderId])
 
+  // ── Smart Polling: tự động cập nhật trạng thái khi đơn hàng đang PENDING ──
+  useEffect(() => {
+    // Chỉ poll khi đơn hàng đang ở trạng thái PENDING
+    if (!order || order.status !== 'PENDING') return
+
+    const pollOrder = async () => {
+      try {
+        const data = /^\d+$/.test(orderId)
+          ? await orderService.getById(orderId)
+          : await orderService.getByOrderNumber(orderId)
+        setOrder(data)
+      } catch (err) {
+        console.error('Polling failed:', err)
+      }
+    }
+
+    const interval = setInterval(pollOrder, 10_000) // Mỗi 10 giây
+    return () => clearInterval(interval) // Dọn dẹp khi rời trang hoặc status đổi
+  }, [order?.status, orderId])
+
   // ── Countdown timer for cancel grace period ──
   useEffect(() => {
     if (!order?.createdAt) return
@@ -92,7 +113,10 @@ export default function OrderDetailPage() {
     if (!isCancellable) return
 
     const calcRemaining = () => {
-      const created = new Date(order.createdAt).getTime()
+      // Backend (Docker/UTC) trả về LocalDateTime không có timezone suffix.
+      // Thêm 'Z' để JavaScript hiểu đúng đây là giờ UTC.
+      const raw = order.createdAt
+      const created = new Date(raw.endsWith('Z') || raw.includes('+') ? raw : raw + 'Z').getTime()
       const deadline = created + CANCEL_GRACE_MINUTES * 60 * 1000
       return Math.max(0, Math.floor((deadline - Date.now()) / 1000))
     }
@@ -236,6 +260,17 @@ export default function OrderDetailPage() {
       <div className="max-w-[900px] mx-auto px-4 sm:px-6 py-8 sm:py-12 print-container">
 
         {/* ─── Payment Result Banner (only when returning from payment) ─── */}
+        {/* ─── COD Success Banner ─── */}
+        {isFromCod && (
+          <PaymentResultBanner
+            variant="success"
+            title="Đặt hàng thành công!"
+            message="Cảm ơn bạn đã mua sắm tại Modimal. Đơn hàng sẽ được thanh toán khi nhận hàng (COD)."
+            className="mb-8"
+          />
+        )}
+
+        {/* ─── VNPay Payment Result Banners ─── */}
         {isFromPayment && isPaidOrder && (
           <PaymentResultBanner
             variant="success"

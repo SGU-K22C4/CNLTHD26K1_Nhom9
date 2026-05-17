@@ -7,7 +7,6 @@ import com.fashion.common.event.OrderItemEvent;
 import com.fashion.common.event.PaymentResultEvent;
 import com.fashion.common.event.SagaTopics;
 import com.fashion.orderservice.entity.Order;
-import com.fashion.orderservice.entity.OrderItem;
 import com.fashion.orderservice.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,8 +32,6 @@ public class OrderSagaConsumer {
     private final OrderRepository orderRepository;
     private final SagaEventPublisher sagaEventPublisher;
 
-    // ── Inventory Reservation Result ─────────────────────────────────────────
-
     @RetryableTopic(
             attempts = "${app.kafka.saga.retry-attempts:4}",
             backoff = @Backoff(
@@ -53,43 +50,25 @@ public class OrderSagaConsumer {
         Order order = orderRepository.findById(event.getOrderId())
                 .orElseThrow(() -> new IllegalStateException("Order not found for inventory result: " + event.getOrderId()));
 
-        // Guard: already in terminal state
-        if (order.getStatus() == Order.OrderStatus.CANCELLED
-                || order.getStatus() == Order.OrderStatus.CONFIRMED) {
+        if (isTerminal(order.getStatus())) {
             log.info("Inventory result ignored for terminal orderId={} status={}", order.getId(), order.getStatus());
             return;
         }
 
         if (event.isSuccess()) {
             order.setInventoryReserved(true);
+            orderRepository.save(order);
+            return;
+        }
 
-            if (order.getPaymentMethod() == Order.PaymentMethod.COD) {
-                // COD: inventory OK → stay PENDING for 15-min grace period.
-                // A scheduled job will auto-confirm after the grace period expires.
-                log.info("COD order inventory reserved, staying PENDING for grace period orderId={}", order.getId());
-                orderRepository.save(order);
-            } else if (order.getPaymentStatus() == Order.PaymentStatus.PAID) {
-                // Payment arrived first and succeeded → now inventory OK → confirm
-                saveIfChanged(order, Order.OrderStatus.CONFIRMED, Order.PaymentStatus.PAID);
-            } else {
-                // Payment not yet arrived → stay PENDING, wait for payment
-                orderRepository.save(order);
-            }
+        order.setInventoryReserved(false);
+        if (order.getPaymentStatus() == Order.PaymentStatus.PAID) {
+            log.error("REFUND NEEDED: payment success but inventory failed orderId={}", order.getId());
+            saveIfChanged(order, Order.OrderStatus.CANCELLED, Order.PaymentStatus.PAID);
         } else {
-            order.setInventoryReserved(false);
-
-            if (order.getPaymentStatus() == Order.PaymentStatus.PAID) {
-                // Payment succeeded but no inventory → CANCEL (keep PAID for future refund)
-                log.error("REFUND NEEDED: payment success but inventory failed orderId={}", order.getId());
-                saveIfChanged(order, Order.OrderStatus.CANCELLED, Order.PaymentStatus.PAID);
-            } else {
-                // Payment not yet / failed → straight cancel
-                saveIfChanged(order, Order.OrderStatus.CANCELLED, Order.PaymentStatus.FAILED);
-            }
+            saveIfChanged(order, Order.OrderStatus.CANCELLED, resolveFailurePaymentStatus(order));
         }
     }
-
-    // ── Payment Result ───────────────────────────────────────────────────────
 
     @RetryableTopic(
             attempts = "${app.kafka.saga.retry-attempts:4}",
@@ -109,42 +88,33 @@ public class OrderSagaConsumer {
         Order order = orderRepository.findById(event.getOrderId())
                 .orElseThrow(() -> new IllegalStateException("Order not found for payment result: " + event.getOrderId()));
 
-        // COD orders don't go through payment flow
         if (order.getPaymentMethod() == Order.PaymentMethod.COD) {
             return;
         }
 
-        // Guard: already in terminal state
-        if (order.getStatus() == Order.OrderStatus.CANCELLED
-                || order.getStatus() == Order.OrderStatus.CONFIRMED) {
+        if (isTerminal(order.getStatus())) {
             log.info("Payment result ignored for terminal orderId={} status={}", order.getId(), order.getStatus());
             return;
         }
 
         if (event.isSuccess()) {
             if (Boolean.TRUE.equals(order.getInventoryReserved())) {
-                // Inventory already reserved → confirm
                 saveIfChanged(order, Order.OrderStatus.CONFIRMED, Order.PaymentStatus.PAID);
             } else if (Boolean.FALSE.equals(order.getInventoryReserved())) {
-                // Inventory already failed → cancel (keep PAID for refund tracking)
                 log.error("REFUND NEEDED: inventory already failed for paid orderId={}", order.getId());
                 saveIfChanged(order, Order.OrderStatus.CANCELLED, Order.PaymentStatus.PAID);
             } else {
-                // Inventory not yet arrived → set PAID, wait for inventory result
                 order.setPaymentStatus(Order.PaymentStatus.PAID);
                 orderRepository.save(order);
             }
-        } else {
-            // Payment failed
-            if (Boolean.TRUE.equals(order.getInventoryReserved())) {
-                // Inventory was reserved → need to rollback inventory
-                publishOrderCancelledEvent(order, "Payment failed, rollback inventory");
-            }
-            saveIfChanged(order, Order.OrderStatus.CANCELLED, Order.PaymentStatus.FAILED);
+            return;
         }
-    }
 
-    // ── DLT Handler ──────────────────────────────────────────────────────────
+        if (Boolean.TRUE.equals(order.getInventoryReserved())) {
+            publishOrderCancelledEvent(order, "Payment failed, rollback inventory");
+        }
+        saveIfChanged(order, Order.OrderStatus.CANCELLED, Order.PaymentStatus.FAILED);
+    }
 
     @DltHandler
     public void handleDltMessage(
@@ -161,8 +131,6 @@ public class OrderSagaConsumer {
         );
     }
 
-    // ── Private Helpers ──────────────────────────────────────────────────────
-
     private InventoryReservationResultEvent parseInventoryEvent(String payload) {
         try {
             return objectMapper.readValue(payload, InventoryReservationResultEvent.class);
@@ -177,6 +145,18 @@ public class OrderSagaConsumer {
         } catch (Exception e) {
             throw new IllegalStateException("Invalid PaymentResultEvent payload", e);
         }
+    }
+
+    private boolean isTerminal(Order.OrderStatus status) {
+        return status == Order.OrderStatus.CANCELLED
+                || status == Order.OrderStatus.DELIVERED
+                || status == Order.OrderStatus.RETURNED;
+    }
+
+    private Order.PaymentStatus resolveFailurePaymentStatus(Order order) {
+        return order.getPaymentMethod() == Order.PaymentMethod.COD
+                ? Order.PaymentStatus.UNPAID
+                : Order.PaymentStatus.FAILED;
     }
 
     private void saveIfChanged(Order order, Order.OrderStatus targetStatus, Order.PaymentStatus targetPaymentStatus) {

@@ -56,6 +56,10 @@ app:
     from: ${MAIL_FROM:${spring.mail.username}}
   auth:
     email-verification-required: ${EMAIL_VERIFICATION_REQUIRED:true}
+  bootstrap:
+    admin-email: ${ADMIN_BOOTSTRAP_EMAIL:}
+    admin-password: ${ADMIN_BOOTSTRAP_PASSWORD:}
+    admin-full-name: ${ADMIN_BOOTSTRAP_FULL_NAME:System Admin}
 
 logging:
   level:

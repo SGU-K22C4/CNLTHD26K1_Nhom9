@@ -149,7 +149,9 @@ jobs:
           if [ -n "$REQUESTED_IMAGE_TAG" ]; then
             echo "value=$REQUESTED_IMAGE_TAG" >> "$GITHUB_OUTPUT"
           else
-            echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            # Include the run number so reruns or follow-up deploys on the same commit
+            # always produce a distinct immutable tag that Kubernetes can observe.
+            echo "value=${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Setup Docker Buildx
@@ -205,7 +207,9 @@ jobs:
           if [ -n "$REQUESTED_IMAGE_TAG" ]; then
             echo "value=$REQUESTED_IMAGE_TAG" >> "$GITHUB_OUTPUT"
           else
-            echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            # Keep deploy and build on the same deterministic tag while still avoiding
+            # collisions when the same commit is rebuilt or redeployed later.
+            echo "value=${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Setup doctl

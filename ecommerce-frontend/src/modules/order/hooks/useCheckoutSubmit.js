@@ -113,9 +113,6 @@ export function useCheckoutSubmit() {
 
       // COD or other methods: clear cart and go to order detail page
       await clearCart()
-<<<<<<< HEAD
-      navigate(`/orders/${savedOrder.id}?from=cod`, { replace: true })
-=======
       if (chatbotAttributions.length > 0) {
         const primaryAttribution = chatbotAttributions[0]
         await chatbotService.sendFeedbackEvent({
@@ -126,8 +123,7 @@ export function useCheckoutSubmit() {
         })
         chatbotService.clearCheckoutAttributions()
       }
-      navigate(`/orders/${savedOrder.id}?from=payment`, { replace: true })
->>>>>>> 8ccf7462979161fd5856974a61fdbce9f9d55be0
+      navigate(`/orders/${savedOrder.id}?from=cod`, { replace: true })
     } catch (err) {
       console.error('Submit order failed:', err)
       alert(err?.message || 'Tạo đơn hàng thất bại. Vui lòng thử lại.')

@@ -17,7 +17,7 @@ public class ReviewSecurityConfig {
 
     private static final String[] PUBLIC_ENDPOINTS = {
             "/api/v1/reviews/product/**",
-            "/actuator/health"
+            "/actuator/**"
     };
 
     @Value("${security.internal.caller:chatbot-service}")
@@ -54,3 +54,4 @@ public class ReviewSecurityConfig {
         };
     }
 }
+

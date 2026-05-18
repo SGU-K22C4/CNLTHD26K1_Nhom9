@@ -18,7 +18,7 @@ import org.springframework.util.StringUtils;
 public class SecurityConfig {
 
     private static final String[] PUBLIC_ENDPOINTS = {
-            "/actuator/health"
+            "/actuator/**"
     };
 
     @Value("${security.internal.caller:chatbot-service}")
@@ -57,3 +57,4 @@ public class SecurityConfig {
         };
     }
 }
+

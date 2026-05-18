@@ -78,3 +78,13 @@ ai:
 
 server:
   port: ${SERVER_PORT:8087}
+
+# ── Monitoring (Prometheus + Actuator) ──
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}

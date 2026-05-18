@@ -223,8 +223,24 @@ public class ProfileEnrichmentServiceImpl implements ProfileEnrichmentService {
     }
 
     private void extractTargetGender(ChatSession.PreferenceProfile profile, String normalized) {
+        // Favor explicit shopping context words so "nam" / "nu" in natural sentences
+        // still update the target audience without overfitting unrelated text.
+        if (normalized.matches(".*\\b(nam|mens?|male)\\b.*")
+                && (normalized.contains("ao") || normalized.contains("quan") || normalized.contains("do")
+                        || normalized.contains("outfit") || normalized.contains("size") || normalized.contains("mac"))) {
+            profile.setTargetGender("male");
+            return;
+        }
+        if (normalized.matches(".*\\b(nu|womens?|female)\\b.*")
+                && (normalized.contains("ao") || normalized.contains("quan") || normalized.contains("do")
+                        || normalized.contains("outfit") || normalized.contains("size") || normalized.contains("mac")
+                        || normalized.contains("vay") || normalized.contains("dam"))) {
+            profile.setTargetGender("female");
+            return;
+        }
         if (normalized.contains("do nam") || normalized.contains("cho nam") || normalized.contains("ban trai")) {
             profile.setTargetGender("male");
+            return;
         }
         if (normalized.contains("do nu") || normalized.contains("cho nu") || normalized.contains("ban gai")) {
             profile.setTargetGender("female");

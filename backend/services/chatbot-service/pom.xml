@@ -15,7 +15,7 @@
     <name>chatbot-service</name>
 
     <properties>
-        <langchain4j.version>0.36.2</langchain4j.version>
+        <langchain4j.version>1.0.0-beta1</langchain4j.version>
     </properties>
 
     <dependencies>
@@ -26,6 +26,10 @@
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-mongodb</artifactId></dependency>
         <dependency><groupId>io.github.resilience4j</groupId><artifactId>resilience4j-spring-boot3</artifactId><version>2.2.0</version></dependency>
         <dependency><groupId>io.github.resilience4j</groupId><artifactId>resilience4j-reactor</artifactId><version>2.2.0</version></dependency>
+
+        <!-- Cache (Caffeine) — Phase 2A -->
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-cache</artifactId></dependency>
+        <dependency><groupId>com.github.ben-manes.caffeine</groupId><artifactId>caffeine</artifactId></dependency>
 
         <!-- LangChain4j -->
         <dependency>

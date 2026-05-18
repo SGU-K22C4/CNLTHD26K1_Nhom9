@@ -541,9 +541,8 @@ public class ChatbotServiceImpl implements ChatbotService {
             String llmReply = invokeAgentWithRetry(sessionId, enrichedMessage, session);
 
             if (llmReply == null || llmReply.isBlank()) {
-                log.warn("Agent liên tục lỗi cho session: {}. Chuyển sang chế độ Heuristic Fallback.", sessionId);
-                ChatResponse fallbackResponse = fallbackHandler.handle(sessionId, message, session, collector);
-                return fallbackResponse;
+                log.warn("Agent li??n t???c l???i cho session: {}. Ch??? ?????ng r??i v??? heuristic fallback ????? gi??? lu???ng h???i tho???i.", sessionId);
+                return executeHeuristicFallback(sessionId, message, session, collector);
             }
 
             // Layer 3: Backend Guardrail — validate LLM output against real data
@@ -559,7 +558,7 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     /**
-     * Retry agent call once on NullPointerException from LangChain4j.
+     * Retry agent call once on any exception (timeout, NPE, etc).
      * NPE occurs when DeepSeek returns tool_call with null content → corrupts
      * ChatMemory.
      * Fix: clear corrupted memory before retry so LangChain4j starts with a clean
@@ -568,26 +567,54 @@ public class ChatbotServiceImpl implements ChatbotService {
     private String invokeAgentWithRetry(String sessionId, String message, ChatSession session) {
         try {
             return fashionAgent.chat(sessionId, message);
-        } catch (NullPointerException npe) {
-            log.warn("Agent NPE for session {}, clearing corrupted memory and retrying. Cause: {}",
-                    sessionId, npe.getMessage());
-            // Retry with reduced context rebuilt from persisted state so one malformed
-            // tool call does not wipe the whole conversation flow.
-            agentConfig.clearSessionMemory(sessionId);
+        } catch (Exception e) {
+            boolean shouldResetMemory = shouldResetAgentMemory(e);
+            log.warn("Agent error ({}) for session {}, retrying with{} memory reset",
+                    e.getClass().getSimpleName(),
+                    sessionId,
+                    shouldResetMemory ? "" : "out",
+                    e);
+            // Ch??? reset memory khi stack trace cho th???y tool-calling ???? b??? corrupt.
+            // C??c l???i timeout/t???m th???i ph???i gi??? nguy??n session ????? tr??nh m???t ng??? c???nh.
+            if (shouldResetMemory) {
+                agentConfig.clearSessionMemory(sessionId);
+            }
             try {
-                Thread.sleep(300);
-                return fashionAgent.chat(sessionId, buildRecoveryRetryMessage(session, message));
+                Thread.sleep(1000); // Đợi 1 chút trước khi thử lại
+                String retryMessage = shouldResetMemory ? buildRecoveryRetryMessage(session, message) : message;
+                return fashionAgent.chat(sessionId, retryMessage);
             } catch (Throwable retryEx) {
-                log.error("Agent retry failed for session {} after memory clear: {}", sessionId, retryEx.getMessage());
+                log.error("Agent retry failed for session {} after memory clear", sessionId, retryEx);
                 return null; // Return null → will be caught upstream as empty reply
             }
         }
     }
 
+    private boolean shouldResetAgentMemory(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if ((current instanceof NullPointerException || current instanceof IllegalArgumentException)
+                    && containsStackFrame(current, "dev.langchain4j.service.tool.DefaultToolExecutor")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private boolean containsStackFrame(Throwable throwable, String className) {
+        for (StackTraceElement frame : throwable.getStackTrace()) {
+            if (className.equals(frame.getClassName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
-     * Chế độ Heuristic fallback: dùng IntentClassifier khi agent lỗi hoặc bị
+     * Ch??? ????? Heuristic fallback: d??ng IntentClassifier khi agent l???i ho???c b???
      * disable.
-     * Giờ đây sẽ gọi Tool thật thay vì trả câu tĩnh.
+     * Gi??? ????y s??? g???i Tool th???t thay v?? tr??? c??u t??nh.
      */
     private ChatResponse executeHeuristicFallback(String sessionId, String message,
             ChatSession session, ToolResultCollector collector) {
@@ -3023,3 +3050,4 @@ public class ChatbotServiceImpl implements ChatbotService {
         return value == null ? "" : String.valueOf(value).trim();
     }
 }
+

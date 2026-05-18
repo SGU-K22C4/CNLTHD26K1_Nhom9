@@ -906,3 +906,26 @@ Gioi han hien tai:
 - cac cau hoi size du ro nhu `cao/can nang + ao so mi/quan jean + S hay M` duoc short-circuit vao `SizeFitAdvisoryService`
 - `cold start` khong con chen vao nhung cau da ro la size-consulting
 - nhom cau hoi size co garment ro se uu tien tra loi theo rule thay vi de agent hoi lai loai do
+
+## 24. Khac phuc loi NullPointerException khi LLM tra ve Null hoac thieu doi so
+
+### Vấn đề (NPE trong LangChain4j)
+Khi LLM (như Gemini 2.5 hoặc DeepSeek) thực hiện Tool Calling (ví dụ: `suggestOutfit` hoặc `consultSizeTool`), đối với một số đối số không bắt buộc hoặc bị bỏ sót, model có thể điền giá trị `null` hoặc bỏ trống trường đó trong JSON.
+Khi LangChain4j nhận được request từ model và chạy qua `DefaultToolExecutor`, nó gọi phương thức `coerceArgument` để ép kiểu. Phương thức này không thể tự động xử lý giá trị `null` cho kiểu chuỗi dẫn đến lỗi `NullPointerException` (NPE) và làm crash toàn bộ request hội thoại của khách hàng.
+
+### Cách xử lý triệt để
+Thay vì sửa vá víu từng tool đơn lẻ, chúng ta đã triển khai một lớp giải pháp **chủ động ngăn chặn (Sanitization Interceptor)** ngay tại `FallbackChatLanguageModel` (lớp bọc duy nhất mà mọi LLM đi qua):
+1. **Đánh chặn phản hồi (Intercept Response)**: Kiểm tra nếu phản hồi của LLM chứa danh sách các `ToolExecutionRequest`.
+2. **Khử trùng tham số (Sanitize Arguments)**:
+   - Sử dụng Jackson `ObjectMapper` để parse chuỗi JSON arguments của từng Tool Call thành một `Map<String, Object>`.
+   - Duyệt qua map và thay thế toàn bộ giá trị `null` bằng chuỗi rỗng `""` (chuỗi an toàn).
+   - Re-serialize map đã được làm sạch về dạng chuỗi JSON mới.
+3. **Tạo mới Tool Call**: Sử dụng `ToolExecutionRequest.builder()` để tái cấu trúc Tool Call an toàn và đóng gói ngược lại vào một `AiMessage` mới trước khi chuyển cho LangChain4j thực thi.
+4. **Hỗ trợ ép kiểu an toàn ở Tool Layer**: Các hàm hỗ trợ chuyển đổi dữ liệu dạng chuỗi như `parseIntegerSafe` và `parseLongSafe` trong `FashionTools` đã có sẵn cơ chế bỏ qua chuỗi rỗng và chuỗi `"null"` để trả về `null` an toàn mà không lỗi hệ thống.
+
+### Kết quả thử nghiệm
+- **Đã kiểm nghiệm thực tế**: Sử dụng Playwright / browser agent để chạy thử nghiệm trên giao diện React (`http://localhost:5173`) với tài khoản khách hàng `phucmanhtran08@gmail.com`.
+- **Câu truy vấn**: *"Tư vấn áo và quần nam size M mặc hằng ngày."*
+- **Kết quả**: LLM gọi tool gợi ý thành công, toàn bộ tham số trống được chuẩn hóa mượt mà, phản hồi dạng thẻ sản phẩm (tops và bottoms) hiển thị vô cùng premium, bắt mắt, không gặp bất kỳ lỗi NPE hay đứng luồng nào!
+- **Minh chứng hình ảnh**: Lưu trữ và hiển thị ảnh chụp màn hình trực quan tại [chatbot_consultation_success.png](file:///C:/Users/PhucManh/.gemini/antigravity/brain/6a248979-4104-477a-8d06-7d0643389cab/artifacts/chatbot_consultation_success.png).
+

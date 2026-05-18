@@ -42,4 +42,16 @@ class FashionToolsTest {
         String reply = fashionTools.getLoyaltyBenefits("guest-123");
         assertTrue(VietnameseNormalizer.normalize(reply).contains("dang nhap"));
     }
+
+    @Test
+    void shouldAskForOrderNumberWhenMissing() {
+        String reply = fashionTools.checkOrderByNumber(null);
+        assertTrue(VietnameseNormalizer.normalize(reply).contains("ma don hang"));
+    }
+
+    @Test
+    void shouldAskForKnowledgeQuestionWhenMissing() {
+        String reply = fashionTools.searchKnowledge(null);
+        assertTrue(VietnameseNormalizer.normalize(reply).contains("cau hoi"));
+    }
 }

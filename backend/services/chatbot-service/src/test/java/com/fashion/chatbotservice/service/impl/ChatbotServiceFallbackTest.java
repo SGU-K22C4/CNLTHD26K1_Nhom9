@@ -47,7 +47,6 @@ class ChatbotServiceFallbackTest {
     private ProfileEnrichmentService profileEnrichmentService;
     private IntentClassifierService intentClassifierService;
     private FashionAgent fashionAgent;
-
     @BeforeEach
     void setUp() {
         fashionAgent = Mockito.mock(FashionAgent.class);
@@ -245,5 +244,22 @@ class ChatbotServiceFallbackTest {
 
         assertTrue(VietnameseNormalizer.normalize(response.getReply()).contains("an toan nhat"));
         assertTrue(VietnameseNormalizer.normalize(response.getReply()).contains("ao so mi lung phoi dang ten"));
+    }
+
+    @Test
+    void shouldFallbackWithoutClearingMemoryOnGenericAgentFailure() {
+        when(intentClassifierService.classify("Kiem tra don ORD-123")).thenReturn(
+                new IntentClassifierService.IntentScore(IntentClassifierService.CHECK_ORDER, 0.95d));
+        when(fashionAgent.chat(anyString(), anyString()))
+                .thenThrow(new RuntimeException("temporary timeout"))
+                .thenThrow(new RuntimeException("temporary timeout"));
+
+        ChatRequest request = new ChatRequest();
+        request.setSessionId("session-5");
+        request.setMessage("Kiem tra don ORD-123");
+
+        ChatResponse response = service.chat(request, null, "trace-5");
+
+        assertTrue(VietnameseNormalizer.normalize(response.getReply()).contains("dang nhap"));
     }
 }

@@ -3,13 +3,9 @@ _format_version: "3.0"
 plugins:
   - name: cors
     config:
-      origins:
         - http://localhost:5173
         - http://127.0.0.1:5173
-<<<<<<< HEAD
-=======
         - https://modimal.tranhuy.dev
->>>>>>> 8ccf7462979161fd5856974a61fdbce9f9d55be0
       methods:
         - GET
         - POST

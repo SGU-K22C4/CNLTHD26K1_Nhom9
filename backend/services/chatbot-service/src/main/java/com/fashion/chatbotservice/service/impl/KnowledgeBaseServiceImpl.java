@@ -7,6 +7,7 @@ import com.fashion.chatbotservice.service.KnowledgeBaseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.text.Normalizer;
@@ -46,6 +47,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private double graphMergeWeight;
 
     @Override
+    @Cacheable(value = "knowledgeBase", key = "#query", unless = "#result == null || #result.isEmpty()")
     public List<SearchResult> search(String query) {
         if (query == null || query.isBlank()) return List.of();
 

@@ -41,4 +41,21 @@ public interface SizeAdvisorService {
      * Nhận diện loại trang phục (áo / quần) từ tin nhắn.
      */
     GarmentType detectGarmentType(String message);
+
+    /**
+     * Trích xuất từ khóa loại trang phục cụ thể từ message.
+     * VD: "áo sơ mi", "quần jean" → trả về đó.
+     * Nếu không tìm thấy → trả về chuỗi rỗng.
+     */
+    default String extractGarmentFromMessage(String message) {
+        if (message == null || message.isBlank()) return "";
+        String lower = message.toLowerCase();
+        for (String g : java.util.List.of(
+                "áo sơ mi", "áo thun", "áo khoác", "áo hoodie", "áo polo", "áo len",
+                "quần jean", "quần tây", "quần short", "quần kaki",
+                "váy", "đầm", "chân váy")) {
+            if (lower.contains(g)) return g;
+        }
+        return "";
+    }
 }

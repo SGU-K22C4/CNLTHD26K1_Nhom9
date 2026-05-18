@@ -33,9 +33,23 @@ chatbot:
   # Agent mode: true = LangChain4j agent, false = heuristic fallback
   use-agent: ${CHATBOT_USE_AGENT:true}
 
+  # Rate Limiting — Phase 3B
+  ratelimit:
+    user-requests-per-minute: ${CHATBOT_RATELIMIT_USER_RPM:20}
+    global-requests-per-minute: ${CHATBOT_RATELIMIT_GLOBAL_RPM:200}
+    timeout-ms: ${CHATBOT_RATELIMIT_TIMEOUT_MS:1000}
+
+  # A/B Experiment — Phase 3C
+  experiment:
+    enabled: ${CHATBOT_EXPERIMENT_ENABLED:false}
+    control-ratio: ${CHATBOT_EXPERIMENT_CONTROL_RATIO:70}
+
   # Memory
   memory:
     max-messages: ${CHATBOT_MEMORY_MAX_MESSAGES:20}
+    # Session eviction: tránh OOM khi service chạy lâu (Review.md: memory leak fix)
+    session-ttl-hours: ${CHATBOT_MEMORY_SESSION_TTL_HOURS:2}
+    max-sessions: ${CHATBOT_MEMORY_MAX_SESSIONS:5000}
 
   # Knowledge Base
   knowledge:
@@ -71,10 +85,13 @@ ai:
   api-key: ${AI_API_KEY}
   model: ${AI_MODEL:deepseek-3.2}
   base-url: ${AI_BASE_URL:https://llm.chiasegpu.vn/v1}
-  timeout-seconds: ${AI_TIMEOUT_SECONDS:180}
-  max-tokens: ${AI_MAX_TOKENS:4096}
-  log-requests: ${AI_LOG_REQUESTS:true}
-  log-responses: ${AI_LOG_RESPONSES:true}
+  # Timeout 60s: cân bằng UX vs complex tool calling (Review.md: 180s quá cao)
+  timeout-seconds: ${AI_TIMEOUT_SECONDS:60}
+  # maxTokens aligned: Java default 4096 = YAML default 4096 (fix inconsistency)
+  max-tokens: ${AI_MAX_TOKENS:10000}
+  # Privacy: log OFF by default, chỉ bật khi debug với AI_LOG_REQUESTS=true
+  log-requests: ${AI_LOG_REQUESTS:false}
+  log-responses: ${AI_LOG_RESPONSES:false}
 
 server:
   port: ${SERVER_PORT:8087}

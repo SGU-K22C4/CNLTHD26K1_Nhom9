@@ -11,24 +11,41 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Backend guardrail runs after the orchestration path has already chosen a reply.
+ * Backend guardrail runs after the orchestration path has already chosen a
+ * reply.
  * The purpose here is not to make the text "nicer", but to remove claims that
- * cannot be grounded in real tool results before the response leaves the service.
+ * cannot be grounded in real tool results before the response leaves the
+ * service.
+ *
+ * <p>
+ * Changes vs previous:
+ * <ul>
+ * <li>validateProductReferences: thêm {@link #BOLD_PRODUCT_PATTERN} để bắt
+ * tên sản phẩm in đậm (**...**) — fix false negative khi LLM không dùng dấu
+ * ngoặc.</li>
+ * <li>isValidName: dùng partial match thay vì exact equals.</li>
+ * </ul>
  */
 @Component
 @Slf4j
 public class ResponseGuardrail {
 
-    private static final Pattern PRICE_PATTERN =
-            Pattern.compile("(\\d{1,3}(\\.\\d{3})*|\\d+)\\s*(đ|d|vnd|k|triệu|tr)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern PRICE_PATTERN = Pattern.compile("(\\d{1,3}(\\.\\d{3})*|\\d+)\\s*(đ|d|vnd|k|triệu|tr)",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern PROMO_CODE_PATTERN = Pattern.compile("\\b[A-Z0-9_-]{4,}\\b");
-    private static final Pattern QUOTED_PRODUCT_PATTERN = Pattern.compile("[\"“”']([^\"“”']{4,80})[\"“”']");
+    /** Match tên sản phẩm trong dấu ngoặc kép thẳng, kép cong, hoặc ngoặc đơn. */
+    private static final Pattern QUOTED_PRODUCT_PATTERN = Pattern.compile(
+            "[\"\\u201c\\u201d'\\u2018\\u2019]([^\"\\u201c\\u201d'\\u2018\\u2019]{4,80})[\"\\u201c\\u201d'\\u2018\\u2019]");
+
+    /**
+     * Match tên sản phẩm in đậm (**...**) hoặc in nghiêng (*...*) trong markdown.
+     * LLM thường dùng **Tên Sản Phẩm** mà không dùng dấu ngoặc → QUOTED_PRODUCT_PATTERN bỏ sót.
+     */
+    private static final Pattern BOLD_PRODUCT_PATTERN = Pattern.compile("\\*{1,2}([^*]{4,80})\\*{1,2}");
 
     private static final String FALLBACK_PRICE_TEXT = "giá trên card sản phẩm";
-    private static final String SOFT_TOOL_FAILURE_REPLY =
-            "Mình chưa kiểm tra được dữ liệu chính xác lúc này. Bạn thử lại sau ít phút hoặc xem trực tiếp trên card sản phẩm giúp mình nhé.";
-    private static final String SOFT_POLICY_REPLY =
-            "Mình chưa kiểm tra được nguồn chính sách chính xác lúc này. Bạn giúp mình hỏi lại sau ít phút hoặc liên hệ CSKH để xác nhận nhanh nhé.";
+    private static final String SOFT_TOOL_FAILURE_REPLY = "Mình chưa kiểm tra được dữ liệu chính xác lúc này. Bạn thử lại sau ít phút hoặc xem trực tiếp trên card sản phẩm giúp mình nhé.";
+    private static final String SOFT_POLICY_REPLY = "Mình chưa kiểm tra được nguồn chính sách chính xác lúc này. Bạn giúp mình hỏi lại sau ít phút hoặc liên hệ CSKH để xác nhận nhanh nhé.";
 
     private static final List<String> STOCK_CLAIMS = List.of(
             "còn hàng", "có sẵn", "con hang", "co san", "available", "in stock");
@@ -113,7 +130,8 @@ public class ResponseGuardrail {
             }
 
             return collector.getPromotions().stream()
-                    .anyMatch(promotion -> matchesNumericPrice(promotion != null ? promotion.getMinOrderAmount() : null, target));
+                    .anyMatch(promotion -> matchesNumericPrice(promotion != null ? promotion.getMinOrderAmount() : null,
+                            target));
         } catch (Exception ex) {
             log.warn("Guardrail skipped unparsable price '{}': {}", priceText, ex.getMessage());
             return true;
@@ -135,6 +153,17 @@ public class ResponseGuardrail {
         }
     }
 
+    /**
+     * Kiểm tra tên sản phẩm được đề cập trong reply có tồn tại trong tool results
+     * không.
+     *
+     * <p>
+     * Scan 2 pass:
+     * <ol>
+     * <li>Quoted names: "áo sơ mi Oxford" hoặc 'áo sơ mi Oxford'</li>
+     * <li>Bold/italic markdown: **Áo Sơ Mi Oxford** — fix false negative</li>
+     * </ol>
+     */
     private String validateProductReferences(String reply, ToolResultCollector collector) {
         if (collector == null || collector.getProducts().isEmpty()) {
             return reply;
@@ -147,26 +176,51 @@ public class ResponseGuardrail {
             }
         });
 
-        Matcher matcher = QUOTED_PRODUCT_PATTERN.matcher(reply);
+        // Pass 1: quoted product names
+        String result = replaceInvalidProductRefs(reply, QUOTED_PRODUCT_PATTERN, 1, validNames, collector);
+
+        // Pass 2: bold/italic markdown product names
+        result = replaceInvalidProductRefs(result, BOLD_PRODUCT_PATTERN, 1, validNames, collector);
+
+        return result;
+    }
+
+    /**
+     * Helper: scan reply với pattern, thay tên không hợp lệ bằng "sản phẩm này".
+     */
+    private String replaceInvalidProductRefs(String reply, Pattern pattern, int captureGroup,
+            Set<String> validNames, ToolResultCollector collector) {
+        Matcher matcher = pattern.matcher(reply);
         StringBuffer buffer = new StringBuffer();
         boolean changed = false;
 
         while (matcher.find()) {
-            String quotedName = matcher.group(1);
-            String normalizedQuoted = normalize(quotedName);
-            if (looksLikeProductReference(normalizedQuoted) && !validNames.contains(normalizedQuoted)) {
+            String candidate = matcher.group(captureGroup);
+            String normalizedCandidate = normalize(candidate);
+            if (looksLikeProductReference(normalizedCandidate) && !isValidName(normalizedCandidate, validNames)) {
                 matcher.appendReplacement(buffer, Matcher.quoteReplacement("sản phẩm này"));
                 collector.addGuardrailViolation("hallucinated_product_name");
+                log.warn("Guardrail blocked hallucinated product reference: '{}'", candidate);
                 changed = true;
+            } else {
+                matcher.appendReplacement(buffer, Matcher.quoteReplacement(matcher.group()));
             }
         }
 
-        if (!changed) {
+        if (!changed)
             return reply;
-        }
-
         matcher.appendTail(buffer);
         return buffer.toString();
+    }
+
+    /**
+     * Partial match: valid nếu tên thật chứa candidate hoặc ngược lại.
+     * VD: "Áo Oxford Classic" match khi validNames chứa "oxford classic".
+     */
+    private boolean isValidName(String normalizedCandidate, Set<String> validNames) {
+        if (validNames.contains(normalizedCandidate))
+            return true;
+        return validNames.stream().anyMatch(v -> v.contains(normalizedCandidate) || normalizedCandidate.contains(v));
     }
 
     private String validatePromotionCodes(String reply, ToolResultCollector collector) {
@@ -211,12 +265,11 @@ public class ResponseGuardrail {
         }
 
         boolean allOutOfStock = collector.getProducts().stream()
-                .allMatch(product -> product == null || product.getAvailableSizes() == null || product.getAvailableSizes().isEmpty());
+                .allMatch(product -> product == null || product.getAvailableSizes() == null
+                        || product.getAvailableSizes().isEmpty());
 
         if (allOutOfStock && containsAny(reply, STOCK_CLAIMS)) {
             collector.addGuardrailViolation("invalid_stock_claim");
-            // Replace both accented and ASCII variants because fallback/test paths
-            // may normalize Vietnamese before reaching the guardrail.
             return reply.replace("còn hàng", "hiện đang hết hàng")
                     .replace("có sẵn", "tạm thời chưa có sẵn")
                     .replace("con hang", "hien dang het hang")
@@ -237,7 +290,7 @@ public class ResponseGuardrail {
     }
 
     private String checkOffScope(String reply) {
-        String[] forbidden = {"Shopee", "Lazada", "Tiki", "chính trị", "tôn giáo"};
+        String[] forbidden = { "Shopee", "Lazada", "Tiki", "chính trị", "tôn giáo" };
         String result = reply;
         for (String word : forbidden) {
             if (result.contains(word)) {
@@ -250,7 +303,7 @@ public class ResponseGuardrail {
 
     private boolean looksLikeProductReference(String normalizedText) {
         return containsAny(normalizedText,
-                "ao", "áo", "quan", "quần", "vay", "váy", "dam", "đầm",
+                "ao", "quan", "vay", "dam",
                 "dress", "shirt", "jean", "jacket", "blazer", "skirt");
     }
 

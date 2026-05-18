@@ -1,5 +1,5 @@
 import { SendHorizonal } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 export default function ChatInput({
   onSend,
@@ -8,13 +8,19 @@ export default function ChatInput({
   compact = false,
 }) {
   const [value, setValue] = useState('')
+  const submitLockRef = useRef(false)
 
   const submit = async () => {
     const message = value.trim()
-    if (!message || disabled) return
-    const sent = await onSend(message)
-    if (sent !== null) {
-      setValue('')
+    if (!message || disabled || submitLockRef.current) return
+    submitLockRef.current = true
+    try {
+      const sent = await onSend(message)
+      if (sent !== null) {
+        setValue('')
+      }
+    } finally {
+      submitLockRef.current = false
     }
   }
 

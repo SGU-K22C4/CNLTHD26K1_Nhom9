@@ -395,7 +395,7 @@ public class FashionTools {
 
     // ========== PRODUCT TOOLS ==========
 
-    @Tool("""
+    @Tool(name = "searchProducts", value = """
             Tìm kiếm sản phẩm thời trang theo từ khóa, mức giá.
             Gọi khi người dùng hỏi về sản phẩm, giá cả, màu sắc, chất liệu, tồn kho.
             VD: 'áo sơ mi đen', 'quần jean dưới 500k', 'váy mùa hè'.
@@ -418,16 +418,25 @@ public class FashionTools {
             CRITICAL: Extract the search keyword ONLY from what the user actually said.
             Do NOT invent product names or add details the user did not mention.
             """)
-    public String searchProducts(
+    public String searchProductsTool(
             @P("Từ khóa tìm kiếm: CHỈ tên loại đồ (VD: 'quần jean', 'áo thun', 'váy đầm'). KHÔNG gộp màu/giá/giới tính") String search,
-            @P("Giá tối thiểu (VND), null nếu không giới hạn. VD: 300k=300000") Long minPrice,
-            @P("Giá tối đa (VND), null nếu không giới hạn. VD: 500k=500000, 2 triệu=2000000") Long maxPrice,
+            @P("Giá tối thiểu (VND), null nếu không giới hạn. VD: 300k=300000") String minPrice,
+            @P("Giá tối đa (VND), null nếu không giới hạn. VD: 500k=500000, 2 triệu=2000000") String maxPrice,
             @P("Màu sắc sản phẩm nếu user có đề cập (VD: 'đen', 'trắng', 'xanh'). null nếu không đề cập.") String color,
             @P("Size nếu user có đề cập (VD: 'S', 'M', 'L', 'XL'). null nếu không đề cập.") String size) {
+        return searchProductsInternal(search, parseLongSafe(minPrice), parseLongSafe(maxPrice), color, size, true);
+    }
+
+    public String searchProducts(
+            String search,
+            Long minPrice,
+            Long maxPrice,
+            String color,
+            String size) {
         return searchProductsInternal(search, minPrice, maxPrice, color, size, true);
     }
 
-    @Tool("""
+    @Tool(name = "searchProductsStrict", value = """
             Tìm kiếm sản phẩm theo TỪ KHÓA CỤ THỂ, KHÔNG fallback rút gọn.
             Dùng khi user hỏi có mẫu X hay không, hoặc muốn kiểm tra tên sản phẩm cụ thể.
 
@@ -435,12 +444,21 @@ public class FashionTools {
             - Không tự động rút gọn từ khóa.
             - Nếu không có kết quả, phải trả lời rõ ràng là không có sản phẩm đó trong hệ thống.
             """)
-    public String searchProductsStrict(
+    public String searchProductsStrictTool(
             @P("Từ khóa tìm kiếm: càng gần với tên sản phẩm càng tốt") String search,
-            @P("Giá tối thiểu (VND), null nếu không giới hạn") Long minPrice,
-            @P("Giá tối đa (VND), null nếu không giới hạn") Long maxPrice,
+            @P("Giá tối thiểu (VND), null nếu không giới hạn") String minPrice,
+            @P("Giá tối đa (VND), null nếu không giới hạn") String maxPrice,
             @P("Màu sắc nếu user đề cập (VD: 'đen', 'trắng'). null nếu không đề cập.") String color,
             @P("Size nếu user có đề cập (VD: 'S', 'M', 'L', 'XL'). null nếu không đề cập.") String size) {
+        return searchProductsInternal(search, parseLongSafe(minPrice), parseLongSafe(maxPrice), color, size, false);
+    }
+
+    public String searchProductsStrict(
+            String search,
+            Long minPrice,
+            Long maxPrice,
+            String color,
+            String size) {
         return searchProductsInternal(search, minPrice, maxPrice, color, size, false);
     }
 
@@ -499,7 +517,7 @@ public class FashionTools {
         }
     }
 
-    @Tool("""
+    @Tool(name = "browseProducts", value = """
             Duyệt danh sách sản phẩm để tư vấn khi user không nêu rõ từ khóa cụ thể.
             Dùng cho các câu như: "tư vấn áo khoác", "gợi ý đồ đi làm", "có mẫu nào phù hợp".
 
@@ -507,11 +525,19 @@ public class FashionTools {
             - Không yêu cầu từ khóa bắt buộc. Hãy dùng filter giá/size/màu nếu có.
             - Nếu không có sản phẩm phù hợp, phải nói rõ là không có.
             """)
-    public String browseProducts(
-            @P("Giá tối thiểu (VND), null nếu không giới hạn") Long minPrice,
-            @P("Giá tối đa (VND), null nếu không giới hạn") Long maxPrice,
+    public String browseProductsTool(
+            @P("Giá tối thiểu (VND), null nếu không giới hạn") String minPriceStr,
+            @P("Giá tối đa (VND), null nếu không giới hạn") String maxPriceStr,
             @P("Màu sắc nếu user có đề cập (VD: 'đen', 'trắng'). null nếu không đề cập.") String color,
             @P("Size nếu user có đề cập (VD: 'S', 'M', 'L', 'XL'). null nếu không đề cập.") String size) {
+        return browseProducts(parseLongSafe(minPriceStr), parseLongSafe(maxPriceStr), color, size);
+    }
+
+    public String browseProducts(
+            Long minPrice,
+            Long maxPrice,
+            String color,
+            String size) {
         try {
             log.info("Tool: browseProducts(min={}, max={}, color={}, size={})", minPrice, maxPrice, color, size);
             List<ChatResponse.ProductSuggestion> suggestions = executeBrowse(minPrice, maxPrice, 12);
@@ -1082,24 +1108,26 @@ public class FashionTools {
             return suggestions;
         }
         String normalizedSize = normalizeText(size);
-        return suggestions.stream()
+        List<ChatResponse.ProductSuggestion> filtered = suggestions.stream()
                 .filter(s -> safeList(s.getAvailableSizes()).stream()
                         .anyMatch(avail -> normalizeText(avail).equals(normalizedSize)))
                 .toList();
+        return filtered.isEmpty() ? suggestions : filtered;
     }
 
-        private List<ChatResponse.ProductSuggestion> applyColorFilter(
+    private List<ChatResponse.ProductSuggestion> applyColorFilter(
             List<ChatResponse.ProductSuggestion> suggestions,
             String color) {
         if (suggestions == null || suggestions.isEmpty() || color == null || color.isBlank()) {
             return suggestions;
         }
         String normalizedColor = normalizeText(color);
-        return suggestions.stream()
-            .filter(s -> safeList(s.getAvailableColors()).stream()
-                .anyMatch(avail -> normalizeText(avail).contains(normalizedColor)))
-            .toList();
-        }
+        List<ChatResponse.ProductSuggestion> filtered = suggestions.stream()
+                .filter(s -> safeList(s.getAvailableColors()).stream()
+                        .anyMatch(avail -> normalizeText(avail).contains(normalizedColor)))
+                .toList();
+        return filtered.isEmpty() ? suggestions : filtered;
+    }
 
     private List<ChatResponse.ProductSuggestion> applyCategoryLock(
             List<ChatResponse.ProductSuggestion> suggestions,
@@ -1172,10 +1200,10 @@ public class FashionTools {
         String categoryGender = normalizeText(suggestion.getCategoryGender());
         if (!categoryGender.isBlank()) {
             if ("male".equals(targetGender)) {
-                return categoryGender.contains("male");
+                return "male".equals(categoryGender);
             }
             if ("female".equals(targetGender)) {
-                return categoryGender.contains("female");
+                return "female".equals(categoryGender);
             }
         }
 
@@ -1592,6 +1620,9 @@ public class FashionTools {
             @P("Mã đơn hàng, VD: ORD-1713200000000") String orderNumber) {
         try {
             log.info("Tool: checkOrderByNumber(orderNumber={})", orderNumber);
+            if (orderNumber == null || orderNumber.isBlank()) {
+                return "Bạn gửi giúp mình mã đơn hàng (ví dụ: ORD-123456) để mình kiểm tra chính xác nhé.";
+            }
             String userId = currentUserId();
             if (isGuestUser(userId)) {
                 return "Báº¡n cáº§n Ä‘Äƒng nháº­p Ä‘á»ƒ mÃ¬nh kiá»ƒm tra Ä‘Æ¡n hÃ ng chÃ­nh xÃ¡c nhÃ©.";
@@ -1626,7 +1657,7 @@ public class FashionTools {
 
     // ========== PROMOTION TOOLS ==========
 
-    @Tool("""
+    @Tool(name = "validateCoupon", value = """
             Kiểm tra mã giảm giá / coupon có hợp lệ với đơn hàng không.
             Gọi khi người dùng hỏi về mã giảm giá, coupon, voucher.
             VD: 'mã SALE20 dùng được không', 'coupon cho đơn 1 triệu'.
@@ -1635,11 +1666,23 @@ public class FashionTools {
             If the user has not explicitly provided BOTH the coupon code AND the order amount,
             you MUST ask them to provide the missing information before calling this tool.
             """)
-    public String validateCoupon(
+    public String validateCouponTool(
             @P("Mã coupon") String code,
-            @P("Giá trị đơn hàng (VND)") Long orderAmount) {
+            @P("Giá trị đơn hàng (VND)") String orderAmountStr) {
+        return validateCoupon(code, parseLongSafe(orderAmountStr));
+    }
+
+    public String validateCoupon(
+            String code,
+            Long orderAmount) {
         try {
             log.info("Tool: validateCoupon(code={}, amount={})", code, orderAmount);
+            if (code == null || code.isBlank()) {
+                return "Bạn gửi giúp mình mã coupon cần kiểm tra nhé.";
+            }
+            if (orderAmount == null) {
+                return "Bạn cho mình thêm giá trị đơn hàng để mình kiểm tra coupon chính xác nhé.";
+            }
             @SuppressWarnings("unchecked")
             Map<String, Object> result = executeResilient("promotion-service", () -> webClient.post()
                     .uri(promotionServiceUrl + "/api/v1/promotions/validate?code={code}&orderAmount={amount}",
@@ -1704,22 +1747,41 @@ public class FashionTools {
 
     // ========== SIZE CONSULTATION ==========
 
-    @Tool("""
+    @Tool(name = "consultSize", value = """
             Tư vấn size thời trang dựa trên số đo cơ thể.
-            Gọi khi người dùng cung cấp chiều cao, cân nặng, vòng ngực/eo/hông
-            và muốn biết nên mặc size gì.
+            Gọi NGAY LẬP TỨC khi user cung cấp số đo (chiều cao, cân nặng...) và hỏi size, KỂ CẢ KHI user nhắc đến tên sản phẩm.
+            KHÔNG GỌI searchProducts nếu user đang nhờ tư vấn size cho một sản phẩm cụ thể. Hãy gọi luôn tool này!
+            
+            Tự động suy luận 'garmentType' từ tên sản phẩm user nhắc đến (ví dụ: áo, sơ mi, khoác -> 'top'; quần, váy, chân váy -> 'bottom').
 
             CRITICAL: Only pass measurement values the user has EXPLICITLY stated.
             Use null for any measurement NOT mentioned by the user.
             Do NOT guess height, weight, or body measurements.
             """)
-    public String consultSize(
-            @P("Chiều cao (cm)") Integer heightCm,
-            @P("Cân nặng (kg)") Integer weightKg,
-            @P("Vòng ngực (cm), null nếu không có") Integer chestCm,
-            @P("Vòng eo (cm), null nếu không có") Integer waistCm,
-            @P("Vòng hông (cm), null nếu không có") Integer hipCm,
+    public String consultSizeTool(
+            @P("Chiều cao (cm)") String heightCmStr,
+            @P("Cân nặng (kg)") String weightKgStr,
+            @P("Vòng ngực (cm), null nếu không có") String chestCmStr,
+            @P("Vòng eo (cm), null nếu không có") String waistCmStr,
+            @P("Vòng hông (cm), null nếu không có") String hipCmStr,
             @P("Loại đồ: 'top' (áo) hoặc 'bottom' (quần/váy)") String garmentType) {
+        return consultSize(
+                parseIntegerSafe(heightCmStr),
+                parseIntegerSafe(weightKgStr),
+                parseIntegerSafe(chestCmStr),
+                parseIntegerSafe(waistCmStr),
+                parseIntegerSafe(hipCmStr),
+                garmentType
+        );
+    }
+
+    public String consultSize(
+            Integer heightCm,
+            Integer weightKg,
+            Integer chestCm,
+            Integer waistCm,
+            Integer hipCm,
+            String garmentType) {
         try {
             log.info("Tool: consultSize(h={}, w={}, c={}, w={}, h={}, type={})", 
                 heightCm, weightKg, chestCm, waistCm, hipCm, garmentType);
@@ -1763,7 +1825,10 @@ public class FashionTools {
             @P("Phong cách (tùy chọn): 'thanh_lich', 'casual', 'sporty'") String style) {
         try {
             log.info("Tool: suggestOutfit(occasion={}, style={})", occasion, style);
-            List<String> queries = outfitRuleEngine.buildQueries(occasion, style);
+            String targetGender = normalizeText(preferenceProfile().getTargetGender());
+            List<String> queries = filterOutfitQueriesByGender(
+                    outfitRuleEngine.buildQueries(occasion, style),
+                    targetGender);
 
             for (String query : queries) {
                 // Giữ flow tool-calling hiện tại để collector tiếp tục gom suggestions cho FE render.
@@ -1781,6 +1846,31 @@ public class FashionTools {
             log.error("suggestOutfit failed", ex);
             return "Mình chưa thể gợi ý trang phục lúc này. Bạn thử lại sau nhé!";
         }
+    }
+
+    private List<String> filterOutfitQueriesByGender(List<String> queries, String targetGender) {
+        if (queries == null || queries.isEmpty() || targetGender == null || targetGender.isBlank()) {
+            return queries == null ? List.of() : queries;
+        }
+
+        List<String> filtered = queries.stream()
+                .filter(query -> isQueryCompatibleWithGender(query, targetGender))
+                .toList();
+
+        // Nếu rule set hiện tại không còn query nào sau khi lọc, giữ query gốc để không làm
+        // bot rơi vào trạng thái không gợi ý được outfit.
+        return filtered.isEmpty() ? queries : filtered;
+    }
+
+    private boolean isQueryCompatibleWithGender(String query, String targetGender) {
+        String normalizedQuery = normalizeText(query);
+        if ("male".equals(targetGender)) {
+            return !containsAny(normalizedQuery, "vay", "dam", "chan vay", "blouse", "ao kieu");
+        }
+        if ("female".equals(targetGender)) {
+            return !containsAny(normalizedQuery, "ao so mi nam", "quan chino", "oxford", "polo nam");
+        }
+        return true;
     }
 
     // ========== KNOWLEDGE ==========
@@ -1810,6 +1900,9 @@ public class FashionTools {
     private String searchKnowledgeInternal(String query, boolean prioritizeSalesSources) {
         try {
             log.info("Tool: searchKnowledgeInternal(query={}, prioritizeSalesSources={})", query, prioritizeSalesSources);
+            if (query == null || query.isBlank()) {
+                return "Bạn nói rõ thêm giúp mình câu hỏi cần tra cứu, ví dụ: đổi trả, giao hàng, bảo hành hoặc hướng dẫn đặt hàng.";
+            }
             List<KnowledgeBaseService.SearchResult> results = knowledgeBaseService.search(query);
             if (prioritizeSalesSources) {
                 results = prioritizeSalesKnowledge(results);
@@ -2020,6 +2113,9 @@ public class FashionTools {
             @P("ID sản phẩm cần xem đánh giá. Bắt buộc.") String productId) {
         try {
             log.info("Tool: getProductReviews(productId={})", productId);
+            if (productId == null || productId.isBlank()) {
+                return "Bạn gửi giúp mình mã sản phẩm hoặc chọn đúng card sản phẩm để mình xem đánh giá chính xác nhé.";
+            }
             @SuppressWarnings("unchecked")
             Map<String, Object> stats = executeResilient("review-service", () -> webClient.get()
                     .uri(reviewServiceUrl + "/api/v1/reviews/product/" + productId + "/stats")
@@ -2067,19 +2163,9 @@ public class FashionTools {
 
     @Tool("""
             So sánh 2 sản phẩm về giá, size, màu sắc để giúp user lựa chọn.
-
-            GỌI KHI:
-            - User hỏi "so sánh A và B", "A vs B cái nào tốt hơn", "A khác B ở điểm nào"
-            - Intent: product_compare
-
-            KHÔNG GỌI KHI:
-            - User chỉ hỏi về 1 sản phẩm
-            - User chưa nêu rõ cả 2 tên sản phẩm
-
-            CRITICAL:
-            - Cần có cả 2 tên sản phẩm mới gọi tool này.
-            - Chỉ so sánh dữ liệu thật từ hệ thống.
-            - Không đưa ra kết luận "sản phẩm X tốt hơn" nếu không có đủ dữ liệu đánh giá.
+            GỌI NGAY LẬP TỨC khi user liệt kê 2 sản phẩm (đặc biệt sau khi bạn đã hỏi họ muốn so sánh sản phẩm nào).
+            Ví dụ: "áo sơ mi trắng và quần jean" -> gọi compareProducts.
+            KHÔNG CẦN gọi searchProducts trước, tool này tự động tìm kiếm.
             """)
     public String compareProducts(
             @P("Tên hoặc từ khóa sản phẩm thứ nhất") String productA,
@@ -2381,6 +2467,28 @@ public class FashionTools {
         if (value instanceof BigDecimal bd) return bd;
         if (value instanceof Number n) return BigDecimal.valueOf(n.doubleValue());
         try { return new BigDecimal(String.valueOf(value)); } catch (Exception e) { return null; }
+    }
+
+    private Long parseLongSafe(String value) {
+        if (value == null || value.trim().isEmpty() || "null".equalsIgnoreCase(value.trim())) {
+            return null;
+        }
+        try {
+            return (long) Double.parseDouble(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Integer parseIntegerSafe(String value) {
+        if (value == null || value.trim().isEmpty() || "null".equalsIgnoreCase(value.trim())) {
+            return null;
+        }
+        try {
+            return (int) Double.parseDouble(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }
 

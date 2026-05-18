@@ -78,6 +78,8 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
   const { user } = useAuth()
   const userId = user?.id || user?.email || null
   const prevUserIdRef = useRef(userId)
+  const sendingLockRef = useRef(false)
+  const lastSubmittedRef = useRef({ text: '', at: 0 })
 
   const [messages, setMessages] = useState([DEFAULT_GREETING])
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES)
@@ -149,7 +151,13 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
 
   const sendMessage = useCallback(async (rawMessage) => {
     const message = String(rawMessage || '').trim()
-    if (!message || isSending) return null
+    if (!message || isSending || sendingLockRef.current) return null
+
+    const now = Date.now()
+    const lastSubmitted = lastSubmittedRef.current
+    if (lastSubmitted.text === message && now - lastSubmitted.at < 1500) {
+        return null
+    }
 
     const inferredEvent = detectChatFeedbackEvent(message)
     const latestSuggestionContext = [...messages]
@@ -162,6 +170,8 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
       createdAt: new Date().toISOString(),
     })
 
+    sendingLockRef.current = true
+    lastSubmittedRef.current = { text: message, at: now }
     setMessages((prev) => [...prev, userMessage])
     setIsSending(true)
     setError('')
@@ -224,6 +234,7 @@ export function useChatbot({ autoLoadHistory = true } = {}) {
       setError(err?.message || 'Gửi tin nhắn thất bại')
       return null
     } finally {
+      sendingLockRef.current = false
       setIsSending(false)
     }
   }, [isSending, messages, preferences, selectedProductContext, sessionId])

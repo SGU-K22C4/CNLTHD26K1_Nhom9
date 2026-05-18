@@ -28,6 +28,19 @@ public class ChatResponse {
     private ChatSession.PreferenceProfile profile;
     private Instant createdAt;
 
+    /**
+     * Quick reply options hiển thị dưới dạng button ở frontend.
+     * Dùng cho Progressive Disclosure cold-start flow (Phase 3A).
+     */
+    @Builder.Default
+    private List<String> quickReplies = new ArrayList<>();
+
+    /**
+     * Điểm chất lượng response (0-100) từ ResponseQualityScorer.
+     * Chỉ populate khi scoring enabled. Không trả về cho client production.
+     */
+    private Integer qualityScore;
+
     @Data
     @Builder
     public static class ProductSuggestion {

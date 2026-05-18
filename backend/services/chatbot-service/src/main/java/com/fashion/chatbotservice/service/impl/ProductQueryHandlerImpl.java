@@ -43,6 +43,10 @@ public class ProductQueryHandlerImpl implements ProductQueryHandler {
             return false;
         }
 
+        if (isCreativeOrContentRequest(normalized)) {
+            return false;
+        }
+
         if (shouldBrowseProducts(message)
                 || isGenericBudgetOnlyFollowUp(message)
                 || isBroadDiscoveryRequest(normalized)
@@ -754,6 +758,19 @@ public class ProductQueryHandlerImpl implements ProductQueryHandler {
         if ("male".equals(normalized)) return "nam";
         if ("female".equals(normalized)) return "nữ";
         return "phù hợp";
+    }
+
+    private boolean isCreativeOrContentRequest(String normalized) {
+        return containsAnyKeyword(normalized,
+                "viet bai", "viet post", "viet content", "viet stt", "viet status", "viet caption", "viet cap",
+                "viet quang cao", "viet gioi thieu", "viet tho", "viet van", "viet pr", "viet facebook", "viet fb",
+                "bai viet facebook", "bai dang facebook", "post facebook", "status facebook", "stt facebook",
+                "dang facebook", "dang fb", "dang stt", "dang status", "dang caption",
+                "gioi thieu hai huoc", "quang cao hai huoc", "stt hai huoc", "status hai huoc", "caption hai huoc",
+                "gioi thieu hom hinh", "quang cao hom hinh", "stt hom hinh", "status hom hinh", "caption hom hinh",
+                "viet doan gioi thieu", "viet doan quang cao", "viet status", "viet caption", "viet stt",
+                "viet ho", "viet giup", "viet gium", "dang len facebook", "dang len fb"
+        );
     }
 
     private boolean containsAnyKeyword(String normalizedMessage, String... keywords) {

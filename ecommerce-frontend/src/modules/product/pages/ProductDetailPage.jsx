@@ -68,7 +68,10 @@ function DetailRow({ label, content, defaultOpen = false }) {
         <span className="text-[18px] leading-none text-[#888]">{open ? '−' : '+'}</span>
       </button>
       {open && (
-        <p className="pb-4 text-[13px] text-[#555] leading-relaxed">{content}</p>
+        <div
+          className="pb-4 text-[13px] text-[#555] leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: content }}
+        />
       )}
     </div>
   )
@@ -134,9 +137,31 @@ export default function ProductDetailPage() {
 
   const galleryImages = useMemo(() => {
     if (!product) return []
+
+    // 1. Find images for the specifically selected color variant
+    if (selectedColor && product.colors && product.variants) {
+      const selectedColorIndex = product.colors.indexOf(selectedColor)
+      if (selectedColorIndex !== -1) {
+        const selectedColorLabel = product.colorLabels?.[selectedColorIndex]
+        const variant = product.variants.find((v) => v.colorName === selectedColorLabel)
+        
+        if (variant && variant.images && variant.images.length > 0) {
+          return [...variant.images]
+            .sort((a, b) => {
+              if (a.primary && !b.primary) return -1
+              if (!a.primary && b.primary) return 1
+              return (a.sortOrder || 0) - (b.sortOrder || 0)
+            })
+            .map((img) => img.imageUrl)
+            .filter(Boolean)
+        }
+      }
+    }
+
+    // 2. Fallback to all product images if variant has no specific images
     if (product.images?.length) return product.images
     return product.image ? [product.image] : []
-  }, [product])
+  }, [product, selectedColor])
 
   if (loading) {
     return (
@@ -280,7 +305,10 @@ export default function ProductDetailPage() {
                 {name}
               </h1>
               <button
-                onClick={() => toggleWishlist(product.id)}
+                onClick={() => {
+                  if (!user) { navigate('/login'); return }
+                  toggleWishlist(product.id)
+                }}
                 className="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
                 aria-label="Toggle wishlist"
               >

@@ -14,7 +14,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.util.ArrayList;
@@ -118,15 +117,28 @@ class ProductServiceTest {
 
     @Test
     void should_ReturnPagedProducts_When_SearchFiltersProvided() {
-        Pageable pageable = PageRequest.of(0, 12);
+        int page = 0;
+        int size = 12;
+        String sortBy = "createdAt";
+        String sortDir = "desc";
         Product product = Product.builder().id("P1").build();
         ProductResponse mappedResponse = ProductResponse.builder().id("P1").build();
         Page<Product> productPage = new PageImpl<>(List.of(product));
 
-        when(productRepository.search(eq("CAT01"), eq("Ao"), any(), any(), eq(pageable))).thenReturn(productPage);
+        when(productRepository.search(eq("CAT01"), eq("Ao"), any(), any(), any(Pageable.class)))
+            .thenReturn(productPage);
         when(productMapper.toResponse(product)).thenReturn(mappedResponse);
 
-        Page<ProductResponse> result = productService.getAll("CAT01", "Ao", null, null, pageable);
+        Page<ProductResponse> result = productService.getAll(
+            "CAT01",
+            "Ao",
+            null,
+            null,
+            page,
+            size,
+            sortBy,
+            sortDir
+        );
 
         assertEquals(1, result.getTotalElements());
         assertEquals("P1", result.getContent().get(0).getId());

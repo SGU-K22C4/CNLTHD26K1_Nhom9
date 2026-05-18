@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import AboutPage from '../modules/about/pages/AboutPage'
 import LoginPage from '../modules/auth/pages/LoginPage'
 import RegisterPage from '../modules/auth/pages/RegisterPage'
 import VerifyEmailPage from '../modules/auth/pages/VerifyEmailPage'
@@ -32,6 +33,7 @@ export default function AppRoutes() {
       <Route path="/products/:id" element={<WithLayout><ProductDetailPage /></WithLayout>} />
       <Route path="/verify-email" element={<WithLayout><VerifyEmailPage /></WithLayout>} />
       <Route path="/contact" element={<WithLayout><ContactPage /></WithLayout>} />
+      <Route path="/about" element={<WithLayout><AboutPage /></WithLayout>} />
       <Route path="/chatbot" element={<PrivateRoute><WithLayout><ChatbotPage /></WithLayout></PrivateRoute>} />
       <Route path="/index.html" element={<WithLayout><HomePage /></WithLayout>} />
 

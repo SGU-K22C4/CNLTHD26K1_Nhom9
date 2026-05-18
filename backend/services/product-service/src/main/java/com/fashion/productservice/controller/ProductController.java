@@ -34,9 +34,8 @@ public class ProductController {
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir
     ) {
-        Sort sort = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         return ResponseEntity.ok(
-            productService.getAll(categoryId, search, minPrice, maxPrice, PageRequest.of(page, size, sort))
+            productService.getAll(categoryId, search, minPrice, maxPrice, page, size, sortBy, sortDir)
         );
     }
 

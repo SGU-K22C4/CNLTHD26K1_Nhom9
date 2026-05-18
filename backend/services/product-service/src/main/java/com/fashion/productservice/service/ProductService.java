@@ -11,7 +11,7 @@ public interface ProductService {
 
     Page<ProductResponse> getAll(String categoryId, String search,
                                  BigDecimal minPrice, BigDecimal maxPrice,
-                                 Pageable pageable);
+                                 int page, int size, String sortBy, String sortDir);
 
     Page<ProductResponse> getAdminProducts(String categoryId, String search,
                                            BigDecimal minPrice, BigDecimal maxPrice,

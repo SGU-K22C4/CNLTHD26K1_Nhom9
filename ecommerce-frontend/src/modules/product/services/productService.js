@@ -1,32 +1,11 @@
 import axios from 'axios'
 import { API_CONFIG } from '../../../config/api.config'
+import { colorNameToHex } from '../../../shared/utils/colorMap'
 
 const api = axios.create({
   baseURL: API_CONFIG.BASE_URL,
   timeout: API_CONFIG.TIMEOUT,
 })
-
-const COLOR_TO_HEX = {
-  black: '#1C1C1C',
-  white: '#FFFFFF',
-  red: '#C0392B',
-  blue: '#2E86DE',
-  green: '#5A6D57',
-  yellow: '#F1C40F',
-  gray: '#C0C0C0',
-  grey: '#C0C0C0',
-  pink: '#F78FB3',
-  purple: '#9B59B6',
-  brown: '#8B7355',
-  orange: '#E67E22',
-  beige: '#D2B48C',
-  navy: '#1F3A93',
-}
-
-function toColorHex(colorName = '') {
-  const normalized = String(colorName).toLowerCase().trim()
-  return COLOR_TO_HEX[normalized] || '#A8A8A8'
-}
 
 function toImageList(product) {
   const images = (product.variants || [])
@@ -119,7 +98,7 @@ export function normalizeProduct(product) {
     stockBySize,
     image: images[0] || '',
     images,
-    colors: colors.map(toColorHex),
+    colors: colors.map(colorNameToHex),
     colorLabels: colors,
     sizes,
     collection: product.categoryName || '',

@@ -3,3 +3,13 @@ spring:
     name: cart-service
   config:
     import: "optional:configserver:http://localhost:8888"
+
+# ── Monitoring (Prometheus + Actuator) ──
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}

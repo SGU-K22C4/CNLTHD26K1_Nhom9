@@ -65,3 +65,13 @@ logging:
   level:
     com.fashion.userservice: DEBUG
     org.springframework.security: INFO
+
+# ── Monitoring (Prometheus + Actuator) ──
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}

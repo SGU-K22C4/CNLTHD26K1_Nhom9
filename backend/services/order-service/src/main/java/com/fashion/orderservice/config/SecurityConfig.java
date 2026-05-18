@@ -19,7 +19,7 @@ public class SecurityConfig {
 
     private static final String[] PUBLIC_ENDPOINTS = {
             "/api/v1/payments/vnpay/payment-return",
-            "/actuator/health"
+            "/actuator/**"
     };
 
     @Value("${security.internal.caller:chatbot-service}")
@@ -58,3 +58,4 @@ public class SecurityConfig {
         };
     }
 }
+

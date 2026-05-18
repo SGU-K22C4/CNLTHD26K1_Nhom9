@@ -23,7 +23,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/chatbot/chat").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/chatbot/analytics/events").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/chatbot/sessions/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/**").permitAll()
                         .anyRequest().authenticated()
                 );
 

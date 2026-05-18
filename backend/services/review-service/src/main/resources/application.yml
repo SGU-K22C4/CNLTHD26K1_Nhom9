@@ -7,3 +7,13 @@ spring:
 review:
   integration:
     order-service-url: ${ORDER_SERVICE_URL:http://localhost:8084}
+
+# ── Monitoring (Prometheus + Actuator) ──
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}

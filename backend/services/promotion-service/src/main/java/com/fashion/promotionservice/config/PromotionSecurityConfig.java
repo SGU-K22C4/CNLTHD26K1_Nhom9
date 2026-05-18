@@ -18,7 +18,7 @@ public class PromotionSecurityConfig {
     private static final String[] PUBLIC_ENDPOINTS = {
             "/api/v1/promotions/active/**",
             "/api/v1/promotions/validate/**",
-            "/actuator/health"
+            "/actuator/**"
     };
 
     @Value("${security.internal.caller:chatbot-service}")
@@ -55,3 +55,4 @@ public class PromotionSecurityConfig {
         };
     }
 }
+

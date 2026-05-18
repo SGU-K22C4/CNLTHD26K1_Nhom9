@@ -14,6 +14,8 @@ import com.fashion.productservice.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.extern.slf4j.Slf4j;
@@ -33,7 +35,18 @@ public class ProductServiceImpl implements ProductService {
     @Transactional(readOnly = true)
     public Page<ProductResponse> getAll(String categoryId, String search,
             BigDecimal minPrice, BigDecimal maxPrice,
-            Pageable pageable) {
+            int page, int size, String sortBy, String sortDir) {
+        // Map entity property names to DB column names (required for native query)
+        String dbSortBy = switch (sortBy) {
+            case "createdAt" -> "created_at";
+            case "updatedAt" -> "updated_at";
+            case "name"      -> "name";
+            default          -> "created_at";
+        };
+        Sort sort = sortDir.equalsIgnoreCase("asc")
+                ? Sort.by(dbSortBy).ascending()
+                : Sort.by(dbSortBy).descending();
+        Pageable pageable = PageRequest.of(page, size, sort);
         return productRepository.search(categoryId, search, minPrice, maxPrice, pageable)
                 .map(productMapper::toResponse);
     }

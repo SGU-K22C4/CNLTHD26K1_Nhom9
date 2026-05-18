@@ -19,20 +19,43 @@ public interface ProductRepository extends JpaRepository<Product, String> {
 
         Page<Product> findByCategoryIdAndVisibleTrue(String categoryId, Pageable pageable);
 
+<<<<<<< HEAD
     @Query("""
                 SELECT DISTINCT p FROM Product p
                 WHERE p.visible = true
                     AND (:categoryId IS NULL OR p.category.id = :categoryId)
                     AND (:search IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%')))
+=======
+    @Query(value = """
+                SELECT DISTINCT p.* FROM products p
+                WHERE p.is_visible = true
+                    AND (:categoryId IS NULL OR p.category_id = :categoryId)
+                    AND (:search IS NULL OR p.name COLLATE utf8mb4_0900_ai_ci LIKE CONCAT('%', :search, '%'))
+>>>>>>> 2dd54ea (fix: update product UI and service logic)
                     AND (:minPrice IS NULL OR EXISTS (
-                                SELECT v1.id FROM ProductVariant v1
-                                WHERE v1.product = p AND v1.price >= :minPrice
+                                SELECT v1.id FROM product_variants v1
+                                WHERE v1.product_id = p.id AND v1.price >= :minPrice
                     ))
                     AND (:maxPrice IS NULL OR EXISTS (
-                                SELECT v2.id FROM ProductVariant v2
-                                WHERE v2.product = p AND v2.price <= :maxPrice
+                                SELECT v2.id FROM product_variants v2
+                                WHERE v2.product_id = p.id AND v2.price <= :maxPrice
                     ))
-    """)
+    """,
+    countQuery = """
+                SELECT COUNT(DISTINCT p.id) FROM products p
+                WHERE p.is_visible = true
+                    AND (:categoryId IS NULL OR p.category_id = :categoryId)
+                    AND (:search IS NULL OR p.name COLLATE utf8mb4_0900_ai_ci LIKE CONCAT('%', :search, '%'))
+                    AND (:minPrice IS NULL OR EXISTS (
+                                SELECT v1.id FROM product_variants v1
+                                WHERE v1.product_id = p.id AND v1.price >= :minPrice
+                    ))
+                    AND (:maxPrice IS NULL OR EXISTS (
+                                SELECT v2.id FROM product_variants v2
+                                WHERE v2.product_id = p.id AND v2.price <= :maxPrice
+                    ))
+    """,
+    nativeQuery = true)
     Page<Product> search(
             @Param("categoryId") String categoryId,
             @Param("search") String search,

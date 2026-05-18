@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import { formatCurrency } from '../../../shared/utils/format'
 import { useWishlistContext } from '../../wishlist/context/useWishlistContext'
+import { useAuth } from '../../auth/hooks/useAuth'
+import { isGradientColor, needsSwatchBorder } from '../../../shared/utils/colorMap'
 
 /* ── Wishlist heart icons (SVG, no MUI dependency) ───────── */
 function HeartOutline() {
@@ -34,6 +36,7 @@ function HeartFilled() {
 
 export default function ProductCard({ product }) {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { isWishlisted, toggleWishlist } = useWishlistContext()
 
   if (!product) return null
@@ -86,6 +89,7 @@ export default function ProductCard({ product }) {
           className="absolute top-3 right-3 p-1 transition-transform hover:scale-110"
           onClick={(e) => {
             e.stopPropagation()
+            if (!user) { navigate('/login'); return }
             toggleWishlist(id)
           }}
           aria-label="Toggle wishlist"
@@ -120,17 +124,21 @@ export default function ProductCard({ product }) {
         {/* Colour swatches */}
         {colors?.length > 0 && (
           <div className="flex gap-1.5 mt-1">
-            {colors.map((color, idx) => (
-              <span
-                key={`${color}-${idx}`}
-                className="w-[14px] h-[14px] rounded-full inline-block flex-shrink-0"
-                style={{
-                  backgroundColor: color,
-                  border: '1px solid #E0E0E0',
-                }}
-                title={color}
-              />
-            ))}
+            {colors.map((color, idx) => {
+              const gradient = isGradientColor(color)
+              return (
+                <span
+                  key={`${color}-${idx}`}
+                  className="w-[14px] h-[14px] rounded-full inline-block flex-shrink-0"
+                  style={{
+                    background: gradient ? color : undefined,
+                    backgroundColor: gradient ? undefined : color,
+                    border: needsSwatchBorder(color) ? '1px solid #D0D0D0' : '1px solid #E0E0E0',
+                  }}
+                  title={product.colorLabels?.[idx] || color}
+                />
+              )
+            })}
           </div>
         )}
       </div>

@@ -11,9 +11,7 @@ spring:
 
   jpa:
     hibernate:
-      #dùng validate khi đã có database cần validate , ngoài ra nếu chạy lần đầu thì dùng update
-      # ddl-auto: validate
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: true
     properties:
       hibernate:

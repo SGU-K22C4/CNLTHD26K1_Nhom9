@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
 import { productService } from '../services/productService'
 import ProductGallery from '../components/ProductGallery'
 import SizeSelector from '../components/SizeSelector'
+import SizeGuideModal from '../components/SizeGuideModal'
 import ColorSelector from '../components/ColorSelector'
 import ProductCard from '../components/ProductCard'
 import { formatCurrency } from '../../../shared/utils/format'
@@ -94,6 +95,7 @@ export default function ProductDetailPage() {
   const [selectedSize, setSelectedSize] = useState(null)
   const [qty, setQty] = useState(1)
   const [addedToCart, setAddedToCart] = useState(false)
+  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false)
 
   const { isWishlisted, toggleWishlist } = useWishlistContext()
   const wishlisted = product ? isWishlisted(product.id) : false
@@ -353,7 +355,11 @@ export default function ProductDetailPage() {
                   <p className="text-[12px] tracking-[0.08em] uppercase text-[#202020] font-medium">
                     Size
                   </p>
-                  <button className="text-[12px] underline text-[#888] hover:text-[#202020] transition-colors">
+                  <button
+                    type="button"
+                    onClick={() => setIsSizeGuideOpen(true)}
+                    className="text-[12px] underline text-[#888] hover:text-[#202020] transition-colors"
+                  >
                     Size Guide
                   </button>
                 </div>
@@ -421,6 +427,13 @@ export default function ProductDetailPage() {
         </div>
 
         <ProductReviewSection productId={product.id} />
+
+        <SizeGuideModal
+          isOpen={isSizeGuideOpen}
+          onClose={() => setIsSizeGuideOpen(false)}
+          categoryName={product?.categoryName || category}
+          categoryGender={product?.categoryGender}
+        />
 
         {/* ── Related Products ───────────────────────────── */}
         {related.length > 0 && (

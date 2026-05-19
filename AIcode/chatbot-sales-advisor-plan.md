@@ -929,3 +929,23 @@ Thay vì sửa vá víu từng tool đơn lẻ, chúng ta đã triển khai mộ
 - **Kết quả**: LLM gọi tool gợi ý thành công, toàn bộ tham số trống được chuẩn hóa mượt mà, phản hồi dạng thẻ sản phẩm (tops và bottoms) hiển thị vô cùng premium, bắt mắt, không gặp bất kỳ lỗi NPE hay đứng luồng nào!
 - **Minh chứng hình ảnh**: Lưu trữ và hiển thị ảnh chụp màn hình trực quan tại [chatbot_consultation_success.png](file:///C:/Users/PhucManh/.gemini/antigravity/brain/6a248979-4104-477a-8d06-7d0643389cab/artifacts/chatbot_consultation_success.png).
 
+## 25. Sửa lỗi kiểm thử (Unit Tests Failures) khi build lên Server CI/CD
+
+### Vấn đề 1: Lỗi kiểm thử `ResponseQualityScorerTest.lowQualityNoProducts`
+* **Triệu chứng**: Test case kiểm tra trường hợp chất lượng câu trả lời thấp do không trả về danh sách sản phẩm gợi ý (cho intent tìm sản phẩm `SEARCH_PRODUCT`) bị thất bại do `score.getWarnings()` trống rỗng.
+* **Nguyên nhân**: Trong `ResponseQualityScorerImpl.java`, khi một hội thoại có intent tìm kiếm sản phẩm nhưng dữ liệu `collector` trống và phản hồi không chứa câu báo lỗi lịch sự chuẩn `"mình chưa tìm thấy"`, hệ thống đã không chủ động thêm cảnh báo `Warning` tương ứng.
+* **Giải pháp**: Bổ sung nhánh cảnh báo `else if (isProductIntent(intent))` để tự động kích hoạt `qs.addWarning("No products suggested for a product intent");` khi không có sản phẩm nào được trả về cho các ý định mua sắm/size/mùa. Điều này làm cho cảnh báo được đưa ra đầy đủ và chuẩn xác, giúp test case kiểm thử đạt yêu cầu thành công.
+
+### Vấn đề 2: Lỗi kiểm thử `SemanticIntentRouterTest` (`clearPromotionMessage_routesWithoutLLM`, `clearSizeMessage_routesWithoutLLM`, `wishlistMessage_classified`)
+* **Triệu chứng**: Các test case giả lập bỏ qua bộ phân loại LLM (TF-IDF/ML Classifier) khi gặp các tin nhắn cực kỳ tường minh (như hỏi voucher, số đo chiều cao, xem wishlist) đều bị chuyển hướng thất bại sang intent mặc định `GENERAL`.
+* **Nguyên nhân**: Bộ lọc độ tin cậy `SemanticIntentRouter.java` sử dụng giải thuật cosine overlap chia tổng trọng số từ khóa khớp cho **tổng trọng số của tất cả từ khóa đã đăng ký** đối với intent đó. Việc này dẫn đến việc điểm số tương đồng thực tế của các câu hội thoại cực kỳ ngắn, rõ nghĩa của con người luôn rất nhỏ (ví dụ: `0.176` hoặc `0.333`), không bao giờ có thể vượt qua ngưỡng tin cậy cứng `HIGH_CONFIDENCE_THRESHOLD = 0.82`.
+* **Giải pháp**: Nâng cấp giải thuật so khớp từ khóa thông minh (Prime Keyword Boost):
+  * Xác định 3 từ khóa hàng đầu của mỗi intent trong `IntentKeywordRegistry` là **từ khóa cốt lõi (Prime Keywords)** (ví dụ: `"size"`, `"voucher"`, `"wishlist"`).
+  * Trong `computeKeywordMatchScore`, nếu tin nhắn của khách hàng khớp với bất kỳ từ khóa cốt lõi nào, hệ thống sẽ ngay lập tức trả về điểm tương đồng tối đa là `0.9` (vượt qua ngưỡng `0.82` một cách tuyệt đối).
+  * Phương án này giúp các ý định rõ ràng được định tuyến trực tiếp siêu tốc, giảm tối đa tải cho LLM Classifier, đồng thời đảm bảo các tin nhắn mập mờ vẫn được đẩy về LLM Classifier kiểm duyệt chuẩn xác.
+
+### Kết quả
+* **Đã chạy kiểm thử cục bộ**: Chạy thành công suite test của Maven (`mvn test` tại `chatbot-service`).
+* **Đạt kết quả**: `Tests run: 51, Failures: 0, Errors: 0, Skipped: 0` - **BUILD SUCCESS** hoàn hảo!
+
+

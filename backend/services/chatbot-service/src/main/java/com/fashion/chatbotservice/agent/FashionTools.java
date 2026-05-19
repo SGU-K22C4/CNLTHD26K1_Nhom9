@@ -348,7 +348,8 @@ public class FashionTools {
     }
 
     private ChatSession.PreferenceProfile preferenceProfile() {
-        return preferenceHolder.get();
+        ChatSession.PreferenceProfile profile = preferenceHolder.get();
+        return profile != null ? profile : ChatSession.PreferenceProfile.empty();
     }
 
     private String currentUserId() {

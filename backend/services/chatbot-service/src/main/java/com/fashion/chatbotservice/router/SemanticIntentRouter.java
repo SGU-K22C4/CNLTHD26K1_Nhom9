@@ -79,6 +79,7 @@ public class SemanticIntentRouter {
         double totalWeight = 0.0;
         double matchWeight = 0.0;
         int size = keywords.size();
+        boolean matchesPrime = false;
 
         for (int i = 0; i < size; i++) {
             String kw = keywords.get(i);
@@ -87,10 +88,19 @@ public class SemanticIntentRouter {
             totalWeight += weight;
             if (normalized.contains(kw)) {
                 matchWeight += weight;
+                if (i < 3) {
+                    matchesPrime = true;
+                }
             }
         }
 
         if (totalWeight == 0) return 0.0;
+
+        // Nếu khớp từ khóa chính (prime keyword), gán score cao để route trực tiếp
+        if (matchesPrime) {
+            return 0.9;
+        }
+
         double raw = matchWeight / totalWeight;
 
         // Boost nếu nhiều keywords khớp (indicates clear intent)

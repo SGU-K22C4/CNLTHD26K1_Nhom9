@@ -71,6 +71,8 @@ public class ResponseQualityScorerImpl implements ResponseQualityScorer {
         } else if (isProductIntent(intent) && reply.contains("mình chưa tìm thấy")) {
             // Honest no-result reply vẫn OK
             qs.addPoint("honest_no_result", 5);
+        } else if (isProductIntent(intent)) {
+            qs.addWarning("No products suggested for a product intent");
         }
 
         // 2. Grounding: giá trong reply có vẻ từ data thật (có chữ số + đ/k/vnđ)

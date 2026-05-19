@@ -185,8 +185,8 @@ public class AgentConfig {
 
     private String executeToolSafely(Object toolHost, Method method,
             ToolExecutionRequest toolExecutionRequest, Object memoryId) {
-        Object[] arguments = prepareToolArguments(method, toolExecutionRequest, memoryId);
         try {
+            Object[] arguments = prepareToolArguments(method, toolExecutionRequest, memoryId);
             method.setAccessible(true);
             Object result = method.invoke(toolHost, arguments);
             return result == null ? "" : String.valueOf(result);

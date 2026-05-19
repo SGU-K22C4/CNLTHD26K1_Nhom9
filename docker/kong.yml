@@ -6,6 +6,8 @@ plugins:
       origins:
         - http://localhost:5173
         - http://127.0.0.1:5173
+        - http://localhost:5174
+        - http://127.0.0.1:5174
         - https://modimal.tranhuy.dev
       methods:
         - GET
@@ -31,6 +33,7 @@ plugins:
         - Authorization
       credentials: false
       max_age: 3600
+  - name: prometheus
 
 services:
   - name: user-service

@@ -3,7 +3,7 @@ import { X, Minus, Plus } from 'lucide-react'
 import { useCartContext } from '../hooks/useCartContext'
 import { formatCurrency } from '../../../shared/utils/format'
 
-const TAX_RATE = 0.08
+const TAX_RATE = 0.0
 
 /* ── Shared Order Summary block (used on mobile + desktop right column) ── */
 const OrderSummaryFooter = ({ totalItems, subtotal, tax, total, onNext }) => (
@@ -24,9 +24,6 @@ const OrderSummaryFooter = ({ totalItems, subtotal, tax, total, onNext }) => (
       <span>Order Totals:</span>
       <span>{formatCurrency(total)}</span>
     </div>
-    <p className="text-[11px] text-[#202020] font-semibold leading-relaxed mt-1">
-      The Total Amount You Pay Includes All Applicable Customs Duties &amp; Taxes. We Guarantee No Additional Charges On Delivery
-    </p>
     <button
       onClick={onNext}
       className="w-full lg:w-auto lg:self-end bg-[#5A6D57] hover:bg-[#748C70] text-white text-sm font-[Montserrat] tracking-wide py-4 lg:px-14 lg:py-3 transition-colors mt-2"
@@ -40,7 +37,7 @@ export default function CartPage() {
   const { items, removeItem, updateQuantity, subtotal, totalItems } = useCartContext()
   const navigate = useNavigate()
 
-  const tax   = subtotal * TAX_RATE
+  const tax = subtotal * TAX_RATE
   const total = subtotal + tax
 
   const handleNext = () => navigate('/checkout')
@@ -97,7 +94,7 @@ export default function CartPage() {
               {/* Info block */}
               <div className="flex-1 flex flex-col gap-1 pr-6 pt-1">
                 <p className="text-sm font-bold text-[#202020]">{item.name}</p>
-                {item.size  && <p className="text-sm text-[#404040]">Size: {item.size}</p>}
+                {item.size && <p className="text-sm text-[#404040]">Size: {item.size}</p>}
                 {item.color && <p className="text-sm text-[#404040]">Color: {item.color}</p>}
 
                 {/* Price + stepper on same row */}
@@ -140,7 +137,7 @@ export default function CartPage() {
 
           {/* Mobile order summary footer */}
           <div className="mt-6">
-            <OrderSummaryFooter 
+            <OrderSummaryFooter
               totalItems={totalItems}
               subtotal={subtotal}
               tax={tax}
@@ -224,7 +221,7 @@ export default function CartPage() {
               </div>
             ))}
             <div className="mt-8">
-              <OrderSummaryFooter 
+              <OrderSummaryFooter
                 totalItems={totalItems}
                 subtotal={subtotal}
                 tax={tax}

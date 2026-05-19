@@ -7,6 +7,7 @@ spring:
 review:
   integration:
     order-service-url: ${ORDER_SERVICE_URL:http://localhost:8084}
+    promotion-service-url: ${PROMOTION_SERVICE_URL:http://localhost:8085}
 
 # ── Monitoring (Prometheus + Actuator) ──
 management:

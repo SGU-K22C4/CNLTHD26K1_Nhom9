@@ -43,3 +43,8 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ['chatbot-service:8087']
+
+  # ── Kong Gateway ──
+  - job_name: 'kong-gateway'
+    static_configs:
+      - targets: ['kong:8001']

@@ -9,7 +9,7 @@ import { useCheckoutForm } from '../hooks/useCheckoutForm'
 import { useLoyaltyPoints } from '../hooks/useLoyaltyPoints'
 import { useCheckoutSubmit } from '../hooks/useCheckoutSubmit'
 
-const TAX_RATE = 0.08
+const TAX_RATE = 0.0
 
 /* ── Sub-components lifted out of render ── */
 
@@ -23,7 +23,7 @@ const CartItemRow = ({ item, updateQuantity, removeItem }) => (
     </div>
     <div className="flex-1 flex flex-col gap-1 pr-6 pt-1">
       <p className="text-sm font-bold text-[#202020]">{item.name}</p>
-      {item.size  && <p className="text-sm text-[#404040]">Size: {item.size}</p>}
+      {item.size && <p className="text-sm text-[#404040]">Size: {item.size}</p>}
       {item.color && <p className="text-sm text-[#404040]">Color: {item.color}</p>}
       <div className="flex items-center justify-between mt-3">
         <p className="text-sm font-bold text-[#202020]">{formatCurrency(item.price * item.quantity)}</p>
@@ -78,11 +78,11 @@ const OrderTotals = ({ totalItems, subtotal, tax, loyaltyDiscount, appliedPoints
   )
 }
 
-const LoyaltySection = ({ 
-  walletPoints, pointInput, setPointInput, 
-  handleUseMaxPoints, handleApplyPoints, handleClearPoints, 
-  applyingPoints, subtotal, loyaltyMessage, loyaltyError, 
-  setLoyaltyError, setLoyaltyMessage, getInputClass, appliedPoints 
+const LoyaltySection = ({
+  walletPoints, pointInput, setPointInput,
+  handleUseMaxPoints, handleApplyPoints, handleClearPoints,
+  applyingPoints, subtotal, loyaltyMessage, loyaltyError,
+  setLoyaltyError, setLoyaltyMessage, getInputClass, appliedPoints
 }) => (
   <div className="border border-[#dfdfdf] p-3">
     <p className="text-xs text-[#666] mb-2">Số dư hiện tại: <span className="font-semibold text-[#202020]">{walletPoints} điểm</span></p>
@@ -130,8 +130,8 @@ const PaymentMethodSelector = ({ paymentMethod, onChange, radioName = "paymentMe
   </div>
 )
 
-const CheckoutFormFields = ({ 
-  user, form, errors, set, getInputClass, 
+const CheckoutFormFields = ({
+  user, form, errors, set, getInputClass,
   useRegisteredAddress, setUseRegisteredAddress,
   handleCityChange, handleWardChange, provinces, wards,
   walletPoints, pointInput, setPointInput, handleUseMaxPoints, handleApplyPoints, handleClearPoints,
@@ -201,7 +201,7 @@ const CheckoutFormFields = ({
 
       {/* Loyalty Points */}
       <h2 className="text-base font-semibold text-[#202020] mt-6 mb-3">Sử dụng điểm tích lũy</h2>
-      <LoyaltySection 
+      <LoyaltySection
         walletPoints={walletPoints} pointInput={pointInput} setPointInput={setPointInput}
         handleUseMaxPoints={handleUseMaxPoints} handleApplyPoints={handleApplyPoints} handleClearPoints={handleClearPoints}
         applyingPoints={applyingPoints} subtotal={subtotal} loyaltyMessage={loyaltyMessage} loyaltyError={loyaltyError}
@@ -232,7 +232,7 @@ const CheckoutFormFields = ({
 /* ── Main Component ── */
 
 export default function CheckoutPage() {
-  const { items, removeItem, updateQuantity, subtotal, totalItems, clearCart = () => {} } = useCartContext()
+  const { items, removeItem, updateQuantity, subtotal, totalItems, clearCart = () => { } } = useCartContext()
   const navigate = useNavigate()
 
   const tax = subtotal * TAX_RATE
@@ -303,27 +303,27 @@ export default function CheckoutPage() {
 
         {/* Cart items */}
         {items.map((item) => (
-          <CartItemRow 
-            key={item.id} 
-            item={item} 
-            updateQuantity={updateQuantity} 
-            removeItem={removeItem} 
+          <CartItemRow
+            key={item.id}
+            item={item}
+            updateQuantity={updateQuantity}
+            removeItem={removeItem}
           />
         ))}
 
         {/* Totals */}
         <div className="mt-4 mb-2">
-          <OrderTotals 
-            totalItems={totalItems} 
-            subtotal={subtotal} 
-            tax={tax} 
-            loyaltyDiscount={loyaltyDiscount} 
-            appliedPoints={appliedPoints} 
+          <OrderTotals
+            totalItems={totalItems}
+            subtotal={subtotal}
+            tax={tax}
+            loyaltyDiscount={loyaltyDiscount}
+            appliedPoints={appliedPoints}
           />
         </div>
 
         {/* Form */}
-        <CheckoutFormFields 
+        <CheckoutFormFields
           user={user} form={form} errors={errors} set={set} getInputClass={getInputClass}
           useRegisteredAddress={useRegisteredAddress} setUseRegisteredAddress={setUseRegisteredAddress}
           handleCityChange={handleCityChange} handleWardChange={handleWardChange} provinces={provinces} wards={wards}
@@ -387,7 +387,7 @@ export default function CheckoutPage() {
 
           {/* Contact & Shipping Form */}
           <div className="flex flex-col gap-4">
-            <CheckoutFormFields 
+            <CheckoutFormFields
               user={user} form={form} errors={errors} set={set} getInputClass={getInputClass}
               useRegisteredAddress={useRegisteredAddress} setUseRegisteredAddress={setUseRegisteredAddress}
               handleCityChange={handleCityChange} handleWardChange={handleWardChange} provinces={provinces} wards={wards}
@@ -419,21 +419,21 @@ export default function CheckoutPage() {
           <h2 className="text-xl font-bold text-[#202020] text-center mb-8">Your Cart</h2>
           <div className="flex flex-col">
             {items.map((item) => (
-              <CartItemRow 
-                key={item.id} 
-                item={item} 
-                updateQuantity={updateQuantity} 
-                removeItem={removeItem} 
+              <CartItemRow
+                key={item.id}
+                item={item}
+                updateQuantity={updateQuantity}
+                removeItem={removeItem}
               />
             ))}
           </div>
           <div className="mt-6">
-            <OrderTotals 
-              totalItems={totalItems} 
-              subtotal={subtotal} 
-              tax={tax} 
-              loyaltyDiscount={loyaltyDiscount} 
-              appliedPoints={appliedPoints} 
+            <OrderTotals
+              totalItems={totalItems}
+              subtotal={subtotal}
+              tax={tax}
+              loyaltyDiscount={loyaltyDiscount}
+              appliedPoints={appliedPoints}
             />
           </div>
         </div>

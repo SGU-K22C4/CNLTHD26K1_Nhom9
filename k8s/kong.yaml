@@ -26,6 +26,7 @@ data:
             - "http://modimal.tranhuy.dev"
             - "https://modimal.tranhuy.dev"
             - "http://localhost:5173"
+            - "http://localhost:5174"
             - "http://localhost:3000"
           methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
           headers:
@@ -46,6 +47,8 @@ data:
           policy: local
           fault_tolerant: true
           hide_client_headers: false
+
+      - name: prometheus
 
     services:
       - name: user-service

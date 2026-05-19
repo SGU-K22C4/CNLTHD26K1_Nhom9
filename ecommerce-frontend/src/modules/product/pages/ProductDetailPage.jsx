@@ -102,6 +102,44 @@ export default function ProductDetailPage() {
 
   const chatbotAttribution = location.state?.chatbotAttribution || chatbotService.getProductAttribution(id)
 
+  // Find the matching variant by selected color
+  const selectedVariant = useMemo(() => {
+    if (!product || !selectedColor) return null
+    const colors = product.colors
+    const colorLabels = product.colorLabels
+    const variants = product.variants
+    const selectedColorIndex = colors?.indexOf(selectedColor) ?? 0
+    const selectedColorLabel = colorLabels?.[selectedColorIndex] || ''
+    return variants?.find((v) => v.colorName === selectedColorLabel) || variants?.[0]
+  }, [product, selectedColor])
+
+  // Sizes that are out of stock (quantity = 0) in the currently selected variant
+  const disabledSizes = useMemo(() => {
+    if (!product || !product.sizes) return []
+    const sizes = product.sizes
+    const stockBySize = product.stockBySize
+    if (!selectedVariant) {
+      return sizes.filter((s) => !(stockBySize?.[s] > 0))
+    }
+    return sizes.filter((s) => {
+      const variantSizeObj = selectedVariant.sizes?.find((vSize) => vSize.sizeName === s)
+      const quantity = variantSizeObj ? (variantSizeObj.quantity ?? 0) : 0
+      return quantity <= 0
+    })
+  }, [product, selectedVariant])
+
+  const selectedVariantStock = useMemo(() => {
+    if (!selectedVariant) return 0
+    return (selectedVariant.sizes ?? []).reduce((sum, s) => sum + (s.quantity ?? 0), 0)
+  }, [selectedVariant])
+
+  // Reset selected size if it becomes disabled under the selected color
+  useEffect(() => {
+    if (selectedSize && disabledSizes.includes(selectedSize)) {
+      setSelectedSize(null)
+    }
+  }, [selectedColor, disabledSizes, selectedSize])
+
   useEffect(() => {
     let isMounted = true
 
@@ -204,9 +242,6 @@ export default function ProductDetailPage() {
 
   const { name, category, price, isNew, colors, sizes, collection, fabric, description, variants, colorLabels, inStock, stockBySize } = product
 
-  // Sizes that are out of stock (quantity = 0)
-  const disabledSizes = sizes.filter((s) => !(stockBySize?.[s] > 0))
-
   const handleAddToCart = async (e) => {
     if (!user) {
       navigate('/login')
@@ -215,13 +250,8 @@ export default function ProductDetailPage() {
     if (!selectedSize) return
     setCartError('')
 
-    // Find the matching variant by selected color
-    const selectedColorIndex = colors?.indexOf(selectedColor) ?? 0
-    const selectedColorLabel = colorLabels?.[selectedColorIndex] || ''
-    const variant = variants?.find((v) => v.colorName === selectedColorLabel) || variants?.[0]
-
-    // Find the size ID within that variant
-    const sizeObj = variant?.sizes?.find((s) => s.sizeName === selectedSize)
+    // Find the size ID within the selected variant
+    const sizeObj = selectedVariant?.sizes?.find((s) => s.sizeName === selectedSize)
     const variantSizeId = sizeObj?.id
 
     if (!variantSizeId) {
@@ -390,11 +420,11 @@ export default function ProductDetailPage() {
             {/* Add to Cart button */}
             <button
               onClick={handleAddToCart}
-              disabled={!selectedSize || !inStock}
+              disabled={!selectedSize || !inStock || selectedVariantStock <= 0}
               className="w-full h-[52px] text-[13px] font-medium tracking-[0.1em] uppercase text-white transition-opacity disabled:opacity-40 hover:opacity-90 mb-3"
               style={{ backgroundColor: PRIMARY }}
             >
-              {!inStock ? 'Hết hàng' : addedToCart ? 'Added to Cart ✓' : 'Add to Cart'}
+              {(!inStock || selectedVariantStock <= 0) ? 'Hết hàng' : addedToCart ? 'Added to Cart ✓' : 'Add to Cart'}
             </button>
 
             {cartError && (

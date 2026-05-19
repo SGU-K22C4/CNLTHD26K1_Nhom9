@@ -26,8 +26,7 @@ INSERT INTO product_variants (id, product_id, color_name, price, composition_det
 INSERT INTO variant_images (id, variant_id, image_url, is_primary, sort_order) VALUES 
 ('img-001', 'var-001', 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=800&q=80', TRUE, 0),
 ('img-002', 'var-003', 'https://images.unsplash.com/photo-1542272604-787c3835535d?auto=format&fit=crop&w=800&q=80', TRUE, 0),
-('img-003', 'var-004', 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=800&q=80', TRUE, 0),
-('img-004', 'var-006', 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=80', TRUE, 0);
+('img-003', 'var-004', 'https://images.unsplash.com/photo-1539109132314-d4a8c77ee8c8?auto=format&fit=crop&w=800&q=80', TRUE, 0);
 
 -- Seed Data for Variant Sizes
 INSERT INTO variant_sizes (id, variant_id, size_name, quantity, status) VALUES 

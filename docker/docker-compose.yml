@@ -205,9 +205,16 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - JWT_EXPIRATION=${JWT_EXPIRATION:-3600000}
       - SPRING_CLOUD_CONFIG_ENABLED=false
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - MANAGEMENT_ZIPKIN_TRACING_ENDPOINT=http://jaeger:9411/api/v2/spans
+      - MANAGEMENT_TRACING_SAMPLING_PROBABILITY=1.0
     depends_on:
       mysql:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
 
   review-service:
     build:

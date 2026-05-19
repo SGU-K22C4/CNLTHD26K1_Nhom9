@@ -18,10 +18,10 @@ public class VNPayService {
     /**
      * Build the full VNPay redirect URL for a given order.
      *
-     * @param orderId    The order's database ID (used as vnp_TxnRef)
+     * @param orderId     The order's database ID (used as vnp_TxnRef)
      * @param totalAmount Total in VND (integer, e.g. 1299000)
-     * @param orderInfo  Description shown on VNPay payment page
-     * @param ipAddress  The client's IP address
+     * @param orderInfo   Description shown on VNPay payment page
+     * @param ipAddress   The client's IP address
      * @return Full HTTPS URL to redirect the user to VNPay
      */
     public String createPaymentUrl(Long orderId, long totalAmount, String orderInfo, String ipAddress) {
@@ -79,8 +79,8 @@ public class VNPayService {
                 hashData.append(fieldName).append('=').append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
                 // Build query
                 query.append(URLEncoder.encode(fieldName, StandardCharsets.US_ASCII))
-                     .append('=')
-                     .append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
+                        .append('=')
+                        .append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
                 first = false;
             }
         }
@@ -92,14 +92,16 @@ public class VNPayService {
     }
 
     /**
-     * Validate the response parameters from VNPay callback by checking the secure hash.
+     * Validate the response parameters from VNPay callback by checking the secure
+     * hash.
      *
      * @param params All query parameters from VNPay redirect URL
      * @return true if signature is valid
      */
     public boolean validateSignature(Map<String, String> params) {
         String vnp_SecureHash = params.get("vnp_SecureHash");
-        if (vnp_SecureHash == null) return false;
+        if (vnp_SecureHash == null)
+            return false;
 
         // Remove hash fields before re-computing
         Map<String, String> fields = new TreeMap<>(params);

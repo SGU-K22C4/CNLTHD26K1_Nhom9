@@ -1,0 +1,1202 @@
+{
+  "info": {
+    "_postman_id": "6c4c2927-0cd0-4f30-a654-2d11e6d83a11",
+    "name": "Fashion Microservices - API Design",
+    "description": "Collection-first API design for the Fashion microservices project. Import this collection into Postman to get a service-based sidebar structure similar to a published API reference. All requests are routed through Kong by default via {{baseUrl}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "xUserId", "value": "" },
+    { "key": "xUserRole", "value": "USER" },
+    { "key": "email", "value": "admin@fashion.com" },
+    { "key": "password", "value": "admin123" },
+    { "key": "productId", "value": "" },
+    { "key": "categoryId", "value": "" },
+    { "key": "addressId", "value": "" },
+    { "key": "variantSizeId", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "orderNumber", "value": "" },
+    { "key": "couponCode", "value": "" },
+    { "key": "sessionId", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{accessToken}}", "type": "string" }
+    ]
+  },
+  "item": [
+    {
+      "name": "UserService",
+      "description": "Authentication and user profile endpoints.",
+      "item": [
+        {
+          "name": "Auth",
+          "item": [
+            {
+              "name": "Register",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"fullName\": \"Postman User\",\n  \"email\": \"user@example.com\",\n  \"password\": \"Password123!\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/register",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "auth", "register"]
+                },
+                "description": "Public register endpoint."
+              }
+            },
+            {
+              "name": "Login",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "auth", "login"]
+                },
+                "description": "Public login endpoint."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "  const data = pm.response.json();",
+                      "  if (data.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);",
+                      "  if (data.refreshToken) pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                      "  if (data.user && data.user.id) pm.collectionVariables.set('xUserId', String(data.user.id));",
+                      "  if (data.user && data.user.role) pm.collectionVariables.set('xUserRole', String(data.user.role));",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Refresh Token",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/refresh",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "auth", "refresh"]
+                }
+              }
+            },
+            {
+              "name": "Logout",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/logout",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "auth", "logout"]
+                }
+              }
+            },
+            {
+              "name": "Forgot Password",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{email}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "auth", "forgot-password"]
+                }
+              }
+            },
+            {
+              "name": "Reset Password",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"token\": \"\",\n  \"newPassword\": \"Password123!\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/reset-password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "auth", "reset-password"]
+                }
+              }
+            },
+            {
+              "name": "Verify Email",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/verify-email?token=",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "auth", "verify-email"],
+                  "query": [
+                    { "key": "token", "value": "" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Resend Verification",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{email}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/resend-verification",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "auth", "resend-verification"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Users",
+          "item": [
+            {
+              "name": "Get My Profile",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/users/me",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "users", "me"]
+                }
+              }
+            },
+            {
+              "name": "Update My Profile",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"fullName\": \"Updated User\",\n  \"phone\": \"0900000000\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/users/me",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "users", "me"]
+                }
+              }
+            },
+            {
+              "name": "Change Password",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"oldPassword\": \"{{password}}\",\n  \"newPassword\": \"Password123!\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/users/me/password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "users", "me", "password"]
+                }
+              }
+            },
+            {
+              "name": "Get My Addresses",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/users/me/addresses",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "users", "me", "addresses"]
+                }
+              }
+            },
+            {
+              "name": "Add Address",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"recipientName\": \"Postman User\",\n  \"recipientPhone\": \"0900000000\",\n  \"addressLine\": \"123 Street\",\n  \"ward\": \"Ward 1\",\n  \"district\": \"District 1\",\n  \"city\": \"Ho Chi Minh City\",\n  \"isDefault\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/users/me/addresses",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "users", "me", "addresses"]
+                }
+              }
+            },
+            {
+              "name": "Update Address",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"recipientName\": \"Postman User\",\n  \"recipientPhone\": \"0900000000\",\n  \"addressLine\": \"456 Street\",\n  \"ward\": \"Ward 2\",\n  \"district\": \"District 3\",\n  \"city\": \"Ho Chi Minh City\",\n  \"isDefault\": false\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/users/me/addresses/{{addressId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "users", "me", "addresses", "{{addressId}}"]
+                }
+              }
+            },
+            {
+              "name": "Delete Address",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/users/me/addresses/{{addressId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "users", "me", "addresses", "{{addressId}}"]
+                }
+              }
+            },
+            {
+              "name": "Admin - List Users",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Role", "value": "ADMIN" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/users?page=0&size=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "users"],
+                  "query": [
+                    { "key": "page", "value": "0" },
+                    { "key": "size", "value": "10" }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ProductCatalogService",
+      "description": "Products and wishlist endpoints.",
+      "item": [
+        {
+          "name": "Products",
+          "item": [
+            {
+              "name": "Get Products",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/products?page=0&size=12",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "products"],
+                  "query": [
+                    { "key": "page", "value": "0" },
+                    { "key": "size", "value": "12" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Featured Products",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/products/featured?page=0&size=8",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "products", "featured"],
+                  "query": [
+                    { "key": "page", "value": "0" },
+                    { "key": "size", "value": "8" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get New Arrivals",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/products/new-arrivals?page=0&size=8",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "products", "new-arrivals"],
+                  "query": [
+                    { "key": "page", "value": "0" },
+                    { "key": "size", "value": "8" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Product By Id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/products/{{productId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "products", "{{productId}}"]
+                }
+              }
+            },
+            {
+              "name": "Admin - List Products",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Role", "value": "ADMIN" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/products/admin/list?page=0&size=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "products", "admin", "list"],
+                  "query": [
+                    { "key": "page", "value": "0" },
+                    { "key": "size", "value": "10" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Create Product",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-User-Role", "value": "ADMIN" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Postman Product\",\n  \"slug\": \"postman-product\",\n  \"description\": \"Created from Postman\",\n  \"price\": 199000,\n  \"categoryId\": \"{{categoryId}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/products",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "products"]
+                }
+              }
+            },
+            {
+              "name": "Update Product",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-User-Role", "value": "ADMIN" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated Product\",\n  \"slug\": \"updated-product\",\n  \"description\": \"Updated from Postman\",\n  \"price\": 299000,\n  \"categoryId\": \"{{categoryId}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/products/{{productId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "products", "{{productId}}"]
+                }
+              }
+            },
+            {
+              "name": "Delete Product",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "X-User-Role", "value": "ADMIN" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/products/{{productId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "products", "{{productId}}"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wishlists",
+          "item": [
+            {
+              "name": "Get Wishlist",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/wishlists?page=0&size=20",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "wishlists"],
+                  "query": [
+                    { "key": "page", "value": "0" },
+                    { "key": "size", "value": "20" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Wishlist Ids",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/wishlists/ids",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "wishlists", "ids"]
+                }
+              }
+            },
+            {
+              "name": "Add To Wishlist",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/wishlists/{{productId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "wishlists", "{{productId}}"]
+                }
+              }
+            },
+            {
+              "name": "Remove From Wishlist",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/wishlists/{{productId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "wishlists", "{{productId}}"]
+                }
+              }
+            },
+            {
+              "name": "Check Wishlisted",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/wishlists/{{productId}}/check",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "wishlists", "{{productId}}", "check"]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ShoppingCartService",
+      "description": "Redis-backed shopping cart endpoints.",
+      "item": [
+        {
+          "name": "Get Cart",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cart",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "cart"]
+            }
+          }
+        },
+        {
+          "name": "Add Cart Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"variantSizeId\": \"{{variantSizeId}}\",\n  \"quantity\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cart/items",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "cart", "items"]
+            }
+          }
+        },
+        {
+          "name": "Update Cart Item Quantity",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 2\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cart/items/{{variantSizeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "cart", "items", "{{variantSizeId}}"]
+            }
+          }
+        },
+        {
+          "name": "Remove Cart Item",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cart/items/{{variantSizeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "cart", "items", "{{variantSizeId}}"]
+            }
+          }
+        },
+        {
+          "name": "Clear Cart",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cart",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "cart"]
+            }
+          }
+        },
+        {
+          "name": "Get Cart Count",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cart/count",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "cart", "count"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "OrderService",
+      "description": "Checkout, orders, and VNPay endpoints.",
+      "item": [
+        {
+          "name": "Orders",
+          "item": [
+            {
+              "name": "Create Order",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"recipientName\": \"Postman User\",\n  \"recipientPhone\": \"0900000000\",\n  \"shippingAddress\": \"123 Street\",\n  \"paymentMethod\": \"COD\",\n  \"note\": \"Created from Postman\",\n  \"couponCode\": \"{{couponCode}}\",\n  \"discount\": 0,\n  \"shippingFee\": 0,\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"productName\": \"Demo Product\",\n      \"productSlug\": \"demo-product\",\n      \"imageUrl\": \"\",\n      \"color\": \"Black\",\n      \"size\": \"M\",\n      \"quantity\": 1,\n      \"unitPrice\": 199000\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/orders",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "orders"]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "  const data = pm.response.json();",
+                      "  if (data.id) pm.collectionVariables.set('orderId', String(data.id));",
+                      "  if (data.orderNumber) pm.collectionVariables.set('orderNumber', String(data.orderNumber));",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get My Orders",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/orders?page=0&size=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "orders"],
+                  "query": [
+                    { "key": "page", "value": "0" },
+                    { "key": "size", "value": "10" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Order By Id",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "orders", "{{orderId}}"]
+                }
+              }
+            },
+            {
+              "name": "Get Order By Number",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/orders/by-number/{{orderNumber}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "orders", "by-number", "{{orderNumber}}"]
+                }
+              }
+            },
+            {
+              "name": "Get Order Detail",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/orders/detail/{{orderId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "orders", "detail", "{{orderId}}"]
+                }
+              }
+            },
+            {
+              "name": "Cancel Order",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/cancel",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "orders", "{{orderId}}", "cancel"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payments",
+          "item": [
+            {
+              "name": "Create VNPay Payment URL",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/payments/vnpay/create-payment?orderId={{orderId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "payments", "vnpay", "create-payment"],
+                  "query": [
+                    { "key": "orderId", "value": "{{orderId}}" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "VNPay Payment Return",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/payments/vnpay/payment-return?vnp_TxnRef={{orderId}}&vnp_ResponseCode=00&vnp_TransactionNo=SIM123&vnp_SecureHash=",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "payments", "vnpay", "payment-return"],
+                  "query": [
+                    { "key": "vnp_TxnRef", "value": "{{orderId}}" },
+                    { "key": "vnp_ResponseCode", "value": "00" },
+                    { "key": "vnp_TransactionNo", "value": "SIM123" },
+                    { "key": "vnp_SecureHash", "value": "" }
+                  ]
+                },
+                "description": "Public callback endpoint. For a fully automated callback simulation, use the existing saga collections in postman/collections/New Collection."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Orders",
+          "item": [
+            {
+              "name": "Admin - List Orders",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Role", "value": "ADMIN" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/orders?page=0&size=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "orders"],
+                  "query": [
+                    { "key": "page", "value": "0" },
+                    { "key": "size", "value": "10" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Admin - Get Order Detail",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Role", "value": "ADMIN" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "orders", "{{orderId}}"]
+                }
+              }
+            },
+            {
+              "name": "Admin - Cancel Order",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "X-User-Role", "value": "ADMIN" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}/cancel",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "orders", "{{orderId}}", "cancel"]
+                }
+              }
+            },
+            {
+              "name": "Admin - Update Order Status",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-User-Role", "value": "ADMIN" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"CONFIRMED\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}/status",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "orders", "{{orderId}}", "status"]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PromotionService",
+      "description": "Coupons, promotions, and loyalty endpoints.",
+      "item": [
+        {
+          "name": "Promotions",
+          "item": [
+            {
+              "name": "Get Active Promotions",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/promotions/active",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "promotions", "active"]
+                }
+              }
+            },
+            {
+              "name": "Validate Coupon",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/promotions/validate?code={{couponCode}}&orderAmount=100000",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "promotions", "validate"],
+                  "query": [
+                    { "key": "code", "value": "{{couponCode}}" },
+                    { "key": "orderAmount", "value": "100000" }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Loyalty",
+          "item": [
+            {
+              "name": "Get Wallet",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/promotions/loyalty/wallet",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "promotions", "loyalty", "wallet"]
+                }
+              }
+            },
+            {
+              "name": "Get Transactions",
+              "request": {
+                "method": "GET",
+                "header": [
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/promotions/loyalty/transactions?size=20",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "promotions", "loyalty", "transactions"],
+                  "query": [
+                    { "key": "size", "value": "20" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Preview Redeem",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"points\": 100,\n  \"orderAmount\": 200000\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/promotions/loyalty/redeem/preview",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "promotions", "loyalty", "redeem", "preview"]
+                }
+              }
+            },
+            {
+              "name": "Redeem Points",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"points\": 100,\n  \"orderId\": \"{{orderId}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/promotions/loyalty/redeem",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "promotions", "loyalty", "redeem"]
+                }
+              }
+            },
+            {
+              "name": "Refund Points",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"points\": 100\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/promotions/loyalty/refund",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "promotions", "loyalty", "refund"]
+                }
+              }
+            },
+            {
+              "name": "Earn Points From Order",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"amount\": 200000\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/promotions/loyalty/earn/order",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "promotions", "loyalty", "earn", "order"]
+                }
+              }
+            },
+            {
+              "name": "Earn Points From Review",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "X-User-Id", "value": "{{xUserId}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reviewId\": \"\",\n  \"points\": 10\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/promotions/loyalty/earn/review",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "promotions", "loyalty", "earn", "review"]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ReviewService",
+      "description": "Review listing, stats, and creation.",
+      "item": [
+        {
+          "name": "Get Reviews By Product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews/product/{{productId}}?page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "reviews", "product", "{{productId}}"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Review Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews/product/{{productId}}/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "reviews", "product", "{{productId}}", "stats"]
+            }
+          }
+        },
+        {
+          "name": "Get My Reviews",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews/mine",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "reviews", "mine"]
+            }
+          }
+        },
+        {
+          "name": "Create Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"rating\": 5,\n  \"comment\": \"Great product\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "reviews"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ChatbotService",
+      "description": "Public chat and chatbot session endpoints.",
+      "item": [
+        {
+          "name": "Chat",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"message\": \"Xin chao, toi muon tim ao thun den\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/chatbot/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "chatbot", "chat"]
+            }
+          }
+        },
+        {
+          "name": "Get Session",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/chatbot/sessions/{{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "chatbot", "sessions", "{{sessionId}}"]
+            }
+          }
+        },
+        {
+          "name": "Record Analytics Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Id", "value": "{{xUserId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"eventType\": \"feedback\",\n  \"value\": \"positive\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/chatbot/analytics/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "chatbot", "analytics", "events"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Existing QA Collections",
+      "description": "Repo already contains deeper E2E flows for Saga and VNPay under postman/collections/New Collection.",
+      "item": [
+        {
+          "name": "See Local Files",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost",
+              "host": ["http://localhost"]
+            },
+            "description": "Reference only. Import these existing files separately: Saga_Checkout_Guided_E2E.postman_collection.json and QA_Saga_VNPAY_Cancel_Compensation.postman_collection.json."
+          }
+        }
+      ]
+    }
+  ]
+}

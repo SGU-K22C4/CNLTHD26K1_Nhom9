@@ -1122,10 +1122,18 @@ public class FashionTools {
         if (suggestions == null || suggestions.isEmpty() || color == null || color.isBlank()) {
             return suggestions;
         }
-        String normalizedColor = normalizeText(color);
+        String normalizedColor = normalizeText(color).toLowerCase(Locale.ROOT);
         List<ChatResponse.ProductSuggestion> filtered = suggestions.stream()
-                .filter(s -> safeList(s.getAvailableColors()).stream()
-                        .anyMatch(avail -> normalizeText(avail).contains(normalizedColor)))
+                .filter(s -> {
+                    List<String> colors = safeList(s.getAvailableColors());
+                    if (colors.isEmpty()) return false;
+                    return colors.stream().anyMatch(avail -> {
+                        String normalizedAvail = normalizeText(avail).toLowerCase(Locale.ROOT);
+                        return normalizedAvail.equals(normalizedColor)
+                                || normalizedAvail.contains(normalizedColor)
+                                || normalizedColor.contains(normalizedAvail);
+                    });
+                })
                 .toList();
         return filtered.isEmpty() ? suggestions : filtered;
     }

@@ -33,6 +33,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private final KnowledgeDocumentRepository repository;
     private final GraphRagService graphRagService;
+    private final PostRAGReranker postRAGReranker;
 
     @Value("${chatbot.knowledge.top-k:4}")
     private int topK;
@@ -64,7 +65,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             double safeGraphWeight = clamp(graphMergeWeight, 0.0, 1.0);
             double lexicalWeight = 1.0 - safeGraphWeight;
 
-            return allDocs.stream()
+            List<SearchResult> rawResults = allDocs.stream()
                     .map(doc -> {
                         double lexicalScore = scoreDocument(doc, queryTokens);
                         double graphScore = doc.getId() == null
@@ -82,8 +83,13 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                     })
                     .filter(result -> result.score() >= effectiveMinScore)
                     .sorted(Comparator.comparingDouble(SearchResult::score).reversed())
-                    .limit(topK)
+                    .limit(topK * 3) // retrieve extra for re-ranker to work with
                     .toList();
+
+            // Post-RAG Self-Reflection: re-rank, dedup and truncate for LLM quality
+            List<SearchResult> reranked = postRAGReranker.rerank(rawResults, query, topK);
+            log.debug("PostRAG: {} raw → {} after rerank", rawResults.size(), reranked.size());
+            return reranked;
         } catch (Exception ex) {
             log.warn("Knowledge search failed: {}", ex.getMessage());
             return List.of();

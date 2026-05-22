@@ -340,28 +340,56 @@ Pipeline trong `ChatbotServiceImpl` đi theo thứ tự:
 
 Điểm mạnh của cách làm này là:
 
-- giảm số call LLM không cần thiết
-- tăng tính ổn định
-- bớt chi phí
-- giữ được các business flow quan trọng ở backend, không phó mặc cho model
+- **Giảm số call LLM không cần thiết**
+  - *Là gì:* Các bước validate, out-of-domain filter, direct intent được xử lý bằng Java logic thuần.
+  - *Ở đâu:* `ChatbotServiceImpl.java` — các method `handleOutOfDomain()`, `handleDirectIntent()`, `handleDeicticReference()` chạy trước khi gọi agent.
+  - *Làm gì:* Nếu câu hỏi lệch domain hoặc là intent mạnh đã biết (wishlist, loyalty, size), trả lời ngay mà không tốn token LLM.
+
+- **Tăng tính ổn định**
+  - *Là gì:* Pipeline có thứ tự cố định, mỗi bước có try-catch riêng và fallback rõ ràng.
+  - *Ở đâu:* `ChatbotServiceImpl.java` — toàn bộ method `processMessage()` bọc trong cấu trúc try-catch nhiều tầng.
+  - *Làm gì:* Khi một bước lỗi (ví dụ enrich profile fail), pipeline vẫn tiếp tục thay vì throw exception ra ngoài, giúp bot không bị sập khi dịch vụ phụ trợ không ổn định.
+
+- **Bớt chi phí**
+  - *Là gì:* Chỉ gọi LLM ở bước agent path, các bước còn lại dùng rule-based hoặc cache.
+  - *Ở đâu:* `KnowledgeBaseServiceImpl.java` — có `@Cacheable(value = "knowledgeBase")` để cache kết quả search knowledge.
+  - *Làm gì:* Câu hỏi policy/FAQ đã được hỏi trước đó sẽ lấy từ cache thay vì search lại MongoDB và tốn thêm token.
+
+- **Giữ business flow quan trọng ở backend, không phó mặc cho model**
+  - *Là gì:* Các nghiệp vụ quan trọng (wishlist chưa login → yêu cầu đăng nhập; size consulting → tính toán size theo số đo) được code cứng trong Java.
+  - *Ở đâu:* `ChatbotServiceImpl.java` — `handleDirectIntent()`; `SizeAdvisorServiceImpl.java`; `SizeFitAdvisoryServiceImpl.java`.
+  - *Làm gì:* Đảm bảo các flow quan trọng luôn chạy đúng, không phụ thuộc vào việc LLM có "hiểu" đúng prompt hay không.
 
 ---
 
 ## 6.2. Chatbot có “bộ não bán hàng”, không phải chỉ search sản phẩm
 
-Chatbot có `SalesStage`:
+Chatbot có `SalesStage` — enum định nghĩa 7 giai đoạn hành trình bán hàng:
 
-- `DISCOVERY`
-- `FILTERING`
-- `RECOMMENDING`
-- `COMPARING`
-- `CLOSING`
+- **`DISCOVERY`** — *Ở đâu:* `SalesStage.java`. *Làm gì:* Giai đoạn bot đang tìm hiểu nhu cầu ban đầu, chưa có đủ thông tin để recommend. Bot ưu tiên hỏi dịp mặc, phong cách, ngân sách.
+- **`STYLE_DISCOVERY`** — *Làm gì:* Bot đang đào sâu về phong cách (vibe, màu sắc, form dáng) sau khi đã biết loại sản phẩm cần mua.
+- **`FILTERING`** — *Làm gì:* Đã có đủ thông tin cơ bản, bot đang thu hẹp danh sách sản phẩm theo filter (size, màu, giá).
+- **`RECOMMENDING`** — *Làm gì:* Bot đang gợi ý sản phẩm cụ thể, kèm lý do phù hợp với profile user.
+- **`COMPARING`** — *Làm gì:* User đang so sánh 2+ sản phẩm, bot hỗ trợ phân tích ưu nhược điểm từng mẫu.
+- **`CLOSING`** — *Làm gì:* Bot nhận ra user sắp chốt đơn, chủ động nhắc promotion, loyalty hoặc CTA.
+- **`AFTER_SALES`** — *Làm gì:* Sau khi đặt hàng, hỗ trợ tra cứu đơn, chính sách đổi trả.
 
 `ConversationStateServiceImpl` dùng slot readiness để quyết định:
 
-- còn thiếu thông tin gì
-- nên hỏi tiếp hay đã nên recommend
-- đang ở bước so sánh hay chốt đơn
+- **Còn thiếu thông tin gì**
+  - *Là gì:* `RecommendationReadiness` — object đánh giá xem slot nào còn trống trong `StylingSlots`.
+  - *Ở đâu:* `ConversationStateServiceImpl.java` — `checkReadiness()` kiểm tra các slot: gender, occasion, budget, size, style vibe.
+  - *Làm gì:* Nếu slot quan trọng còn thiếu → trả về `ClarifyingQuestion` để bot hỏi thêm thay vì recommend ngay.
+
+- **Nên hỏi tiếp hay đã nên recommend**
+  - *Là gì:* `StageDecision` — object quyết định hành động tiếp theo dựa trên stage hiện tại và readiness score.
+  - *Ở đâu:* `ConversationStateServiceImpl.java` — `decideNextStage()`.
+  - *Làm gì:* Nếu readiness đạt ngưỡng → chuyển stage sang `RECOMMENDING` và trigger tool search. Nếu chưa → ở lại `FILTERING` và sinh clarifying question.
+
+- **Đang ở bước so sánh hay chốt đơn**
+  - *Là gì:* Logic detect intent so sánh ("mẫu nào tốt hơn", "khác nhau thế nào") và intent chốt ("mình lấy mẫu này", "thêm vào giỏ").
+  - *Ở đâu:* `ChatbotServiceImpl.java` — phần xử lý stage `COMPARING` và `CLOSING`.
+  - *Làm gì:* Ở COMPARING bot gọi tool so sánh; ở CLOSING bot nhắc promotion và loyalty tier còn áp dụng.
 
 Điểm này rất tốt khi báo cáo vì nó chứng minh bot hiểu cuộc hội thoại như một hành trình bán hàng, không phải chuỗi câu hỏi rời rạc.
 
@@ -371,24 +399,24 @@ Chatbot có `SalesStage`:
 
 `SlotFillingServiceImpl` đang thu thập các slot quan trọng:
 
-- gender
-- occasion
-- style vibe
-- product type
-- budget
-- size
-- fit
-- color
-- height / weight
+- **`gender`** — Trích từ câu nói tự nhiên ("đồ nam", "cho con gái") bằng regex context-aware, tránh bắt sai khi user dùng "nam" không phải để chỉ giới tính. *Ở đâu:* `ProfileEnrichmentServiceImpl.java` — `extractTargetGender()`.
+- **`occasion`** — Nhận diện dịp mặc: "đi làm" → `office`, "đi chơi" → `casual`, "dự tiệc" → `party`, "du lịch" → `travel`. *Ở đâu:* `ProfileEnrichmentServiceImpl.java` — `extractOccasionPreference()`.
+- **`style vibe`** — Lưu vào `StylingSlots`. *Ở đâu:* `StylingSlots.java` — `SlotFillingServiceImpl.java` ghi nhận khi user nhắc đến "basic", "minimal", "streetwear", "elegant".
+- **`product type`** — Phân loại áo, quần, váy, đầm từ tin nhắn. *Ở đâu:* `ProfileEnrichmentServiceImpl.java` — `extractCategoryPreference()` dùng keyword matching sau khi normalize tiếng Việt.
+- **`budget`** — Parse ngân sách từ chuỗi tự nhiên ("200k", "dưới 1 triệu", "khoảng 500"). *Ở đâu:* `ProfileEnrichmentServiceImpl.java` — `parseBudget()` + `refreshPriceComfortZone()` phân loại thành `soft/mid/premium`.
+- **`size`** — Trích size bằng regex (`size\s*[:=]?\s*(xs|s|m|l|xl|xxl|\d{2})`). *Ở đâu:* `ProfileEnrichmentServiceImpl.java` — `extractSizePreference()`.
+- **`fit`** — Nhận diện oversize/slim/regular từ từ khóa "rộng", "thoải mái", "ôm", "slim fit". *Ở đâu:* `ProfileEnrichmentServiceImpl.java` — `extractFitPreference()`.
+- **`color`** — Ghi nhận màu yêu thích (xanh, đen, trắng, đỏ, hồng). *Ở đâu:* `ProfileEnrichmentServiceImpl.java` — `extractColorPreference()`.
+- **`height / weight`** — Thu thập từ câu nói khi user tự khai số đo để tư vấn size. *Ở đâu:* `SizeAdvisorServiceImpl.java` — `consultSize()` tính size phù hợp dựa trên BMI và bảng size chuẩn.
 
-Đây là đúng bài toán fashion commerce, vì khách mua quần áo không chỉ hỏi “có gì đẹp”, mà cần:
+Đây là đúng bài toán fashion commerce, vì khách mua quần áo không chỉ hỏi "có gì đẹp", mà cần:
 
-- mặc dịp gì
-- dáng người ra sao
-- thích vibe nào
-- ngân sách bao nhiêu
+- **Mặc dịp gì** — slot `occasion` quyết định filter "office" hay "casual" khi search sản phẩm.
+- **Dáng người ra sao** — slot `height/weight` → `SizeAdvisorServiceImpl` tính toán size phù hợp theo số đo thật.
+- **Thích vibe nào** — slot `style vibe` → inject vào system context của agent để gợi ý đúng phong cách.
+- **Ngân sách bao nhiêu** — slot `budget` → `priceComfortZone` (soft/mid/premium) giúp filter sản phẩm theo khoảng giá phù hợp.
 
-Nghĩa là bot đã dịch được câu nói tự nhiên của user thành dữ liệu tư vấn có cấu trúc.
+Nghĩa là bot đã dịch được câu nói tự nhiên của user thành dữ liệu tư vấn có cấu trúc thông qua `ProfileEnrichmentServiceImpl` + `SlotFillingServiceImpl`, không phải chỉ dựa vào prompt.
 
 ---
 
@@ -396,23 +424,23 @@ Nghĩa là bot đã dịch được câu nói tự nhiên của user thành dữ
 
 Luồng `handleColdStart()` xử lý các câu như:
 
-- “mua áo”
-- “mua quần”
-- “tư vấn đồ”
+- **"mua áo"** — *Là gì:* Câu quá chung, không có đủ thông tin để search. *Làm gì:* Bot nhận diện đây là `DISCOVERY` stage, gọi `handleColdStart()` thay vì chạy agent ngay.
+- **"mua quần"** — *Làm gì:* Tương tự, bot hỏi lại "quần gì — jeans, kaki, hay jogger?" để thu slot `product type` trước.
+- **"tư vấn đồ"** — *Làm gì:* Trigger `handleDiscovery()` — bot hỏi tuần tự: dịp mặc → phong cách → ngân sách, trước khi gọi tool search.
 
 Thay vì vội vàng recommend bừa, bot hỏi lại cụ thể:
 
-- áo gì
-- quần gì
-- váy gì
+- **Áo gì** — *Ở đâu:* `FashionAgent.java` — phần `COLD START / CÂU HỎI QUÁ CHUNG` trong system prompt hướng dẫn agent hỏi: "áo thun, sơ mi, polo hay áo khoác?".
+- **Quần gì** — *Làm gì:* Giúp điền slot `product type` trước khi call tool `searchProducts` hoặc `listProductTypes`.
+- **Váy gì** — *Làm gì:* Tương tự, thu hẹp product type để kết quả recommend chính xác hơn.
 
 Điểm tốt:
 
-- giảm sai ngay từ turn đầu
-- tạo cảm giác bot đang hiểu nhu cầu thật
-- rất hợp với nghiệp vụ tư vấn bán hàng
+- **Giảm sai ngay từ turn đầu** — *Là gì:* Không gọi tool search với query quá mơ hồ → tránh trả về sản phẩm không liên quan ngay lần đầu. *Ở đâu:* `ChatbotServiceImpl.java` — kiểm tra `SalesStage == DISCOVERY` trước khi execute agent.
+- **Tạo cảm giác bot đang hiểu nhu cầu thật** — *Là gì:* Câu hỏi làm rõ được sinh từ `ClarifyingQuestion` object dựa trên slot nào còn thiếu, không phải hỏi đại. *Ở đâu:* `ConversationStateServiceImpl.java` — `generateClarifyingQuestion()`.
+- **Rất hợp với nghiệp vụ tư vấn bán hàng** — *Là gì:* Đây là kỹ thuật consultative selling — hiểu nhu cầu trước khi giới thiệu sản phẩm, đúng quy trình của nhân viên bán hàng chuyên nghiệp.
 
-Đây là một điểm dễ ghi điểm với giảng viên vì nó cho thấy nhóm không để AI trả lời lan man.
+Đây là một điểm dễ ghi điểm với giảng viên vì nó cho thấy nhóm không để AI trả lời lan man — bot bị ràng buộc bởi pipeline và system prompt không được tự suy diễn khi thiếu context.
 
 ---
 
@@ -422,18 +450,34 @@ Phần memory của chatbot mạnh ở 2 tầng:
 
 ### Tầng 1: session memory
 
-- chat history được lưu trong MongoDB `chat_sessions`
-- mỗi turn lưu cả:
-  - user message
-  - bot reply
-  - product suggestions snapshot
-  - promotion snapshot
-- `AgentConfig` hydrate lại `MessageWindowChatMemory` từ lịch sử cũ khi session được mở lại
+- **Chat history lưu trong MongoDB `chat_sessions`**
+  - *Là gì:* Collection `chat_sessions` trong MongoDB, mỗi document là một `ChatSession` gắn với `sessionId` duy nhất.
+  - *Ở đâu:* `ChatSession.java` (model) + `ChatSessionRepository.java` (Spring Data MongoDB repo).
+  - *Làm gì:* Lưu toàn bộ lịch sử câu hỏi/trả lời dưới dạng `List<ChatMessage>` để khôi phục memory khi session được mở lại.
+
+- **Mỗi turn lưu đủ 4 thập**
+  - *`user message`* — Nội dung câu hỏi gốc của user.
+  - *`bot reply`* — Nội dung trả lời của bot đã qua guardrail.
+  - *`product suggestions snapshot`* — Danh sách sản phẩm được gợi ý trong turn đó, dùng để bind khi user nói "mẫu này" ở turn sau.
+  - *`promotion snapshot`* — Promotion đang áp dụng trong turn đó, giúp bot không phải fetch lại nếu user hỏi tiếp.
+  - *Ở đâu:* `ChatbotServiceImpl.java` — method `persistSession()` ghi sau mỗi turn.
+
+- **`AgentConfig` hydrate lại `MessageWindowChatMemory` từ lịch sử cũ**
+  - *Là gì:* `MessageWindowChatMemory` là class của LangChain4j, giữ toàn bộ context chat theo cử a sổ trượt (tối đa 1000 messages theo config).
+  - *Ở đâu:* `AgentConfig.java` — method `hydrateMemory()` được gọi khi `chatMemoryProvider` tạo memory mới cho một session.
+  - *Làm gì:* Đọc `ChatSession.getMessages()` từ MongoDB, nạp vào memory theo thứ tự user/AI mỗi cặp — đảm bảo khi user mở lại widget, bot "nhớ" cuộc hội thoại trước mà không cần user nhắc lại.
 
 ### Tầng 2: long-term preference
 
-- profile được persist async sau mỗi turn
-- khi user quay lại, session mới có thể bootstrap từ profile đã lưu
+- **Profile được persist async sau mỗi turn**
+  - *Là gì:* `UserPreferenceDocument` — MongoDB document lưu profile sở thích lâu dài theo `userId`, tách riêng khỏi session.
+  - *Ở đâu:* `ProfileEnrichmentServiceImpl.java` — `persistProfileAsync()` dùng `CompletableFuture.runAsync()` để không block main thread.
+  - *Làm gì:* Sau mỗi turn, ghi `PreferenceProfile` (size, màu, category, persona, budget zone…) vào MongoDB. Không chặn luồng trả lời để không tăng latency.
+
+- **Khi user quay lại, session mới bootstrap từ profile đã lưu**
+  - *Là gì:* `loadPersistedProfile()` — load profile cũ từ `UserPreferenceRepository` và merge vào session mới.
+  - *Ở đâu:* `ProfileEnrichmentServiceImpl.java` — được gọi ngay ở đầu `processMessage()` khi tạo session mới.
+  - *Làm gì:* User lần trước chọn size M, thích đen, mặc casual — lần này mở chat mới, bot đã biết điều đó ngay từ turn đầu và ưu tiên gợi ý phù hợp.
 
 Kết quả là bot không bị “mất trí nhớ hoàn toàn” sau mỗi câu hay mỗi lần mở lại widget.
 
@@ -441,18 +485,29 @@ Kết quả là bot không bị “mất trí nhớ hoàn toàn” sau mỗi câ
 
 ## 6.6. Chatbot biết tận dụng dữ liệu người dùng thật để cá nhân hóa
 
-`ProfileEnrichmentServiceImpl` không chỉ đọc tin nhắn hiện tại, mà còn enrich từ:
+`ProfileEnrichmentServiceImpl` không chỉ đọc tin nhắn hiện tại, mà còn enrich từ 3 nguồn thật:
 
-- purchase history
-- wishlist
-- user profile
+- **Purchase history (lịch sử mua hàng)**
+  - *Là gì:* `enrichFromPurchaseHistory()` — gọi REST API `GET /api/v1/orders?page=0&size=20` với header `X-User-Id`.
+  - *Ở đâu:* `ProfileEnrichmentServiceImpl.java` — `enrichFromPurchaseHistory()` dùng `WebClient` để gọi `order-service`.
+  - *Làm gì:* Phân tích 20 đơn gần nhất, trích xuất size và màu của từng item đã mua, bổ sung vào `preferredSizes` và `preferredColors` của profile. Chỉ fetch nếu profile còn trống, tránh gọi HTTP mỗi message.
+
+- **Wishlist**
+  - *Là gì:* `enrichFromWishlist()` — gọi REST API `GET /api/v1/wishlists?page=0&size=20` với header `X-User-Id`.
+  - *Ở đâu:* `ProfileEnrichmentServiceImpl.java` — `enrichFromWishlist()` dùng `WebClient` để gọi `product-service`.
+  - *Làm gì:* Với từng sản phẩm trong wishlist, trích xuất `categoryName`, `colorName`, `sizeName` từ variants để enrich `preferredCategories`, `preferredColors`, `preferredSizes`.
+
+- **User profile**
+  - *Là gì:* `enrichFromUserProfile()` — gọi REST API `GET /api/v1/users/me` để lấy hồ sơ cơ bản.
+  - *Ở đâu:* `ProfileEnrichmentServiceImpl.java` — `enrichFromUserProfile()` dùng `WebClient` gọi `user-service`.
+  - *Làm gì:* Lấy `gender` từ field trong profile để điền `targetGender` nếu user chưa đề cập trong chat. Lấy tên để set preferred tone.
 
 Ví dụ bot có thể biết:
 
-- size user hay mua
-- màu user hay chọn
-- category user quan tâm
-- target gender
+- **Size user hay mua** — *Ở đâu:* Từ `enrichFromPurchaseHistory()` — lấy size từng item trong order, ưu tiên gợi ý sản phẩm còn size đó.
+- **Màu user hay chọn** — *Ở đâu:* Từ cả purchase history và wishlist — bot gợi ý sản phẩm màu quen trước.
+- **Category user quan tâm** — *Ở đâu:* Từ wishlist `categoryName` — filter sản phẩm theo category ưu tiên.
+- **Target gender** — *Ở đâu:* Từ user profile `gender` field — không cần user khai lại giới tính mỗi session.
 
 Điểm hay ở đây là cá nhân hóa không chỉ đến từ prompt, mà đến từ dữ liệu thật của hệ thống.
 
@@ -464,24 +519,32 @@ Ví dụ bot có thể biết:
 
 Thay vì đẩy toàn bộ intent vào agent, repo tách một số intent mạnh ra flow riêng:
 
-- wishlist recommendation
-- loyalty benefit
-- size consulting
-- direct product search
+- **Wishlist recommendation**
+  - *Là gì:* Flow xử lý khi user hỏi về wishlist của mình ("đồ đã lưu", "wishlist của tôi").
+  - *Ở đâu:* `ChatbotServiceImpl.java` — `handleDirectIntent()` — nếu intent là `wishlist_recommendation` và user chưa đăng nhập → trả về thông báo yêu cầu login ngay không gọi agent.
+  - *Làm gì:* Nếu đã login, gọi `ProductQueryHandlerImpl` để lấy wishlist thật và render card sản phẩm trực tiếp, không phải đưa qua LLM.
+
+- **Loyalty benefit**
+  - *Là gì:* Flow kiểm tra điểm tích lũy, loyalty tier và ưu đãi thành viên.
+  - *Ở đâu:* `ChatbotServiceImpl.java` — `handleDirectIntent()` — nếu intent là `loyalty_benefit` và guest → trả về yêu cầu đăng nhập.
+  - *Làm gì:* Nếu đã login, gọi `FashionTools.getLoyaltyBenefits()` → lấy điểm thật từ `promotion-service` rồi format kết quả mà không cần LLM tự tạo số.
+
+- **Size consulting**
+  - *Là gì:* Flow tư vấn size dựa trên số đo chiều cao/cân nặng/vòng ngực.
+  - *Ở đâu:* `SizeAdvisorServiceImpl.java` — `consultSize()` có bảng size chuẩn cho áo, quần, váy; `SizeFitAdvisoryServiceImpl.java` tư vấn chọn fit phù hợp dáng người.
+  - *Làm gì:* Nếu user cung cấp số đo rõ → gọi thẳng `buildSizeConsultationResponse()`, trả kết quả deterministic, không cần LLM suy đoán.
+
+- **Direct product search**
+  - *Là gì:* Flow search sản phẩm theo tên cụ thể bằng strict match trước khi dùng fuzzy search.
+  - *Ở đâu:* `ProductQueryHandlerImpl.java` — `searchProductsStrict()` tìm exact/partial match theo tên sản phẩm.
+  - *Làm gì:* Tránh LLM “pần mình” tìm sản phẩm không tồn tại khi user đã nói rõ tên; nếu strict search ra kết quả → trả về ngay.
 
 Lợi ích:
 
-- nhanh hơn
-- ít lỗi hơn
-- deterministic hơn
-- đúng nghiệp vụ hơn
-
-Ví dụ:
-
-- hỏi wishlist mà chưa login thì bot trả lời yêu cầu đăng nhập
-- hỏi loyalty cũng vậy
-- hỏi size với số đo rõ thì vào thẳng `buildSizeConsultationResponse()`
-- hỏi sản phẩm cụ thể thì đi strict search trước
+- **Nhanh hơn** — Không cần qua LLM và tool calling round-trip. Response có thể về trong < 200ms thay vì chờ model.
+- **Ít lỗi hơn** — LLM có thể mắc lỗi intent routing; code Java thì deterministic.
+- **Deterministic hơn** — Cùng một câu hỏi wishlist/loyalty luôn ra cùng kết quả thật từ database, không thay đổi theo temperature.
+- **Đúng nghiệp vụ hơn** — "Guest hỏi wishlist → yêu cầu đăng nhập" là nghiệp vụ cứng, phải luôn đúng, không nên để LLM tự quyết định.
 
 Đây là tư duy rất tốt: dùng AI ở nơi cần linh hoạt, nhưng giữ logic nghiệp vụ quan trọng ở code.
 
@@ -509,21 +572,13 @@ Luồng:
 
 `MultiIntentResolverImpl` cho phép gom nhiều nhu cầu follow-up như:
 
-- hỏi chi tiết
-- hỏi review
-- hỏi khuyến mãi
+- **Hỏi chi tiết** — *Là gì:* Intent `product_detail`. *Ở đâu:* `MultiIntentResolverImpl.java` — detect keyword "chi tiết", "thông tin", "mô tả". *Làm gì:* Gọi `FashionTools.getProductDetails()` lấy mô tả, chất liệu, thông số từ `product-service`.
+- **Hỏi review** — *Là gì:* Intent `product_review`. *Ở đâu:* `MultiIntentResolverImpl.java` — detect "review", "đánh giá". *Làm gì:* Gọi `FashionTools.getProductReviews()` lấy rating và comment thật từ `review-service` (MongoDB).
+- **Hỏi khuyến mãi** — *Là gì:* Intent `promotion_check`. *Ở đâu:* `MultiIntentResolverImpl.java` — detect "khuyến mãi", "giảm giá", "coupon". *Làm gì:* Gọi `FashionTools.getApplicablePromotions()` kiểm tra promotion còn hiệu lực.
 
-trên cùng một sản phẩm đã chọn.
+Kết quả được tổng hợp bởi `ResponseAssembler.java` thành 1 reply gộp — user không cần gửi 3 câu riêng lẻ mà vẫn nhận đủ thông tin.
 
-Nghĩa là user không cần tách 3 câu rời rạc kiểu:
-
-- “cho mình chi tiết”
-- “review sao”
-- “có giảm giá không”
-
-Bot có thể tổng hợp lại thành một reply gộp cho đúng mẫu đó.
-
-Điểm này rất hợp demo vì cho thấy bot làm “người bán hàng” tốt hơn, không chỉ là router intent cơ bản.
+Điểm này rất hợp demo vì cho thấy bot làm "người bán hàng" tốt hơn, không chỉ là router intent cơ bản.
 
 ---
 

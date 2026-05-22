@@ -291,11 +291,32 @@ public class GraphRagServiceImpl implements GraphRagService {
         String normalized = normalize(text);
         if (normalized.isBlank()) return Map.of();
 
+        String[] tokens = normalized.split("\\s+");
         Map<String, Integer> frequencies = new HashMap<>();
-        for (String token : normalized.split("\\s+")) {
+
+        // Unigrams
+        for (String token : tokens) {
             if (token.length() < 2 || STOP_WORDS.contains(token)) continue;
             frequencies.merge(token, 1, Integer::sum);
         }
+
+        // Bigrams — critical for Vietnamese compound product names
+        // e.g. "ao so mi", "chan vay", "quan jeans"
+        for (int i = 0; i < tokens.length - 1; i++) {
+            String t1 = tokens[i], t2 = tokens[i + 1];
+            if (t1.length() < 2 || t2.length() < 2) continue;
+            if (STOP_WORDS.contains(t1) && STOP_WORDS.contains(t2)) continue;
+            frequencies.merge(t1 + "_" + t2, 2, Integer::sum); // weight bigrams as freq=2
+        }
+
+        // Trigrams — for longer product names
+        for (int i = 0; i < tokens.length - 2; i++) {
+            String t1 = tokens[i], t2 = tokens[i + 1], t3 = tokens[i + 2];
+            if (t1.length() < 2 || t2.length() < 2 || t3.length() < 2) continue;
+            if (STOP_WORDS.contains(t1) && STOP_WORDS.contains(t2) && STOP_WORDS.contains(t3)) continue;
+            frequencies.merge(t1 + "_" + t2 + "_" + t3, 3, Integer::sum); // weight trigrams as freq=3
+        }
+
         if (frequencies.isEmpty()) return Map.of();
 
         int maxFrequency = frequencies.values().stream().max(Integer::compareTo).orElse(1);
@@ -305,6 +326,9 @@ public class GraphRagServiceImpl implements GraphRagService {
                 .sorted((a, b) -> {
                     int byFreq = Integer.compare(b.getValue(), a.getValue());
                     if (byFreq != 0) return byFreq;
+                    // Prefer longer phrases (bigrams > unigrams)
+                    int byLength = Integer.compare(b.getKey().length(), a.getKey().length());
+                    if (byLength != 0) return byLength;
                     return a.getKey().compareTo(b.getKey());
                 })
                 .limit(limit)
